@@ -1,6 +1,6 @@
 # Bayper
 
-项目已完成本地 Git 初始化与协作流程验证，准备开始正式开发。当前尚未确定业务功能、技术栈或运行方式，验证用的示例代码与测试已清理。
+项目已完成本地 Git 初始化、协作流程验证和多项基础技术预研，当前进入 PRD 讨论。产品范围与正式工程方案尚未冻结，研究探针与正式实现分开管理。
 
 ## 协作入口
 
@@ -17,6 +17,6 @@ polaris 已从原 hapilon skill 目录完整复制到本仓库，保留 `.agents
 
 本地分支为 `main`，尚未配置远程仓库。所有提交使用 snap 技能；提交不自动触发推送、发布或合并。
 
-## 当前调研
+## 当前工作
 
-当前处于“基于 Herdr 插件的桌宠应用”方向的 PRD 前期调研，尚未进入产品设计或正式开发。资料见 [静态调研](.hapilon/polaris/Bayper前期调研/research.md) 和 [Herdr 运行时实测](.hapilon/polaris/Bayper前期调研/runtime-research.md)；研究脚本与复现说明位于 [research/herdr](research/herdr/README.md)。
+正在讨论有生命感、可互动并能感知 Herdr Agent 状态的桌宠，当前草案见 [Bayper PRD](.hapilon/polaris/Bayper桌面陪伴/prd.md)，尚未进入正式开发。前期资料保留在原研究目录，见 [静态调研](.hapilon/polaris/Bayper前期调研/research.md) 和 [Herdr 运行时实测](.hapilon/polaris/Bayper前期调研/runtime-research.md)；研究脚本与复现说明位于 [research/herdr](research/herdr/README.md)。
