@@ -1,0 +1,23 @@
+# Bayper Herdr 生命周期研究插件。
+# Herdr 启动时执行一次 startup；action 由探针显式调用以启动脱离的 heartbeat。
+# 运行 server 时必须由外层设置 BAYPER_RESEARCH_ROOT 指向 /tmp/bayper-herdr-spike-*。
+# 本文件只是无 GUI 的研究 fixture，用于验证 Herdr 生命周期机制，不是 Bayper 产品插件；
+# version 与根目录 VERSION 保持同步，仅为实验产物的版本标注。
+id = "bayper.research.lifecycle"
+name = "Bayper Research Lifecycle"
+version = "0.1.8"
+description = "只用于 Bayper 隔离技术实验的 startup/action fixture"
+min_herdr_version = "0.9.5"
+platforms = ["macos"]
+
+[[startup]]
+command = ["python3", "fixture_hook.py", "record"]
+platforms = ["macos"]
+
+[[actions]]
+id = "spawn"
+title = "Spawn research heartbeat"
+description = "启动脱离的 fixture heartbeat，并记录其 PID"
+command = ["python3", "fixture_hook.py", "spawn"]
+contexts = ["workspace"]
+platforms = ["macos"]

@@ -16,3 +16,7 @@ polaris 软链指向同级仓库中的 `../hapilon/.hapilon/agents/skills/polari
 提供业务目标与约束后，由 Codex 使用 polaris 形成任务范围、业务预期与验收标准，派发给 Claude Code 实现，再独立审查并运行验收。根据实际需求选择技术栈、组织代码及测试目录，并补充安装和运行说明。
 
 本地分支为 `main`，尚未配置远程仓库。所有提交使用 snap 技能；提交不自动触发推送、发布或合并。
+
+## 当前调研
+
+当前处于“基于 Herdr 插件的桌宠应用”方向的 PRD 前期调研，尚未进入产品设计或正式开发。资料见 [静态调研](.hapilon/polaris/Bayper前期调研/research.md) 和 [Herdr 运行时实测](.hapilon/polaris/Bayper前期调研/runtime-research.md)；研究脚本与复现说明位于 [research/herdr](research/herdr/README.md)。
