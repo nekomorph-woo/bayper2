@@ -1,0 +1,17 @@
+# Bayper Herdr 正式登记插件。
+# startup 与“关联 Bayper” action 使用同一短命入口；只写隔离配置指定的 registry，
+# 不启动/关闭 Bayper、不读取会话正文、不发模型、不控制 pane。版本由 Codex 提交前同步。
+id = "bayper.herdr"
+name = "Bayper Herdr Registration"
+version = "0.1.101"
+min_herdr_version = "0.9.5"
+platforms = ["macos"]
+
+[[startup]]
+command = ["node", "register.cjs"]
+
+[[actions]]
+id = "associate"
+title = "关联 Bayper"
+contexts = ["workspace"]
+command = ["node", "register.cjs"]
