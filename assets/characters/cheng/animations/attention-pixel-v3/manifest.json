@@ -1,0 +1,290 @@
+{
+  "tool": "sprite-pipeline",
+  "source": {
+    "path": "assets/characters/cheng/source/attention-pixel-v3.png",
+    "sha256": "c8d473d7962cde95a6fb759d2fdb334e1156068eeb164c9f1841f7e3af5ca097",
+    "size": {
+      "width": 1536,
+      "height": 1024
+    }
+  },
+  "spec": {
+    "columns": 4,
+    "rows": 2,
+    "cell_size": {
+      "width": 384,
+      "height": 512
+    },
+    "frame_size": {
+      "width": 320,
+      "height": 384
+    },
+    "alpha_threshold": 16,
+    "scale": 0.825485,
+    "neutral_height": 298,
+    "resample": "nearest",
+    "alignment": "foot-bottom-center",
+    "padding": 8,
+    "foot_band_ratio": 0.12,
+    "anchor_mode": "standing-foot-band",
+    "anchor_note": "站立素材底部12%区域alpha范围的中点；尾巴低垂、趴卧或道具低于脚不适用"
+  },
+  "loop": false,
+  "frame_durations_ms": [
+    180,
+    110,
+    120,
+    180,
+    220,
+    120,
+    110,
+    220
+  ],
+  "atlas": {
+    "file": "atlas.png",
+    "columns": 4,
+    "rows": 2,
+    "frame_size": {
+      "width": 320,
+      "height": 384
+    }
+  },
+  "contact_sheets": {
+    "light": "contact-sheet-light.png",
+    "dark": "contact-sheet-dark.png"
+  },
+  "frames": [
+    {
+      "index": 0,
+      "row": 0,
+      "column": 0,
+      "file": "frame-00.png",
+      "duration_ms": 180,
+      "source_bbox": {
+        "x": 75,
+        "y": 119,
+        "width": 275,
+        "height": 361
+      },
+      "source_foot_anchor": {
+        "x": 218.0,
+        "y": 480
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 227,
+        "height": 298
+      },
+      "paste": {
+        "x": 42,
+        "y": 78
+      }
+    },
+    {
+      "index": 1,
+      "row": 0,
+      "column": 1,
+      "file": "frame-01.png",
+      "duration_ms": 110,
+      "source_bbox": {
+        "x": 70,
+        "y": 119,
+        "width": 274,
+        "height": 361
+      },
+      "source_foot_anchor": {
+        "x": 213.0,
+        "y": 480
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 226,
+        "height": 298
+      },
+      "paste": {
+        "x": 42,
+        "y": 78
+      }
+    },
+    {
+      "index": 2,
+      "row": 0,
+      "column": 2,
+      "file": "frame-02.png",
+      "duration_ms": 120,
+      "source_bbox": {
+        "x": 54,
+        "y": 119,
+        "width": 276,
+        "height": 360
+      },
+      "source_foot_anchor": {
+        "x": 198.0,
+        "y": 479
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 228,
+        "height": 297
+      },
+      "paste": {
+        "x": 41,
+        "y": 79
+      }
+    },
+    {
+      "index": 3,
+      "row": 0,
+      "column": 3,
+      "file": "frame-03.png",
+      "duration_ms": 180,
+      "source_bbox": {
+        "x": 42,
+        "y": 121,
+        "width": 275,
+        "height": 359
+      },
+      "source_foot_anchor": {
+        "x": 187.0,
+        "y": 480
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 227,
+        "height": 296
+      },
+      "paste": {
+        "x": 40,
+        "y": 80
+      }
+    },
+    {
+      "index": 4,
+      "row": 1,
+      "column": 0,
+      "file": "frame-04.png",
+      "duration_ms": 220,
+      "source_bbox": {
+        "x": 75,
+        "y": 85,
+        "width": 276,
+        "height": 360
+      },
+      "source_foot_anchor": {
+        "x": 217.5,
+        "y": 445
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 228,
+        "height": 297
+      },
+      "paste": {
+        "x": 42,
+        "y": 79
+      }
+    },
+    {
+      "index": 5,
+      "row": 1,
+      "column": 1,
+      "file": "frame-05.png",
+      "duration_ms": 120,
+      "source_bbox": {
+        "x": 70,
+        "y": 85,
+        "width": 279,
+        "height": 360
+      },
+      "source_foot_anchor": {
+        "x": 214.0,
+        "y": 445
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 230,
+        "height": 297
+      },
+      "paste": {
+        "x": 41,
+        "y": 79
+      }
+    },
+    {
+      "index": 6,
+      "row": 1,
+      "column": 2,
+      "file": "frame-06.png",
+      "duration_ms": 110,
+      "source_bbox": {
+        "x": 51,
+        "y": 85,
+        "width": 280,
+        "height": 360
+      },
+      "source_foot_anchor": {
+        "x": 198.0,
+        "y": 445
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 231,
+        "height": 297
+      },
+      "paste": {
+        "x": 39,
+        "y": 79
+      }
+    },
+    {
+      "index": 7,
+      "row": 1,
+      "column": 3,
+      "file": "frame-07.png",
+      "duration_ms": 220,
+      "source_bbox": {
+        "x": 39,
+        "y": 84,
+        "width": 279,
+        "height": 361
+      },
+      "source_foot_anchor": {
+        "x": 185.5,
+        "y": 445
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 230,
+        "height": 298
+      },
+      "paste": {
+        "x": 39,
+        "y": 78
+      }
+    }
+  ]
+}
