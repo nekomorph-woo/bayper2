@@ -1,0 +1,80 @@
+{
+  "tool": "sprite-pipeline",
+  "source": {
+    "path": "assets/characters/rin/outfits/warm-tea/source/master-v2.png",
+    "sha256": "fabc992237b10b7d4410094940753c17eafa280fd960c9e2f0b84ea65b72cc4c",
+    "size": {
+      "width": 1024,
+      "height": 1536
+    }
+  },
+  "spec": {
+    "columns": 1,
+    "rows": 1,
+    "cell_size": {
+      "width": 1024,
+      "height": 1536
+    },
+    "frame_size": {
+      "width": 320,
+      "height": 384
+    },
+    "alpha_threshold": 16,
+    "scale": 0.208246,
+    "neutral_height": 298,
+    "resample": "nearest",
+    "alignment": "foot-bottom-center",
+    "padding": 8,
+    "foot_band_ratio": 0.12,
+    "anchor_mode": "standing-foot-band",
+    "anchor_note": "站立素材底部12%区域alpha范围的中点；尾巴低垂、趴卧或道具低于脚不适用"
+  },
+  "loop": true,
+  "frame_durations_ms": [
+    1000
+  ],
+  "atlas": {
+    "file": "atlas.png",
+    "columns": 1,
+    "rows": 1,
+    "frame_size": {
+      "width": 320,
+      "height": 384
+    }
+  },
+  "contact_sheets": {
+    "light": "contact-sheet-light.png",
+    "dark": "contact-sheet-dark.png"
+  },
+  "frames": [
+    {
+      "index": 0,
+      "row": 0,
+      "column": 0,
+      "file": "frame-00.png",
+      "duration_ms": 1000,
+      "source_bbox": {
+        "x": 132,
+        "y": 69,
+        "width": 847,
+        "height": 1431
+      },
+      "source_foot_anchor": {
+        "x": 524.0,
+        "y": 1500
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 176,
+        "height": 298
+      },
+      "paste": {
+        "x": 78,
+        "y": 78
+      }
+    }
+  ]
+}
