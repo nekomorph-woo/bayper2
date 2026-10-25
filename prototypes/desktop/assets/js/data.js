@@ -159,7 +159,7 @@ window.BAYPER = {
         key: "tea",
         kind: "preference",
         text: "你更喜欢温一点的茶，太烫的会先放一会儿",
-        source: "凛告诉你 · 你同意过",
+        source: "凛告诉澄 · 经你同意",
         date: "10月12日",
       },
       {

@@ -187,14 +187,13 @@
             <p class="habit block__body">${A.escapeHtml(base.habit || "还没有记下来。")}</p>
           </div>
 
-          <div class="detail__actions">
-            <button class="btn btn--primary" type="button" data-chat>聊一会儿</button>
-            ${
-              base.img && id !== state.desktopId
-                ? `<button class="btn btn--ghost" type="button" data-come>请她陪我</button>`
-                : ""
-            }
-          </div>
+          ${
+            base.img && id !== state.desktopId
+              ? `<div class="detail__actions">
+                   <button class="btn btn--ghost" type="button" data-come>请她陪我</button>
+                 </div>`
+              : ""
+          }
           ${
             base.img
               ? ""
@@ -220,7 +219,9 @@
                </svg>
              </div>`
           : base.img
-          ? `<div class="outfit__art"><img src="${base.img}" alt="${A.escapeHtml(
+          ? `<div class="outfit__art" data-shape="${base.shape}"><img src="${
+              base.img
+            }" alt="${A.escapeHtml(base.name)}穿着${A.escapeHtml(
               outfit.name
             )}" loading="lazy"></div>`
           : `<div class="outfit__art outfit__art--none">这套衣服还没有画出来。</div>`;
@@ -232,8 +233,7 @@
         const actions = outfit.locked
           ? `<button class="btn btn--quiet btn--sm" type="button" data-preview="${outfit.id}">预览</button>
              <a class="btn btn--quiet btn--sm" href="stories.html?story=${outfit.story}">去读故事</a>`
-          : `<button class="btn btn--quiet btn--sm" type="button" data-preview="${outfit.id}">预览</button>
-             <span class="lock">穿着中，没有换装动作</span>`;
+          : `<button class="btn btn--quiet btn--sm" type="button" data-preview="${outfit.id}">预览</button>`;
 
         return `<article class="outfit" data-od-id="outfit-${outfit.id}">
             ${art}
@@ -241,7 +241,7 @@
               <div class="outfit__row">
                 <p class="outfit__name">${A.escapeHtml(outfit.name)}</p>
                 <span class="status" data-kind="${outfit.locked ? "unknown" : "desktop"}">
-                  <i class="status__dot"></i>${outfit.locked ? "未解锁" : "穿着中"}
+                  <i class="status__dot"></i>${outfit.locked ? "未解锁" : "当前穿着"}
                 </span>
               </div>
               ${meta}
@@ -334,9 +334,12 @@
           }</h2>
           <p class="detail__tagline">${A.escapeHtml(base.tagline)}</p>
         </div>
-        <span class="status" data-kind="${A.statusOf(currentId)}">
-          <i class="status__dot"></i>${A.statusLabel(currentId)}
-        </span>
+        <div class="detail__head-actions">
+          <span class="status" data-kind="${A.statusOf(currentId)}">
+            <i class="status__dot"></i>${A.statusLabel(currentId)}
+          </span>
+          <button class="btn btn--primary btn--sm" type="button" data-chat>聊一会儿</button>
+        </div>
       </div>
       <div class="tabs" role="tablist" aria-label="角色信息">
         ${TABS.map(
@@ -609,9 +612,17 @@
       return;
     }
 
+    const figure = base.img
+      ? `<div class="preview-figure"><img src="${base.img}" alt="${A.escapeHtml(
+          base.name
+        )}穿着${A.escapeHtml(outfit.name)}"></div>`
+      : "";
+
     A.dialog({
       title: `${outfit.name} · 预览`,
-      body: `<p>这是${A.escapeHtml(base.name)}现在穿着的这套。预览不会换衣服，也不会改变她的样子。</p>`,
+      body: `${figure}<p>这是${A.escapeHtml(
+        base.name
+      )}现在穿着的这一套，预览不会改变她的样子。</p>`,
       confirmText: "知道了",
       cancelText: "关闭",
     });

@@ -268,18 +268,19 @@
     const rhythm = state.settings.rhythm;
     return `
       <h2>陪伴节奏</h2>
-      <p class="panel__desc">自动活动是机会，不是任务。不排班，也不会补做。</p>
+      <p class="panel__desc">她有时会自己找点事做，不用你安排。</p>
       ${noteSlot()}
 
       <div class="budget">
-        <strong>每 30 分钟最多评估一次，合资格时 25% 的概率发生一件小事。</strong>
-        <span>全应用同时只允许 1 个自动请求在途。</span>
+        <strong>偶尔主动陪你，不催促，也不补做错过的活动。</strong>
+        <span>想核对细节，可以展开下面的完整额度。</span>
       </div>
 
       <details class="budget-more">
-        <summary>展开完整额度</summary>
+        <summary>完整额度</summary>
         <dl>
-          <div><dt>自动活动机会</dt><dd>每 30 分钟评估一次，合资格时 25%</dd></div>
+          <div><dt>自动活动机会</dt><dd>每 30 分钟最多评估一次，合资格时 25%</dd></div>
+          <div><dt>同时进行</dt><dd>全应用同时只允许 1 个自动请求在途</dd></div>
           <div><dt>短日常活动</dt><dd>全应用最多 1 次／小时</dd></div>
           <div><dt>探索</dt><dd>同时 1 位；4 小时最多 1 次，24 小时最多 2 次</dd></div>
           <div><dt>自动模型请求</dt><dd>1 小时 1 次、8 小时 4 次、24 小时 6 次</dd></div>

@@ -35,3 +35,13 @@ Codex源码与PRD核对发现：固定位=桌面角色、已接纳=今日名单�
 独立评审review_final_windows为8/10，认为可供用户体验讨论，尚非视觉定稿。建议衣橱露出服装、960窗口聊天入口前移、活动概率藏入详细额度；加上两处归属文案，按polish.md继续定点打磨。没有要求伪造角色凑满5位，也未增加产品概念。
 
 32个原型源文件已原样导出prototypes/desktop并逐文件SHA-256核对，9个JS的node --check通过。源码按页面职责拆分，无构建依赖，无真实服务请求。模型Key不进入保存状态；这里只验证当前模拟实现，不能推出生产密钥存储结论。
+
+## 定点打磨与交付
+
+polish.md四项修改由OpenDesign/Claude Code完成，Codex读过5个源文件的实际diff，并从仓库导出副本实际打开衣橱预览弹层。polished-character（960×680）、polished-wardrobe、polished-rhythm、polished-outfit-preview截图确认：聊天入口完整位于顶部，服装躯干与裙摆完整，精确预算已折叠，弹层不是仅凭静态复刻判断。各截图无控制台错误/横溢/坏图；9个JS再次node --check通过。
+
+三轮主体设计/审查之后追加一次局部打磨，未扩产品范围。最终定位为可供用户体验的第一版高保真原型，不将8分盲评自行改写为9分或用户已认可。关键截图保存在prototypes/desktop/screenshots，源图及生成说明在assets/README.md。
+
+MCP运行追溯：首轮244c3d4c-c78c-41c2-8e59-b005556360e1；完整交互19e2b2b5-24ab-48a3-bb9e-2c39f50c0750；返修14af1b39-5f97-42ad-a15f-ccab3de41c8c；打磨f9baccbe-c972-4907-899a-f24a28bef88f。全部显式agent=claude，原型代码由其执行；Codex没有自行代改代码。
+
+尚不覆盖首次相遇/模型引导完整流程、真实API与Herdr、后台调度、正式像素动画或多套换装。绫仅文字原型，无立绘；名单外角色上桌面的图像效果未实测。完整手感和文案亲近程度仍待用户体验，不扩大为正式开发验收。

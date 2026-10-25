@@ -16,6 +16,15 @@
     return A.whoName(id);
   }
 
+  // 桌面上的人和固定位是两件事，措辞不要混用。
+  function arrangementText() {
+    const desk = A.displayName(state.desktopId);
+    const fixed = A.displayName(state.fixedId);
+    return desk === fixed
+      ? `当前陪伴是${desk}，接纳新角色不会换人。`
+      : `桌面上是${desk}，固定位是${fixed}；接纳新角色两边都不会变。`;
+  }
+
   function storyStatus(story) {
     if (!story.invite) return false;
     if (state.acceptedIds.includes("aya")) return "accepted";
@@ -97,7 +106,7 @@
       } else if (status === "accepted") {
         invite = `<div class="invite" data-od-id="invite-aya">
             <p class="invite__state">绫已经在小窝了。她还没有画面，先在名单里待着，<a href="characters.html?id=aya">去角色册看看</a>。</p>
-            <p class="invite__text">当前陪伴仍然是${A.escapeHtml(A.displayName(state.fixedId))}，接纳新角色不会替换固定位。</p>
+            <p class="invite__text">${A.escapeHtml(arrangementText())}</p>
           </div>`;
       } else {
         invite = `<div class="invite" data-od-id="invite-aya">
@@ -158,10 +167,8 @@
     }
     A.dialog({
       title: "接纳绫？",
-      body: `<p>她会出现在角色册和小窝的名单里，状态是「在小窝休息」。</p>
-             <p>当前陪伴<strong>${A.escapeHtml(
-               A.displayName(state.fixedId)
-             )}</strong>不会因此改变，桌面上的角色也不会换人。</p>`,
+      body: `<p>她会进入角色册，也会回到小窝，状态是「在小窝休息」。今日名单不会因此变化。</p>
+             <p>${A.escapeHtml(arrangementText())}</p>`,
       confirmText: "接纳她",
       cancelText: "再想想",
       onConfirm() {
