@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' file: data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bayper · 首次相遇</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">Bayper<span class="brand-sub">首次相遇</span></div>
+      <span class="dev-flag">S01 · 开发中</span>
+    </header>
+
+    <main class="shell">
+      <!-- 第一步：模型配置 -->
+      <section class="step" data-step="config" hidden>
+        <div class="intro">
+          <p class="eyebrow">第一步 / 三步</p>
+          <h1>先用你的模型，把话接上。</h1>
+          <p class="lede">
+            Bayper 使用 OpenAI 兼容的模型服务。配置只会保存在这台电脑上，Key
+            交给系统安全存储，不写进普通数据库。
+          </p>
+        </div>
+
+        <form id="config-form" class="card" novalidate>
+          <label class="field">
+            <span class="field-label">Base URL</span>
+            <input
+              id="base-url"
+              name="baseUrl"
+              type="url"
+              inputmode="url"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="https://api.example.com/v1"
+              required
+            />
+            <span class="field-hint">必须使用 HTTPS；仅本机 loopback 服务可使用 HTTP。</span>
+          </label>
+
+          <div class="field-row">
+            <label class="field">
+              <span class="field-label">模型名</span>
+              <input
+                id="model-name"
+                name="modelName"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="model-name"
+                maxlength="120"
+                required
+              />
+            </label>
+            <label class="field">
+              <span class="field-label">API Key</span>
+              <input
+                id="api-key"
+                name="apiKey"
+                type="password"
+                autocomplete="new-password"
+                spellcheck="false"
+                required
+              />
+            </label>
+          </div>
+
+          <p class="note">
+            保存前会向该地址发送一次连通检查，内容是固定的一句短请求，不包含你的个人信息或本机资料。
+          </p>
+
+          <div id="config-alert" class="alert" role="alert" hidden></div>
+
+          <div class="actions">
+            <button id="config-submit" class="btn btn-primary" type="submit">检查并保存</button>
+            <span id="config-status" class="status-text" aria-live="polite"></span>
+          </div>
+        </form>
+      </section>
+
+      <!-- 第二步：愿望与候选 -->
+      <section class="step" data-step="wish" hidden>
+        <div class="intro">
+          <p class="eyebrow">第二步 / 三步</p>
+          <h1>想找怎样的陪伴？</h1>
+          <p class="lede">
+            用一句话说说就好，也可以留空。推荐只依据当前版本角色的既有特征，不会现场改写角色，也不会把愿望记成长期偏好。
+          </p>
+        </div>
+
+        <form id="wish-form" class="wish-form" novalidate>
+          <label class="field wish-field">
+            <span class="field-label">你的愿望</span>
+            <textarea
+              id="wish-input"
+              name="wish"
+              rows="2"
+              maxlength="200"
+              placeholder="例如：想找一个安静陪着我、不太抢话的伙伴。"
+            ></textarea>
+          </label>
+          <button id="wish-submit" class="btn btn-primary" type="submit">看看推荐</button>
+        </form>
+
+        <div id="wish-alert" class="alert" role="alert" hidden></div>
+
+        <article id="candidate-card" class="card candidate" aria-live="polite" hidden>
+          <div class="candidate-figure">
+            <img id="candidate-image" src="" alt="" />
+            <span class="dev-flag dev-flag-small">开发候选素材</span>
+          </div>
+          <div class="candidate-body">
+            <div class="candidate-head">
+              <h2 id="candidate-name"></h2>
+              <span id="candidate-tagline" class="candidate-tagline"></span>
+            </div>
+            <p id="candidate-intro" class="candidate-intro"></p>
+            <ul id="candidate-traits" class="trait-list"></ul>
+            <p id="candidate-reason" class="reason"></p>
+            <div class="candidate-actions">
+              <button id="next-candidate" class="btn btn-ghost" type="button">看看其他候选</button>
+              <span id="candidate-position" class="status-text"></span>
+              <button id="accept-button" class="btn btn-primary" type="button">确认接纳</button>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <!-- 第三步：小窝 -->
+      <section class="step" data-step="home" hidden>
+        <div class="intro">
+          <p class="eyebrow">第三步 / 三步</p>
+          <h1>今天，先这样待在一起。</h1>
+          <p class="lede">
+            关系已经保存在这台电脑上。下次打开会直接回到小窝，不需要重新许愿或接纳。
+          </p>
+        </div>
+
+        <div class="home-grid">
+          <article class="card home-character">
+            <div class="home-figure">
+              <img id="home-image" src="" alt="" />
+              <span class="dev-flag dev-flag-small">开发候选素材</span>
+            </div>
+            <div class="home-character-body">
+              <h2 id="home-name"></h2>
+              <p id="home-tagline" class="candidate-tagline"></p>
+              <p id="home-intro" class="candidate-intro"></p>
+              <ul id="home-traits" class="trait-list"></ul>
+            </div>
+          </article>
+
+          <aside class="card home-side">
+            <h2 class="side-title">今天的安排</h2>
+            <p id="home-fixed" class="side-line"></p>
+            <p id="home-roster" class="side-line"></p>
+
+            <dl class="stats">
+              <div><dt>亲密度</dt><dd id="stat-intimacy"></dd></div>
+              <div><dt>精力</dt><dd id="stat-energy"></dd></div>
+              <div><dt>心情</dt><dd id="stat-mood"></dd></div>
+            </dl>
+
+            <p id="home-model" class="side-meta"></p>
+            <div class="model-check">
+              <button id="check-model" class="btn btn-ghost btn-small" type="button">
+                检查模型连接
+              </button>
+              <span id="check-model-status" class="status-text" role="status" aria-live="polite"></span>
+            </div>
+            <p class="note">
+              聊天与桌面小窗会在后续切片接入；本页不会伪造模型回复，也不代表桌面动画已经可用。
+            </p>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">角色与图片是开发候选，不是正式发布资源。</footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>

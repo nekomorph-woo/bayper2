@@ -1,6 +1,6 @@
 # Bayper
 
-项目已完成本地 Git 初始化、协作流程验证和多项基础技术预研，当前处于 PRD 与高保真原型设计阶段。产品范围与正式工程细节尚未冻结，桌面技术栈已确定为Electron，研究探针与正式实现分开管理。
+Bayper正在按完整PRD分切片实现，技术栈为Electron。当前正式工程已具备模型配置、愿望推荐、首位接纳和重启恢复；桌面陪伴、聊天与记忆、Herdr连接、故事和完整动画仍在开发。研究探针、原型与正式实现分开管理。
 
 ## 协作入口
 
@@ -11,7 +11,25 @@
 
 polaris 已从原 hapilon skill 目录完整复制到本仓库，保留 `.agents/skills/polaris/SKILL.md` 及全部参考文件，Codex 继续通过原入口识别。项目使用不再依赖同级 hapilon 仓库，后续调整可在本项目副本中独立进行。
 
-## 开始开发
+## 运行当前工程
+
+需要Node.js 24及npm。安装并启动：
+
+```sh
+npm install
+npm start
+```
+
+首次在窗口配置OpenAI兼容服务Base URL、模型名和API Key，检查成功后许愿并确认接纳。Key由系统安全存储加密，业务数据存于Electron用户应用目录的`bayper.sqlite3`；不写入仓库。macOS为当前已测环境。当前关闭窗口即退出，托盘和独立桌面画布将在后续切片接入。
+
+```sh
+npm test
+npm run test:acceptance
+```
+
+前者运行局部测试，后者运行隔离Electron窗口/真实SQLite与本机模型协议Fixture。`npm run test:live`为显式真实服务测试：从Git忽略的根`.env`读取`OPEN_AI_BASE_URL`/`OPEN_AI_API_KEY`，核对模型列表后使用`deepseek-flash`执行两次短连通检查，不读取工作会话。普通测试不会调用该服务。测试数据目录退出后清理，证据见交付工作记录。
+
+## 开发与验收
 
 提供业务目标与约束后，由 Codex 使用 polaris 形成任务范围、业务预期与验收标准，派发给 Claude Code 实现，再独立审查并运行验收。基于已确定的Electron技术栈组织代码及测试目录，并补充安装和运行说明。
 
@@ -19,6 +37,6 @@ polaris 已从原 hapilon skill 目录完整复制到本仓库，保留 `.agents
 
 ## 当前工作
 
-正在讨论可独立运行的 Bayper 桌面陪伴：角色在小窝与陪伴位置间活动，同屏最多1位；当日名单最多1固定位＋4随机位，共用自动API活动预算。角色身份与独属记忆长期连续，主题组织服装和故事，连接器提供Herdr工作通知。当前草案见 [Bayper PRD](.hapilon/polaris/Bayper桌面陪伴/prd.md)，尚未进入正式开发。前期资料见 [静态调研](.hapilon/polaris/Bayper前期调研/research.md) 和 [Herdr 运行时实测](.hapilon/polaris/Bayper前期调研/runtime-research.md)，研究脚本与复现说明位于 [research/herdr](research/herdr/README.md)。
+产品依据见 [Bayper PRD](.hapilon/polaris/Bayper桌面陪伴/prd.md)，完整交付范围见 [切片安排](.hapilon/polaris/Bayper完整交付/scope.md)，实际结果见 [验收记录](.hapilon/polaris/Bayper完整交付/evaluation.md)。前期资料见 [静态调研](.hapilon/polaris/Bayper前期调研/research.md) 和 [Herdr运行时实测](.hapilon/polaris/Bayper前期调研/runtime-research.md)，研究脚本与复现说明位于 [research/herdr](research/herdr/README.md)。
 
 桌面程序窗口的可交互原型见 [原型使用说明](prototypes/desktop/README.md)，包含小窝、角色、故事、连接、设置及本地模拟交互。OpenDesign通过MCP调度，Claude Code实现原型代码；真实模型、Herdr和系统控制尚未接入。

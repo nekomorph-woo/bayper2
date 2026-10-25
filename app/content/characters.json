@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "note": "S01 开发候选角色。身份、特征与图片仅用于走通首次相遇流程，不是已发布角色或正式动画资源；正式资源完成前不得据此通过 S07 或总交付。",
+  "candidates": [
+    {
+      "id": "rin",
+      "name": "凛",
+      "tagline": "听得比说得多",
+      "intro": "黑猫耳的住客。她不太抢话，常把窗边那张椅子留给你，自己坐在桌角。",
+      "traits": ["回答问题前会先停一下", "茶要放到温热才喝", "织东西时会留一盏灯"],
+      "matchKeywords": ["安静", "倾听", "听我", "温和", "不急", "茶", "织", "陪着"],
+      "matchReason": "她话不多，习惯先听你说完，再慢慢回应。",
+      "image": "../../prototypes/desktop/assets/img/rin.png",
+      "imageState": "development-candidate",
+      "recipeRef": "reference.maid10",
+      "recipeNote": "引用造型画风参考配方，不是正式角色制作配方。"
+    },
+    {
+      "id": "hu",
+      "name": "琥珀",
+      "tagline": "出门前一定会说一声",
+      "intro": "琥珀坐不住。她把小窝当出发点，出门转一圈，回来时兜里总有点什么。",
+      "traits": ["走路快，说话也快", "喜欢收集石头和旧票据", "不喜欢被人安排行程"],
+      "matchKeywords": ["活泼", "聊天", "热闹", "出门", "散步", "冒险", "好奇", "收集"],
+      "matchReason": "她坐不住，愿意把路上见到的事讲给你听。",
+      "image": "../../prototypes/desktop/assets/img/hu.png",
+      "imageState": "development-candidate",
+      "recipeRef": "reference.maid10",
+      "recipeNote": "引用造型画风参考配方，不是正式角色制作配方。"
+    },
+    {
+      "id": "cheng",
+      "name": "澄",
+      "tagline": "醒着的时候很安静",
+      "intro": "澄多半待在小窝里。她把毯子叠得很整齐，然后坐在上面发呆。",
+      "traits": ["喜欢靠窗的软垫", "睡着的时候会说梦话", "对陌生人先观察三天"],
+      "matchKeywords": ["慵懒", "睡", "软", "观察", "发呆", "慢慢", "抱", "午后"],
+      "matchReason": "她喜欢慢下来，愿意在窗边陪你发一会儿呆。",
+      "image": "../../prototypes/desktop/assets/img/cheng.png",
+      "imageState": "development-candidate",
+      "recipeRef": "reference.maid10",
+      "recipeNote": "引用造型画风参考配方，不是正式角色制作配方。"
+    }
+  ]
+}
