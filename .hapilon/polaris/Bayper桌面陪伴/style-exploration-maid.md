@@ -2,7 +2,7 @@
 
 日期：2026-10-25。阶段：PRD 画风讨论。首批主题已由用户指定为“女仆系列”，本轮样本为原创猫咪女仆。角色素材随版本按主题增加，不在 Bayper 运行时生成图片造型。
 
-![猫咪女仆16宫格](assets/style-board-02-maid.png)
+![猫咪女仆16宫格](../../../tools/appearance-catalog/references/style-board-02-maid.png)
 
 ## 用户偏好与本轮控制
 
@@ -33,14 +33,14 @@
 
 输出1254×1254，共16格、编号完整，角色全身可见；已更换猫咪女仆造型，整体更紧凑，保留猫娘人形特征。部分格子的差异较细，主要可辨差异是冷暖、轮廓、阴影和纹理，不称为16套完全不同的美术体系；候选编号不代表已确定的16位角色。
 
-用户已明确选定本轮 **10号**，后续素材沿用其画风与头身比例。画风ID为 `bayper.pixel.maid10`，记录于 [造型元数据库](appearance-catalog/README.md)。图集的准确像素网格、透明边缘、小尺寸表现和动画一致性均未验收，不能直接当作正式素材；后续需据10号建立独立参考图、色板与制作标准，而非改选其他格。
+用户已明确选定本轮 **10号**，后续素材沿用其画风与头身比例。画风ID为 `bayper.pixel.maid10`，记录于 [造型元数据库](../../../tools/appearance-catalog/README.md)。图集的准确像素网格、透明边缘、小尺寸表现和动画一致性均未验收，不能直接当作正式素材；后续需据10号建立独立参考图、色板与制作标准，而非改选其他格。
 
 ## 生成记录
 
 - 工具：Codex Desktop 内置 imagegen，非透明背景；未使用 CLI 或独立计费 API。
 - 参考图：`assets/style-board-01.png`，只参考16号精细效果与11/14号比例，未沿用旅行服。
 - 原始输出：`/Users/chaooswoo/.codex/generated_images/01a17121-7952-7433-8359-b082940fc70d/exec-18676a7b-3f50-4f91-99e4-b7c4fe1d8fe0.png`。
-- 项目留存：`assets/style-board-02-maid.png`，未覆盖首轮、未做程序化重绘。
+- 项目留存：原为本目录 `assets/style-board-02-maid.png`，现随造型资料工具迁入仓库根目录 `tools/appearance-catalog/references/style-board-02-maid.png`，只有这一份项目内有效参考；未覆盖首轮、未做程序化重绘。
 - 以下保留给生图工具的原始英文提示词。
 
 ```text

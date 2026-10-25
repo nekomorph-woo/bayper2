@@ -19,3 +19,6 @@ C17,expression.neutral_mouth;expression.ear_pose;expression.tail_pose,静态造�
 C18,render.transparent_padding;tail.length;hair.back_length,完整动作和尾发范围纳入留白；不可只按中立立绘裁切,图集审查,待实际制作验证
 C19,limb.left_right_delta;head.face_asymmetry;eye.left_right_delta,左右以角色自身解剖侧为准；画面左右不替代角色侧别,记录审查,设计规则
 C20,render.pixel_grid;render.outline_weight,参数可以有设计连续值；导出必须落在已标定像素网格；不承诺每个小数都产生可见差异,素材制作,待实际制作验证
+C21,animal_ear.kind;headwear.kind;apron.kind,设计先指定少量重点元素；其余维度围绕主题与重点协调而非逐项独立抽样,角色构思,设计规则
+C22,hair.back_shape;palette.secondary;accessory.neck_form,协调元素应记录依据与冲突取舍；只有改变识别特征或违反画风时才重新审查重点,角色构思,设计规则
+C23,render.pixel_grid;render.outline_weight,构思中未强调的维度可自动协调形成；需要量测的正式生产数值与遮挡未知结构仍须标定,制作规格,设计规则

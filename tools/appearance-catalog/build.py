@@ -8,9 +8,9 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-CATALOG_DIR = REPO_ROOT / ".hapilon" / "polaris" / "Bayper桌面陪伴" / "appearance-catalog"
-DEFAULT_OUTPUT = CATALOG_DIR / "catalog.sqlite"
+TOOL_ROOT = Path(__file__).resolve().parent
+DATA_DIR = TOOL_ROOT / "data"
+DEFAULT_OUTPUT = DATA_DIR / "catalog.sqlite"
 
 TABLE_COLUMNS = {
     "styles": ("style_id", "label", "reference_path", "reference_cell", "approval", "notes"),
@@ -18,6 +18,9 @@ TABLE_COLUMNS = {
     "options": ("option_id", "dimension_id", "label", "definition", "status"),
     "recipes": ("recipe_id", "style_id", "label", "status", "notes"),
     "recipe_values": ("recipe_id", "dimension_id", "option_id", "value", "evidence"),
+    "design_guidance": (
+        "recipe_id", "dimension_id", "design_role", "reason", "coordination_basis"
+    ),
     "constraints": ("constraint_id", "dimension_refs", "rule", "check_stage", "status"),
     "assets": ("asset_id", "recipe_id", "path", "locator", "kind", "status", "notes"),
 }
@@ -54,6 +57,13 @@ CREATE TABLE "recipe_values" (
     -- SQLite 的复合外键在 option_id 为 NULL 时跳过，非空时须与同行维度配对存在。
     FOREIGN KEY ("option_id", "dimension_id")
         REFERENCES "options"("option_id", "dimension_id")
+);
+
+CREATE TABLE "design_guidance" (
+    "recipe_id" TEXT NOT NULL REFERENCES "recipes"("recipe_id"),
+    "dimension_id" TEXT NOT NULL REFERENCES "dimensions"("dimension_id"),
+    "design_role" TEXT, "reason" TEXT, "coordination_basis" TEXT,
+    PRIMARY KEY ("recipe_id", "dimension_id")
 );
 
 CREATE TABLE "constraints" (
@@ -105,7 +115,7 @@ def validate_constraint_refs(constraints, dimensions):
 def load_catalog():
     data = {}
     for table, columns in TABLE_COLUMNS.items():
-        data[table] = read_csv(CATALOG_DIR / f"{table}.csv", columns)
+        data[table] = read_csv(DATA_DIR / f"{table}.csv", columns)
     validate_constraint_refs(data["constraints"], data["dimensions"])
     return data
 
