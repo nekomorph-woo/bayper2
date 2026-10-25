@@ -19,4 +19,4 @@ polaris 已从原 hapilon skill 目录完整复制到本仓库，保留 `.agents
 
 ## 当前工作
 
-正在讨论有生命感、可互动并能感知 Herdr Agent 状态的桌宠，当前草案见 [Bayper PRD](.hapilon/polaris/Bayper桌面陪伴/prd.md)，尚未进入正式开发。前期资料保留在原研究目录，见 [静态调研](.hapilon/polaris/Bayper前期调研/research.md) 和 [Herdr 运行时实测](.hapilon/polaris/Bayper前期调研/runtime-research.md)；研究脚本与复现说明位于 [research/herdr](research/herdr/README.md)。
+正在讨论可独立运行、有生命感、可互动的桌宠，通过连接器接入 Herdr 并通知工作状态变化，当前草案见 [Bayper PRD](.hapilon/polaris/Bayper桌面陪伴/prd.md)，尚未进入正式开发。前期资料保留在原研究目录，见 [静态调研](.hapilon/polaris/Bayper前期调研/research.md) 和 [Herdr 运行时实测](.hapilon/polaris/Bayper前期调研/runtime-research.md)；研究脚本与复现说明位于 [research/herdr](research/herdr/README.md)。
