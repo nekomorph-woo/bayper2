@@ -46,4 +46,4 @@ cloth.matte,material.gloss,哑光,以漫反射色块与纹理为主,参考图描
 cloth.satin,material.gloss,柔光,以局部亮簇表达布料反光,文字候选
 neutral.smile,expression.neutral_mouth,微笑,轻微弧度而非强情绪表情,参考图描述
 neutral.flat,expression.neutral_mouth,闭口平线,中立口型不推定冷漠性格,文字候选
-pixel.dither,render.dither_pattern,混合受控,发丝与衣料有细密纹理且保留面部可读性,用户画风参考
+pixel.dither,render.dither_pattern,混合受控,受控的少量抖色与明暗层次，优先清晰色块与面部可读性,文字候选

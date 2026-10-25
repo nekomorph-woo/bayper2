@@ -1,2 +1,2 @@
 style_id,label,reference_path,reference_cell,approval,notes
-bayper.pixel.maid10,精细二次元纹理像素与紧凑头身,../references/style-board-02-maid.png,10,用户已选定,颗粒与抖色参照样张10号；头身以该格视觉为准；逻辑像素数与色板未标定
+bayper.pixel.maid10,像素表达修订版与紧凑头身,../../../assets/characters/rin/source/master-pixel-v2.png,母版；头身来源10号,用户已确认（2026-10-26）,2026-10-26用户确认像素表达修订版；当前有效视觉参考为共享assets母版；10号继续作为紧凑头身与造型方向来源；旧4×4比较图仅历史概念参考；凛的发色、金瞳与服饰不是跨角色通用约束；逻辑像素数与色板未标定；静态母版不是发布动画

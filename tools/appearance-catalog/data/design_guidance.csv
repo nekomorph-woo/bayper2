@@ -1,6 +1,6 @@
 recipe_id,dimension_id,design_role,reason,coordination_basis
 reference.maid10,body.head_ratio,画风固定,保持用户选定的紧凑比例,第二轮10号；不随主题重置
-reference.maid10,render.dither_pattern,画风固定,保持用户选定的细密纹理,第二轮10号；配合脸部与衣物可读性
+reference.maid10,render.dither_pattern,画风固定,以2026-10-26用户认可的修订版母版为准；减少细密抖色，以少量明暗层次和清晰色块保持像素感,当前有效母版 assets/characters/rin/source/master-pixel-v2.png；10号继续作为头身来源；旧4×4 board仅历史概念参考；凛发色金瞳与服饰不构成跨角色通用约束
 reference.maid10,animal_ear.kind,重点元素,该参考形象的猫娘识别特征,猫耳形态需与头发和头饰协调；重点角色为Codex解读并非额外用户确认
 reference.maid10,apron.kind,重点元素,该参考形象的女仆服装识别特征,胸片与裙摆构成清楚浅色前景；重点角色为Codex解读
 reference.maid10,headwear.kind,重点元素,该参考形象的发箍褶边强化造型识别,避免遮住耳根与脸部；重点角色为Codex解读
@@ -8,4 +8,4 @@ reference.maid10,hair.back_shape,协调元素,短发让出头饰与耳部轮廓,
 reference.maid10,palette.secondary,协调元素,浅色覆盖片与深色主体形成对比,服务于服装识别；不能覆盖全局画风
 reference.maid10,accessory.neck_form,协调元素,领结补充胸前视觉焦点,与头饰和围裙协调且控制显著性
 reference.maid10,shoe.kind,协调元素,圆头鞋延续柔和轮廓与紧凑比例,配合裙摆与站姿；不机械从主题复制所有细节
-reference.maid10,render.pixel_grid,待标定,参考图未给出准确逻辑像素网格,概念可协调但正式导出值仍需实测；不杜撰数字
+reference.maid10,render.pixel_grid,待标定,当前母版为静态参考；逻辑像素网格仍需切帧与实际渲染标定,母版 assets/characters/rin/source/master-pixel-v2.png；不把1024×1536位图分辨率当逻辑网格；不杜撰数字

@@ -10,7 +10,7 @@ C08,outfit.topology;bottom.kind;outfit.layer_stack,连衣裙占用主体上下�
 C09,apron.kind;apron.bib_shape;apron.panel_length,无覆盖件时其胸片肩带长度值不生效；不得残留漂浮部件,配方审查,待实际制作验证
 C10,tail.root_anchor;outfit.back_opening;tail.front_back_path,尾根与服装尾口一致；前后遮挡按视角和动作确定,背视动作审查,待实际制作验证
 C11,hair.back_length;accessory.body_form;motion.hair_lag,长发与身体挂件在转身和运动中共同检查,动作审查,待实际制作验证
-C12,material.pattern_scale;material.texture_density;render.detail_budget,纹理按像素可读性合并；不可让衣料抖色吞没五官,实际尺寸审查,待实际制作验证
+C12,material.pattern_scale;material.texture_density;render.detail_budget,纹理与明暗按像素可读性组织；减少细密抖色，避免衣料噪点吞没五官,实际尺寸审查,待实际制作验证
 C13,palette.main;palette.secondary;palette.shadow;palette.outline,配色以语义色角色联动；换主色不等于全图单色替换,配色审查,待实际制作验证
 C14,shoe.heel_height;pose.toe_angle;render.ground_anchor,鞋底鞋跟和落脚点联动；不能换鞋后整只上下跳动,动作审查,待实际制作验证
 C15,accessory.asymmetry;render.mirror_policy;eye.heterochromia,异色瞳侧饰花纹不能用整帧镜像无条件翻转,方向审查,待实际制作验证

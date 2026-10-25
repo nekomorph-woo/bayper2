@@ -297,9 +297,9 @@ motion.ear_response,姿态与动作,耳朵响应幅度,angle,中立耳角,动作
 motion.signature_gesture,姿态与动作,标志性小动作,record,动作描述与已制作动作引用,动作限定
 render.pixel_grid,像素表现,逻辑像素网格,pixel,待单角色制作时标定,锁定参考
 render.outline_weight,像素表现,轮廓线宽,pixel,逻辑像素且待标定,锁定参考
-render.cluster_scale,像素表现,像素簇尺度,ordinal,细密且清晰;禁止粗糙化,锁定参考
+render.cluster_scale,像素表现,像素簇尺度,ordinal,清晰可辨且不过密;避免糊化或粗糙化,锁定参考
 render.dither_pattern,像素表现,抖色结构,enum,局部有序;局部散点;混合受控,锁定参考
-render.dither_density,像素表现,抖色密度,ordinal,参照第二轮10号而非全图噪点,锁定参考
+render.dither_density,像素表现,抖色密度,ordinal,以当前有效母版为参考；少量局部明暗，避免全图噪点,锁定参考
 render.shade_steps,像素表现,明暗色阶,count,每材质分别标定,锁定参考
 render.light_direction,像素表现,基础光照方向,record,统一角色主光与反光,联动
 render.edge_aa,像素表现,边缘过渡规则,enum,透明外缘硬边;内部选择性过渡,锁定参考

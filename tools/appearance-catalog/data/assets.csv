@@ -1,2 +1,3 @@
 asset_id,recipe_id,path,locator,kind,status,notes
-concept.maid.board02,reference.maid10,../references/style-board-02-maid.png,4乘4比较图第3行第2列即10号,概念比较图,仅参考,不是分层部件；不是透明立绘；未验收动画；无正式可发布素材
+concept.maid.board02,reference.maid10,../references/style-board-02-maid.png,4乘4比较图第3行第2列即10号,历史概念比较图,仅历史概念参考,旧4×4比较图保留作历史概念参考；不覆盖2026-10-26新版母版；不是分层部件；不是透明立绘；未验收动画；无正式可发布素材
+char.rin.master-pixel-v2,reference.maid10,../../../assets/characters/rin/source/master-pixel-v2.png,整图母版,像素母版,用户已确认静态母版,2026-10-26用户认可的像素表达修订版；当前有效视觉参考；10号仍为紧凑头身与造型方向来源；静态母版非动画、非分层部件、非发布资源；凛个体发色与金瞳不构成跨角色通用约束

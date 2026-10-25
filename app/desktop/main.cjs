@@ -5,6 +5,8 @@ const readline = require("node:readline");
 const { app, BrowserWindow, ipcMain, screen, session } = require("electron");
 
 const profileDir = process.env.BAYPER_DESKTOP_PROFILE;
+const DISPLAY_SCALE = 0.5;
+const DEFAULT_FRAME_SIZE = Object.freeze({ width: 256, height: 384 });
 if (!profileDir) {
   console.error("缺少 BAYPER_DESKTOP_PROFILE");
   app.quit();
@@ -26,6 +28,15 @@ function send(message) {
   } catch {
     // 父进程断开时由 stdin 结束事件负责退出。
   }
+}
+
+/* 源帧与 manifest 保持原始尺寸；桌面只把窗口和显示线性缩到 50%。
+   窗口同步缩小，透明边缘和拖动命中区域一致，不保留大片不可穿透空白。 */
+function displaySize(frameSize = DEFAULT_FRAME_SIZE) {
+  return {
+    width: Math.max(1, Math.round(frameSize.width * DISPLAY_SCALE)),
+    height: Math.max(1, Math.round(frameSize.height * DISPLAY_SCALE)),
+  };
 }
 
 function clampPosition(x, y, width, height) {
@@ -69,7 +80,8 @@ function applyState(state) {
 
   const frameSize = state.animations?.idle?.frameSize ?? state.animations?.wave?.frameSize;
   if (frameSize) {
-    window.setContentSize(frameSize.width, frameSize.height);
+    const size = displaySize(frameSize);
+    window.setContentSize(size.width, size.height);
   }
 
   window.webContents.send("canvas:state", {
@@ -204,7 +216,9 @@ app.whenReady().then(() => {
     callback(false);
   });
 
-  const initialSize = latestState?.animations?.idle?.frameSize ?? { width: 256, height: 384 };
+  const initialSize = displaySize(
+    latestState?.animations?.idle?.frameSize ?? DEFAULT_FRAME_SIZE,
+  );
   window = new BrowserWindow({
     width: initialSize.width,
     height: initialSize.height,

@@ -249,8 +249,13 @@ test("POL-DESKTOP-001/004 真实画布、管理窗口输入、关闭隐藏与退
     assert.equal(snapshot.desktop.activationPolicy, "prohibited");
     assert.equal(snapshot.desktop.characterId, "rin");
     assert.equal(snapshot.desktop.lastNode, "idle-loop");
-    assert.equal(snapshot.desktop.bounds.width, 256);
-    assert.equal(snapshot.desktop.bounds.height, 384);
+    assert.equal(snapshot.desktop.bounds.width, 128, "画布窗口宽度应为 256 的一半");
+    assert.equal(snapshot.desktop.bounds.height, 192, "画布窗口高度应为 384 的一半");
+    const workArea = await app.evaluate(({ screen }) => screen.getPrimaryDisplay().workArea);
+    assert.ok(snapshot.desktop.bounds.x >= workArea.x);
+    assert.ok(snapshot.desktop.bounds.y >= workArea.y);
+    assert.ok(snapshot.desktop.bounds.x + snapshot.desktop.bounds.width <= workArea.x + workArea.width);
+    assert.ok(snapshot.desktop.bounds.y + snapshot.desktop.bounds.height <= workArea.y + workArea.height);
 
     const childPid = childPidFrom(snapshot);
     const children = desktopProcesses();
@@ -495,6 +500,8 @@ test("POL-DESKTOP-005 手动切换/休息等待真实自然节点并切到 Hu �
       10000,
     );
     assert.ok(hu.desktop.lastNodeAt > aligned.desktop.lastNodeAt);
+    assert.equal(hu.desktop.bounds.width, 128, "角色切换后窗口仍保持半尺寸");
+    assert.equal(hu.desktop.bounds.height, 192);
     await capture(page, "desktop-manual-hu");
 
     const huNode = await waitForSnapshot(
