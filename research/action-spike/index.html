@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>多动作调度独立探针</title>
+<style>
+  body { margin: 0; padding: 24px; background: #1d1d21; color: #e6e6e6;
+         font-family: ui-monospace, Menlo, monospace; }
+  h1 { font-size: 18px; margin: 0 0 12px; }
+  h2 { font-size: 13px; margin: 18px 0 6px; color: #a9a9b3; }
+  canvas { width: 512px; height: 512px; border: 1px solid #4a4a52;
+           image-rendering: pixelated; display: block; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 4px; }
+  button { padding: 7px 12px; background: #35353c; color: #e6e6e6;
+           border: 1px solid #5a5a64; border-radius: 4px; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: default; }
+  #status { margin: 10px 0 0; color: #b9c7a8; }
+  pre { margin: 0; padding: 10px; background: #26262c; border: 1px solid #3e3e46;
+        max-height: 220px; overflow: auto; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<main>
+  <h1>多动作调度独立探针（非产品界面）</h1>
+  <canvas id="canvas" width="256" height="256"></canvas>
+  <p id="status">加载 clips.json 与真实 PNG…</p>
+  <div class="controls">
+    <button id="wave" disabled>触发 wave（W / 画布点击）</button>
+    <button id="alert" disabled>触发 alert（A）</button>
+    <button id="delay" disabled>1 秒后触发 alert</button>
+    <button id="reset" disabled>reset（取消计时器）</button>
+  </div>
+  <h2>state</h2>
+  <pre id="state">未就绪</pre>
+  <h2>events</h2>
+  <pre id="events">[]</pre>
+</main>
+<script type="module">
+import { createController } from "./controller.mjs";
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const statusNode = document.getElementById("status");
+const stateNode = document.getElementById("state");
+const eventsNode = document.getElementById("events");
+const buttons = {
+  wave: document.getElementById("wave"), alert: document.getElementById("alert"),
+  delay: document.getElementById("delay"), reset: document.getElementById("reset"),
+};
+let clips = null;
+let frameSize = 256;
+let images = new Map();
+let controller = null;
+let pendingTimer = null;
+let lastTime = null;
+
+function loadImage(path) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error(`PNG 加载失败：${path}`));
+    image.src = path;
+  });
+}
+
+function round(value) {
+  return Math.round(value * 1000) / 1000;
+}
+
+function drawBoard() {
+  const square = 16;
+  for (let y = 0; y < frameSize; y += square) {
+    for (let x = 0; x < frameSize; x += square) {
+      ctx.fillStyle = ((x + y) / square) % 2 === 0 ? "#2b2b31" : "#3a3a42";
+      ctx.fillRect(x, y, square, square);
+    }
+  }
+}
+
+function render(snapshot) {
+  ctx.imageSmoothingEnabled = false;
+  drawBoard();
+  const clip = clips[snapshot.clip];
+  const frame = clip.frames[snapshot.frame];
+  ctx.drawImage(images.get(clip.atlas), frame.x, frame.y, frameSize, frameSize,
+    0, 0, frameSize, frameSize);
+}
+
+function updateDom(snapshot) {
+  stateNode.textContent = JSON.stringify({
+    clip: snapshot.clip, frame: snapshot.frame, playhead: round(snapshot.playhead),
+    suspended: snapshot.suspended
+      ? { clip: snapshot.suspended.clip, playhead: round(snapshot.suspended.playhead) }
+      : null,
+    pendingTimer: pendingTimer !== null,
+  }, null, 2);
+  eventsNode.textContent = JSON.stringify(snapshot.events.map((event) => ({
+    ...event, playhead: event.playhead === undefined ? undefined : round(event.playhead),
+  })), null, 2);
+}
+
+function tick(now) {
+  const delta = lastTime === null ? 0 : now - lastTime;
+  lastTime = now;
+  controller.advance(delta);
+  const snapshot = controller.snapshot();
+  render(snapshot);
+  updateDom(snapshot);
+  requestAnimationFrame(tick);
+}
+
+const trigger = (name, source) => controller && controller.trigger(name, source);
+buttons.wave.addEventListener("click", () => trigger("wave", "button"));
+buttons.alert.addEventListener("click", () => trigger("alert", "button"));
+buttons.delay.addEventListener("click", () => {
+  if (pendingTimer !== null) clearTimeout(pendingTimer);
+  pendingTimer = setTimeout(() => {
+    pendingTimer = null;
+    trigger("alert", "timeout");
+  }, 1000);
+});
+buttons.reset.addEventListener("click", () => {
+  if (pendingTimer !== null) {
+    clearTimeout(pendingTimer);
+    pendingTimer = null;
+  }
+  if (controller) controller.reset();
+});
+canvas.addEventListener("click", () => trigger("wave", "canvas"));
+window.addEventListener("keydown", (event) => {
+  if (!controller || event.repeat) return;
+  if (event.key === "w" || event.key === "W") trigger("wave", "keyboard");
+  if (event.key === "a" || event.key === "A") trigger("alert", "keyboard");
+});
+
+async function init() {
+  try {
+    const response = await fetch("assets/processed/clips.json");
+    if (!response.ok) throw new Error(`clips.json 读取失败：HTTP ${response.status}`);
+    const data = await response.json();
+    clips = data.clips;
+    frameSize = data.frame_size;
+    canvas.width = frameSize;
+    canvas.height = frameSize;
+    const paths = [...new Set(Object.values(clips).map((clip) => clip.atlas))];
+    const loaded = await Promise.all(paths.map(async (path) => [path, await loadImage(path)]));
+    images = new Map(loaded);
+    controller = createController(clips);
+    for (const button of Object.values(buttons)) button.disabled = false;
+    statusNode.textContent = "已加载 clips.json 与两张 PNG；W/点击画布触发 wave，A/按钮触发 alert。";
+    requestAnimationFrame(tick);
+  } catch (error) {
+    statusNode.textContent = `加载失败：${error.message}`;
+    statusNode.style.color = "#ff8a8a";
+  }
+}
+
+init();
+</script>
+</body>
+</html>

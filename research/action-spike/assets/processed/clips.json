@@ -1,0 +1,93 @@
+{
+  "frame_size": 256,
+  "clips": {
+    "idle": {
+      "atlas": "assets/idle-atlas.png",
+      "loop": true,
+      "frames": [
+        {
+          "x": 0,
+          "y": 0,
+          "duration": 150
+        },
+        {
+          "x": 256,
+          "y": 0,
+          "duration": 150
+        },
+        {
+          "x": 512,
+          "y": 0,
+          "duration": 150
+        },
+        {
+          "x": 0,
+          "y": 256,
+          "duration": 150
+        },
+        {
+          "x": 256,
+          "y": 256,
+          "duration": 150
+        },
+        {
+          "x": 512,
+          "y": 256,
+          "duration": 150
+        }
+      ]
+    },
+    "wave": {
+      "atlas": "assets/processed/action-atlas.png",
+      "loop": false,
+      "frames": [
+        {
+          "x": 0,
+          "y": 0,
+          "duration": 600
+        },
+        {
+          "x": 256,
+          "y": 0,
+          "duration": 600
+        },
+        {
+          "x": 512,
+          "y": 0,
+          "duration": 600
+        },
+        {
+          "x": 768,
+          "y": 0,
+          "duration": 600
+        }
+      ]
+    },
+    "alert": {
+      "atlas": "assets/processed/action-atlas.png",
+      "loop": false,
+      "frames": [
+        {
+          "x": 0,
+          "y": 256,
+          "duration": 200
+        },
+        {
+          "x": 256,
+          "y": 256,
+          "duration": 250
+        },
+        {
+          "x": 512,
+          "y": 256,
+          "duration": 250
+        },
+        {
+          "x": 768,
+          "y": 256,
+          "duration": 200
+        }
+      ]
+    }
+  }
+}

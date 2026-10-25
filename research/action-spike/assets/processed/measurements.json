@@ -1,0 +1,259 @@
+{
+  "grid": [
+    4,
+    2
+  ],
+  "source_cell": [
+    384,
+    512
+  ],
+  "canvas": 256,
+  "scale": 0.561404,
+  "scale_rule": "以新动作第一 neutral 可见高度对齐 idle 第一帧可见高度，八帧共用",
+  "neutral_height_source": 399,
+  "target_height": 224,
+  "idle_reference_bbox": [
+    27,
+    24,
+    192,
+    248
+  ],
+  "feet_bottom": 248,
+  "visible_alpha_threshold": 128,
+  "atlas_size": [
+    1024,
+    512
+  ],
+  "boundary_check": "八帧可见 bbox 均未触及格边，未发现侵入相邻格",
+  "frames": [
+    {
+      "index": 0,
+      "clip": "wave",
+      "source_bbox": [
+        20,
+        87,
+        344,
+        486
+      ],
+      "offset": [
+        12,
+        -24
+      ],
+      "foot_anchor_source_cell": 223.0,
+      "foot_anchor_output": 127.5,
+      "alpha_output": {
+        "zero": 33264,
+        "full": 0,
+        "semi": 32272
+      },
+      "output_visible_bbox": [
+        23,
+        25,
+        206,
+        248
+      ],
+      "hash": "72a3a481aae5abbf"
+    },
+    {
+      "index": 1,
+      "clip": "wave",
+      "source_bbox": [
+        401,
+        87,
+        736,
+        486
+      ],
+      "offset": [
+        18,
+        -24
+      ],
+      "foot_anchor_source_cell": 214.0,
+      "foot_anchor_output": 128.5,
+      "alpha_output": {
+        "zero": 33263,
+        "full": 0,
+        "semi": 32273
+      },
+      "output_visible_bbox": [
+        28,
+        25,
+        216,
+        248
+      ],
+      "hash": "45f7471f0801d70e"
+    },
+    {
+      "index": 2,
+      "clip": "wave",
+      "source_bbox": [
+        783,
+        87,
+        1141,
+        486
+      ],
+      "offset": [
+        22,
+        -24
+      ],
+      "foot_anchor_source_cell": 208.0,
+      "foot_anchor_output": 128.5,
+      "alpha_output": {
+        "zero": 32973,
+        "full": 0,
+        "semi": 32563
+      },
+      "output_visible_bbox": [
+        30,
+        25,
+        232,
+        248
+      ],
+      "hash": "6b6feada5fcfad04"
+    },
+    {
+      "index": 3,
+      "clip": "wave",
+      "source_bbox": [
+        1169,
+        87,
+        1495,
+        486
+      ],
+      "offset": [
+        13,
+        -24
+      ],
+      "foot_anchor_source_cell": 222.0,
+      "foot_anchor_output": 128.0,
+      "alpha_output": {
+        "zero": 33387,
+        "full": 0,
+        "semi": 32149
+      },
+      "output_visible_bbox": [
+        23,
+        25,
+        206,
+        248
+      ],
+      "hash": "f889ee5cbd0b867d"
+    },
+    {
+      "index": 4,
+      "clip": "alert",
+      "source_bbox": [
+        17,
+        573,
+        344,
+        973
+      ],
+      "offset": [
+        12,
+        -10
+      ],
+      "foot_anchor_source_cell": 222.5,
+      "foot_anchor_output": 127.5,
+      "alpha_output": {
+        "zero": 33041,
+        "full": 0,
+        "semi": 32495
+      },
+      "output_visible_bbox": [
+        22,
+        24,
+        206,
+        248
+      ],
+      "hash": "b38089a6f563cfbe"
+    },
+    {
+      "index": 5,
+      "clip": "alert",
+      "source_bbox": [
+        406,
+        559,
+        737,
+        973
+      ],
+      "offset": [
+        12,
+        -10
+      ],
+      "foot_anchor_source_cell": 228.0,
+      "foot_anchor_output": 128.5,
+      "alpha_output": {
+        "zero": 31878,
+        "full": 0,
+        "semi": 33658
+      },
+      "output_visible_bbox": [
+        24,
+        16,
+        211,
+        248
+      ],
+      "hash": "804f473b3ce0982e"
+    },
+    {
+      "index": 6,
+      "clip": "alert",
+      "source_bbox": [
+        783,
+        559,
+        1113,
+        973
+      ],
+      "offset": [
+        16,
+        -10
+      ],
+      "foot_anchor_source_cell": 221.5,
+      "foot_anchor_output": 128.0,
+      "alpha_output": {
+        "zero": 31765,
+        "full": 0,
+        "semi": 33771
+      },
+      "output_visible_bbox": [
+        24,
+        16,
+        210,
+        248
+      ],
+      "hash": "f0bf911b5dfce369"
+    },
+    {
+      "index": 7,
+      "clip": "alert",
+      "source_bbox": [
+        1169,
+        573,
+        1495,
+        973
+      ],
+      "offset": [
+        12,
+        -10
+      ],
+      "foot_anchor_source_cell": 222.0,
+      "foot_anchor_output": 127.5,
+      "alpha_output": {
+        "zero": 33152,
+        "full": 0,
+        "semi": 32384
+      },
+      "output_visible_bbox": [
+        22,
+        24,
+        205,
+        248
+      ],
+      "hash": "3db273a1ecf22be4"
+    }
+  ],
+  "distinct_hashes": 8,
+  "inputs": {
+    "actions_sha256": "37200e3dffbf4998b309092722b0944f03c88211b31b1ce491fb587ae439e309",
+    "idle_atlas_sha256": "381a1a7d6bc9063ba98d515a6d40c3958e83f385b3b0e0ddaa9fc53cd7438d6f"
+  }
+}
