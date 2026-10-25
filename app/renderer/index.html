@@ -176,8 +176,22 @@
               </button>
               <span id="check-model-status" class="status-text" role="status" aria-live="polite"></span>
             </div>
+            <div class="chat-launch">
+              <h3 class="arrange-title">聊一会儿</h3>
+              <p id="chat-current-label" class="side-line"></p>
+              <button id="chat-current" class="btn btn-ghost btn-small" type="button">
+                和当前角色聊一会儿
+              </button>
+              <div class="chat-launch-row">
+                <select id="chat-character" aria-label="选择已结识角色"></select>
+                <button id="chat-start" class="btn btn-ghost btn-small" type="button">
+                  聊一会儿
+                </button>
+              </div>
+              <p id="chat-launch-status" class="status-text" role="status" aria-live="polite"></p>
+            </div>
             <p class="note">
-              聊天与桌面小窗会在后续切片接入；本轮只验证本地安排与数值，不会伪造回复或探索完成。
+              聊天历史按角色保存；打开聊天会进入一段临时互动，关闭后回到原陪伴安排。
             </p>
           </aside>
 
@@ -234,6 +248,8 @@
 
     <footer class="foot">角色与图片是开发候选，不是正式发布资源。</footer>
 
+    <script src="chat-view-gate.js"></script>
+    <script src="chat-panel.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

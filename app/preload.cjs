@@ -1,4 +1,5 @@
-/* 渲染进程唯一的业务接口面。不暴露 ipcRenderer、文件、数据库或网络能力。 */
+/* 渲染进程的具名业务接口面。不暴露 ipcRenderer、文件、数据库或网络能力。
+   bayper 保持既有 S01/S02 表面；bayperChat 只提供聊天所需的显式方法。 */
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld(
@@ -18,5 +19,21 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.on("bayper:snapshot-updated", (_event, snapshot) => callback(snapshot));
     },
     getSystemStatus: () => ipcRenderer.invoke("bayper:system-status"),
+  }),
+);
+
+contextBridge.exposeInMainWorld(
+  "bayperChat",
+  Object.freeze({
+    openChat: (characterId) => ipcRenderer.invoke("bayper:chat:open", characterId),
+    getChatConversation: (characterId, conversationId) =>
+      ipcRenderer.invoke("bayper:chat:conversation", characterId, conversationId),
+    sendChatMessage: (payload) => ipcRenderer.invoke("bayper:chat:send", payload),
+    cancelChatMessage: (payload) => ipcRenderer.invoke("bayper:chat:cancel", payload),
+    retryChatMessage: (payload) => ipcRenderer.invoke("bayper:chat:retry", payload),
+    closeChat: () => ipcRenderer.invoke("bayper:chat:close"),
+    onChatClosed: (callback) => {
+      ipcRenderer.on("bayper:chat-closed", () => callback());
+    },
   }),
 );

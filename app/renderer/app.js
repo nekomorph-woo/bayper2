@@ -1,6 +1,7 @@
 /* S02a renderer：界面状态切换、S01 首次相遇与本地陪伴安排。
    不访问文件、数据库或网络，也不使用 localStorage；聊天与桌面小窗不在本切片。 */
 const api = window.bayper;
+const chatApi = window.bayperChat;
 const byId = (id) => document.getElementById(id);
 
 const state = {
@@ -38,6 +39,21 @@ async function callApi(method, ...args) {
     return { ok: false, error: { code: "IPC_ERROR", message: "应用通信失败，请重试。" } };
   }
 }
+
+async function callChatApi(method, ...args) {
+  try {
+    return await chatApi[method](...args);
+  } catch {
+    return { ok: false, error: { code: "IPC_ERROR", message: "聊天通信失败，请重试。" } };
+  }
+}
+
+const chatPanel = window.createChatPanel({
+  api: chatApi,
+  callApi: callChatApi,
+  showAlert,
+  getSnapshot: () => state.snapshot,
+});
 
 /* ---------- 模型配置 ---------- */
 
@@ -225,11 +241,20 @@ function renderRoster(companion) {
       name.textContent = entry.displayName;
 
       row.append(slot, name);
+      const actions = document.createElement("span");
+      actions.className = "roster-actions";
+      const chatButton = document.createElement("button");
+      chatButton.type = "button";
+      chatButton.className = "btn btn-ghost btn-small";
+      chatButton.dataset.action = "chat";
+      chatButton.dataset.characterId = entry.characterId;
+      chatButton.textContent = "聊天";
+      actions.append(chatButton);
       if (entry.isCurrent) {
         const current = document.createElement("span");
         current.className = "status-text";
         current.textContent = "当前";
-        row.append(current);
+        actions.append(current);
       } else {
         const button = document.createElement("button");
         button.type = "button";
@@ -237,8 +262,9 @@ function renderRoster(companion) {
         button.dataset.action = "switch";
         button.dataset.characterId = entry.characterId;
         button.textContent = "请她陪我";
-        row.append(button);
+        actions.append(button);
       }
+      row.append(actions);
       return row;
     }),
   );
@@ -363,6 +389,7 @@ function renderHome() {
 
   renderRoster(companion);
   renderCompanionControls(companion);
+  chatPanel.renderLaunch(companion);
 }
 
 async function runCompanionAction(button, call, successText, statusId) {
@@ -498,6 +525,11 @@ byId("fixed-select").addEventListener("change", () => {
 });
 byId("nickname-save").addEventListener("click", saveNickname);
 byId("roster-list").addEventListener("click", (event) => {
+  const chatButton = event.target.closest('button[data-action="chat"]');
+  if (chatButton) {
+    chatPanel.openFor(chatButton.dataset.characterId, chatButton);
+    return;
+  }
   const button = event.target.closest('button[data-action="switch"]');
   if (!button) {
     return;

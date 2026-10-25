@@ -114,3 +114,27 @@ Codex查看实际窗口截图并核对真实GUI测试操作。当前1200×800及
 Codex显式执行`node --no-warnings --test tests/acceptance/live-chat.spec.cjs`。2026-10-26本地时间，实际GET /models确认deepseek-flash；独立临时SQLite、真实生产chat/memory服务，未经过GUI。真实chat只发1次，无自动重试、无测试seed。模型回应“温茶。好，我记着了。”，但memoryApplied=0，活动记忆为空，测试在学习环节正确失败；重开回忆、纠正和删除后三步未执行，不记为通过。
 
 证据`s03b-codex-live-chat-first.log`及`s03b-pol-chat-008-live-first-failure.json`只包含构造内容与必要计数，不含Key/Authorization/reasoning_content。独立语义判断同样FAIL：口头承诺与保存事实不一致；回复中的虚构茶壶动作也不能作为共同经历入库。失败规格见s03b-live-review.md，待窗口开发释放共享文件后修复并复验。该测试入口属于有效的失败检测成果，不表示生产功能已通过；保留明确单独执行入口，避免默认回归消耗真实API。
+
+## S03b窗口首版独立执行（2026-10-26）
+
+Claude窗口首版CLI23750已退出0。Codex独立执行 `node --no-warnings --test --test-concurrency=1 tests/acceptance/chat-ui.spec.cjs tests/acceptance/onboarding.spec.cjs tests/acceptance/companionship-ui.spec.cjs`，14/14通过，证据evidence/s03b-codex-window-first.log。真实Electron/SQLite与本地受控HTTP；不含真实模型。聊天5项覆盖角色归属、重启历史可达、尺寸可操作、取消、显式重试、跨角色迟到回复和退出互动锁清理；既有配置6项、陪伴UI3项回归通过。
+
+本批不判整个POL-CHAT通过：同角色历史请求倒序、关闭失败协调状态及await后焦点归属仍待按s03b-window-review.md复现；窗口隐藏/系统暂停和有效互动数值仍未完整覆盖。首版生产增量约1140行、测试500行，由独立chat-panel分担renderer；后续审查保留规模与可维护性关注，不通过压行降数。真实模型记忆缺陷仍FAIL；已派同开发者依s03b-live-review.md先修协议，禁止自动真实请求。
+
+## POL-CHAT-008真实第二轮语义审查
+
+协议补全后的独立服务回归37/37（s03b-codex-protocol-r2.log），真实DeepSeek实际GET models确认deepseek-flash；4次聊天，无自动重试，测试exit0。证据s03b-pol-chat-008-live-second.json及s03b-codex-live-chat-second.log。来源为构造数据，未seed偏好；首次实际落库1条，SQLite关闭重开后全新对话召回，明确本地纠正影响后续回答，删除后活动记忆为空且不再称知道旧/新饮品。存储/隔离/纠正/删除子断言PASS。
+
+Codex读取逐轮原文后判来源归因语义FAIL：模型将“我喜欢温茶”扩写成“你上次说过，茶放到温热才喝”，无该行为来源；删除后“你还没跟我说过”把当前无记录推为历史未说过。故整体POL-CHAT-008仍不PASS，不改原始machineVerdict或伪造人工结果。下一修正是通用来源忠实与未知表达约束，不能用测试饮品词后处理；本地删除为选择条目操作，不证明自然语言删除功能完成。
+
+### 第三轮：事实扩写改善，未知表达仍未通过
+
+Codex独立服务37/37（s03b-codex-attribution.log），真实四轮机器通过（s03b-pol-chat-008-live-third.json）。学习实际保存1条，重启回答原话“温茶”，纠正回答热可可且不再扩造旧饮茶行为；三阶段语义本批可接受。删除后说“我还没听你提过”，仍将无可用记忆当作过去没有交流；该语义子项FAIL，整体POL-CHAT-008不记PASS。无变化不继续重复真实调用；后续有明确策略变更再复验，原始三批结果全部保留。
+
+## S03b窗口返修与真实记忆第四轮（2026-10-26）
+
+Codex独立窗口回归18/18通过（s03b-codex-window-r2.log）：含8项真实聊天GUI、1项视图代次单测、6项配置GUI、3项陪伴GUI。新增验证实际SQLite关闭故障时面板/互动保留、解除故障后成功重试；关闭在途后的焦点与迟到隔离；真实本地memoryApplied反馈不由模型文案驱动。历史请求倒序的token判定仅在小模块单测覆盖，尚缺实际IPC延迟的完整UI场景，不能把这项冒称GUI实证。
+
+最新上下文策略独立服务38/38（s03b-codex-unknown.log）。第四轮真实DeepSeek GET models1/chat4，无自动重试；evidence/s03b-pol-chat-008-live-fourth.json保存完整构造文本与本地状态。Codex逐轮阅读：初次“我记下了”对应实际1条记忆；重启新会话“你喜欢喝温茶”有原话来源；本地纠正后回答热可可；删除后“这个我还不清楚”不再断言从未交流。后续留茶是角色未来提议，不计为真实经历。该构造链路机器与语义均PASS，接受POL-CHAT-008的当前服务边界，不推为所有语言变体、自然语言定位/删除、外部源解析或UI记忆管理完成。
+
+受托接受聊天窗口首个可用切片与固定回复协议：正式管理窗可按角色聊天、取消、显式重试、历史只读及重开；存储和源事实归因改进已实测。仍待本地记忆管理入口、自然语言控制、精力有效互动接线、IPC历史延迟完整UI、native整体视觉和全产品验收。前三批失败证据保留，不覆盖或删除。

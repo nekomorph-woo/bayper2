@@ -28,7 +28,7 @@ async function waitFor(predicate, timeoutMs = 2000) {
   }
 }
 
-function sendContent(res, content, status = 200) {
+function sendRawContent(res, content, status = 200) {
   if (res.destroyed || res.writableEnded) {
     return;
   }
@@ -40,8 +40,16 @@ function sendContent(res, content, status = 200) {
   );
 }
 
+function sendReply(res, content, status = 200) {
+  sendRawContent(
+    res,
+    JSON.stringify({ reply: content, memoryCandidates: [] }),
+    status,
+  );
+}
+
 function sendEnvelope(res, envelope, status = 200) {
-  sendContent(res, JSON.stringify(envelope), status);
+  sendRawContent(res, JSON.stringify(envelope), status);
 }
 
 async function startModelServer() {
@@ -62,7 +70,7 @@ async function startModelServer() {
       requests.push(body);
       const responder = responders.shift();
       Promise.resolve(
-        responder ? responder({ body, res }) : sendContent(res, "收到。"),
+        responder ? responder({ body, res }) : sendReply(res, "收到。"),
       ).catch(() => {
         if (!res.destroyed && !res.writableEnded) {
           res.destroy();
@@ -201,6 +209,35 @@ test("POL-CHAT-001 同一 SQLite、已结识角色隔离与名单不变", async 
   assert.equal(rinResult.status, "completed");
   assert.equal(huResult.status, "completed");
   assert.equal(server.requests.length, 2);
+  const systemPrompt = server.requests[0].messages.find(
+    (message) => message.role === "system",
+  ).content;
+  for (const kind of ["identity", "preference", "experience", "detail"]) {
+    assert.ok(systemPrompt.includes(kind));
+  }
+  assert.ok(systemPrompt.includes("用户长期偏好"));
+  assert.ok(systemPrompt.includes("真实共同经历"));
+  assert.ok(systemPrompt.includes("factKey"));
+  assert.ok(systemPrompt.includes("稳定"));
+  assert.ok(systemPrompt.includes("主体"));
+  assert.ok(systemPrompt.includes("否定"));
+  assert.ok(systemPrompt.includes("来源归因边界"));
+  assert.ok(systemPrompt.includes("用户明确告知"));
+  assert.ok(systemPrompt.includes("推断"));
+  assert.ok(systemPrompt.includes("转述"));
+  assert.ok(systemPrompt.includes("当前有效记忆或最近对话"));
+  assert.ok(systemPrompt.includes("过去从未说过"));
+  assert.ok(systemPrompt.includes("角色设定与特征只用于角色自己的语气"));
+  const rinMemory = server.requests[0].messages.filter(
+    (message) => message.role === "system",
+  )[1].content;
+  const huMemory = server.requests[1].messages.filter(
+    (message) => message.role === "system",
+  )[1].content;
+  assert.ok(rinMemory.includes("用户明确告知"));
+  assert.ok(rinMemory.includes("身份"));
+  assert.ok(huMemory.includes("偏好"));
+  assert.ok(huMemory.includes("用户明确告知"));
 
   const rinBody = JSON.stringify(server.requests[0]);
   const huBody = JSON.stringify(server.requests[1]);
@@ -231,6 +268,52 @@ test("POL-CHAT-001 同一 SQLite、已结识角色隔离与名单不变", async 
   );
 });
 
+test("POL-CHAT-008 无记忆时标注检索边界，对照例不进入记忆且不落库", async (t) => {
+  const ctx = await setupChatTest(t);
+  const { store, server } = ctx;
+  const conversation = store.chat.openConversation({ characterId: "rin" }).conversation;
+  // 模拟模型把提示里的对照例误当作用户信息：证据不在用户原话中，必须被拒绝。
+  server.enqueue(({ res }) =>
+    sendEnvelope(res, {
+      reply: "这个我现在想不起来了，能再跟我说说吗？",
+      memoryCandidates: [
+        {
+          factKey: "pref.example",
+          body: "用户常喝酸梅汤",
+          kind: "preference",
+          trust: "stated",
+          evidence: "你还记得我上次喝的酸梅汤吗",
+        },
+      ],
+    }),
+  );
+  const result = await store.chat.sendMessage({
+    characterId: "rin",
+    conversationId: conversation.id,
+    text: "今天好。",
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.memoryApplied, 0);
+  assert.equal(store.memory.listMemories("rin").length, 0);
+
+  const systems = server.requests[0].messages.filter((message) => message.role === "system");
+  assert.equal(systems.length, 2);
+  const memoryContext = systems[1].content;
+  assert.ok(memoryContext.includes("暂无有效记忆。"));
+  assert.ok(memoryContext.includes("不是全部人生记录"));
+  assert.ok(memoryContext.includes("现在没有可用记录"));
+  assert.ok(memoryContext.includes("从未交流"));
+  assert.ok(memoryContext.includes("删除过记录或关闭过来源"));
+  assert.ok(memoryContext.includes("历史断言"));
+  // 对照例只出现在系统提示，不得混入本轮记忆数据。
+  assert.equal(memoryContext.includes("酸梅汤"), false);
+  const prompt = systems[0].content;
+  assert.ok(prompt.includes("未知表达对照例"));
+  assert.ok(prompt.includes("不是用户信息、不是可用记忆"));
+  assert.ok(prompt.includes("酸梅汤"));
+  assert.ok(prompt.includes("想不起来"));
+});
+
 test("POL-CHAT-002 用户明确事实写一次，助手建议与模型授权不写入", async (t) => {
   const ctx = await setupChatTest(t);
   const { store, server } = ctx;
@@ -238,7 +321,7 @@ test("POL-CHAT-002 用户明确事实写一次，助手建议与模型授权不�
   const userText = "我喜欢无糖咖啡，请记住。";
   server.enqueue(({ res }) =>
     sendEnvelope(res, {
-      reply: "记住了。",
+      reply: "温茶，知道了。",
       memoryCandidates: [
         {
           factKey: "pref.coffee",
@@ -266,7 +349,7 @@ test("POL-CHAT-002 用户明确事实写一次，助手建议与模型授权不�
     text: userText,
   });
   assert.equal(result.status, "completed");
-  assert.equal(result.reply, "记住了。");
+  assert.equal(result.reply, "温茶，知道了。");
   assert.equal(result.memoryApplied, 1);
 
   const messages = store.chat.getConversation({
@@ -284,25 +367,37 @@ test("POL-CHAT-002 用户明确事实写一次，助手建议与模型授权不�
   assert.equal(countRows(store.dbPath, "memory_extraction_batches"), 1);
 
   server.enqueue(({ res }) =>
-    sendEnvelope(res, { reply: "好的。", memoryCandidates: "bad" }),
+    sendEnvelope(res, {
+      reply: "好的。",
+      memoryCandidates: [
+        {
+          factKey: "pref.rejected",
+          body: "用户喜欢拿铁",
+          kind: "preference",
+          trust: "stated",
+          evidence: "用户喜欢拿铁",
+        },
+      ],
+    }),
   );
-  const malformedMemory = await store.chat.sendMessage({
+  const rejectedCandidate = await store.chat.sendMessage({
     characterId: "rin",
     conversationId: conversation.id,
     text: "今天呢？",
   });
-  assert.equal(malformedMemory.status, "completed");
-  assert.equal(malformedMemory.reply, "好的。");
-  assert.equal(malformedMemory.memoryApplied, 0);
+  assert.equal(rejectedCandidate.status, "completed");
+  assert.equal(rejectedCandidate.reply, "好的。");
+  assert.equal(rejectedCandidate.memoryApplied, 0);
   assert.equal(store.memory.listMemories("rin").length, 1);
 
-  server.enqueue(({ res }) => sendContent(res, "我觉得你可以试试拿铁。"));
+  server.enqueue(({ res }) => sendReply(res, "我觉得你可以试试拿铁。"));
   const suggestion = await store.chat.sendMessage({
     characterId: "rin",
     conversationId: conversation.id,
     text: "那你推荐什么？",
   });
   assert.equal(suggestion.status, "completed");
+  assert.equal(suggestion.reply, "我觉得你可以试试拿铁。");
   assert.equal(suggestion.memoryApplied, 0);
   assert.equal(store.memory.listMemories("rin").length, 1);
   assert.equal(countRows(store.dbPath, "memory_extraction_batches"), 1);
@@ -319,13 +414,39 @@ test("POL-CHAT-002 用户明确事实写一次，助手建议与模型授权不�
   );
 });
 
+test("POL-CHAT-002 纯文本宣称记住但未返回结构不得作为完成", async (t) => {
+  const ctx = await setupChatTest(t);
+  const { store, server } = ctx;
+  const conversation = store.chat.openConversation({ characterId: "rin" }).conversation;
+  server.enqueue(({ res }) =>
+    sendRawContent(res, "温茶。好，我记着了。"),
+  );
+  const result = await store.chat.sendMessage({
+    characterId: "rin",
+    conversationId: conversation.id,
+    text: "请记住，我喜欢温茶。",
+    requestId: "plain-claim",
+  });
+  assert.equal(result.status, "failed");
+  assert.equal(result.errorCode, "INVALID_RESPONSE");
+  assert.equal(result.reply, null);
+  assert.equal(result.retryable, true);
+  const messages = store.chat.getConversation({
+    characterId: "rin",
+    conversationId: conversation.id,
+  }).messages;
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].role, "user");
+  assert.equal(store.memory.listMemories("rin").length, 0);
+});
+
 test("POL-CHAT-003 取消与关闭对话丢弃迟到回复", async (t) => {
   const ctx = await setupChatTest(t);
   const { store, server } = ctx;
   const conversation = store.chat.openConversation({ characterId: "rin" }).conversation;
   server.enqueue(async ({ res }) => {
     await delay(150);
-    sendContent(res, "迟到的回复");
+    sendReply(res, "迟到的回复");
   });
   const first = store.chat.sendMessage({
     characterId: "rin",
@@ -346,7 +467,7 @@ test("POL-CHAT-003 取消与关闭对话丢弃迟到回复", async (t) => {
 
   server.enqueue(async ({ res }) => {
     await delay(150);
-    sendContent(res, "关闭后的迟到回复");
+    sendReply(res, "关闭后的迟到回复");
   });
   const second = store.chat.sendMessage({
     characterId: "rin",
@@ -388,7 +509,7 @@ test("POL-CHAT-003 超时/结构失败可重试且不重复消息与记忆", asy
   const conversation = store.chat.openConversation({ characterId: "rin" }).conversation;
   server.enqueue(async ({ res }) => {
     await delay(500);
-    sendContent(res, "迟到回复");
+    sendReply(res, "迟到回复");
   });
   const userText = "我喜欢茉莉花茶，请记住。";
   const first = await store.chat.sendMessage({
@@ -408,7 +529,7 @@ test("POL-CHAT-003 超时/结构失败可重试且不重复消息与记忆", asy
     1,
   );
 
-  server.enqueue(({ res }) => sendContent(res, '{"reply":'));
+  server.enqueue(({ res }) => sendRawContent(res, '{"reply":'));
   const invalid = await store.chat.retryRequest({
     characterId: "rin",
     requestId: "retry-1",
@@ -419,7 +540,7 @@ test("POL-CHAT-003 超时/结构失败可重试且不重复消息与记忆", asy
 
   server.enqueue(({ res }) =>
     sendEnvelope(res, {
-      reply: "这次记住了。",
+      reply: "这次收到了。",
       memoryCandidates: [
         {
           factKey: "pref.jasmine",
@@ -436,7 +557,7 @@ test("POL-CHAT-003 超时/结构失败可重试且不重复消息与记忆", asy
     requestId: "retry-1",
   });
   assert.equal(retried.status, "completed");
-  assert.equal(retried.reply, "这次记住了。");
+  assert.equal(retried.reply, "这次收到了。");
   assert.equal(retried.memoryApplied, 1);
   assert.equal(server.requests.length, 3);
   assert.equal(
@@ -518,6 +639,11 @@ test("POL-CHAT-004/005 在途纠正与删除使迟到回复失效", async (t) =>
   });
   assert.equal(huResult.status, "completed");
   const huBody = JSON.stringify(server.requests[1]);
+  const huMemory = server.requests[1].messages.filter(
+    (message) => message.role === "system",
+  )[1].content;
+  assert.ok(huMemory.includes("转述"));
+  assert.ok(huMemory.includes("听rin说"));
   assert.ok(huBody.includes("用户喜欢新茶"));
   assert.equal(huBody.includes("用户喜欢旧茶"), false);
 
@@ -590,7 +716,7 @@ test("POL-CHAT-005 删除来源后重启不再拼接旧聊天片段", async (t) 
   });
 
   ctx.reopen();
-  server.enqueue(({ res }) => sendContent(res, "第二次回复。"));
+  server.enqueue(({ res }) => sendReply(res, "第二次回复。"));
   const second = await ctx.store.chat.sendMessage({
     characterId: "rin",
     conversationId: conversation.id,
@@ -618,7 +744,7 @@ test("POL-CHAT-003 重试前核验来源，来源排除后不外发旧事实", a
   const ctx = await setupChatTest(t);
   const { store, server } = ctx;
   const conversation = store.chat.openConversation({ characterId: "rin" }).conversation;
-  server.enqueue(({ res }) => sendContent(res, "服务失败", 500));
+  server.enqueue(({ res }) => sendReply(res, "服务失败", 500));
   const first = await store.chat.sendMessage({
     characterId: "rin",
     conversationId: conversation.id,
@@ -959,7 +1085,7 @@ test("POL-CHAT-001 启动恢复遗留 pending，普通重开不误伤", async (t
   });
   ctx.server.enqueue(async ({ res }) => {
     await gate;
-    sendContent(res, "旧回复");
+    sendReply(res, "旧回复");
   });
   const pending = ctx.store.chat.sendMessage({
     characterId: "rin",
@@ -1005,7 +1131,7 @@ test("POL-CHAT-001 启动恢复遗留 pending，普通重开不误伤", async (t
   assert.equal(replayed.errorCode, "INTERRUPTED");
   assert.equal(ctx.server.requests.length, 1);
 
-  ctx.server.enqueue(({ res }) => sendContent(res, "恢复成功。"));
+  ctx.server.enqueue(({ res }) => sendReply(res, "恢复成功。"));
   const retried = await ctx.store.chat.retryRequest({
     characterId: "rin",
     requestId: "recover-1",
@@ -1046,7 +1172,7 @@ test("POL-CHAT-003 dispose 取消在途请求后可安全关闭数据库", async
   });
   ctx.server.enqueue(async ({ res }) => {
     await gate;
-    sendContent(res, "迟到的退出回复");
+    sendReply(res, "迟到的退出回复");
   });
   const pending = ctx.store.chat.sendMessage({
     characterId: "rin",

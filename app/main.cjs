@@ -12,7 +12,7 @@ const {
 } = require("electron");
 const { AppError, toPublicError } = require("./errors.cjs");
 const { createStore } = require("./store.cjs");
-const { createOnboardingService } = require("./onboarding.cjs");
+const { createOnboardingService, readStoredModelCredentials } = require("./onboarding.cjs");
 const { createCompanionshipService } = require("./companionship.cjs");
 const { createDesktopHost } = require("./desktop-host.cjs");
 const { buildDesktopPresentation } = require("./desktop-assets.cjs");
@@ -55,6 +55,7 @@ let desktopPassthrough = false;
 let cleanupStarted = false;
 let cleanupFinished = false;
 let quitting = false;
+let activeChat = null;
 
 function readDataDir(argv) {
   const inline = argv.find((arg) => arg.startsWith("--data-dir="));
@@ -87,7 +88,13 @@ function startApplication() {
     callback(false);
   });
 
-  store = createStore(app.getPath("userData"));
+  store = createStore(app.getPath("userData"), {
+    chat: {
+      // 只在应用启动边界恢复崩溃遗留请求；凭据按请求从安全存储解密。
+      recoverInterrupted: true,
+      getCredentials: () => readStoredModelCredentials({ store, safeStorage }),
+    },
+  });
   desktopVisible = store.getAppState("desktop_visible") !== "0";
   desktopPassthrough = store.getAppState("desktop_passthrough") === "1";
 
@@ -101,6 +108,12 @@ function startApplication() {
     candidates: characterContent.candidates,
   });
   companionship.start();
+  // 上次异常退出可能留下互动锁；本次启动先恢复稳定陪伴状态。
+  try {
+    companionship.endInteraction();
+  } catch (error) {
+    console.error("启动清理互动锁失败：", error?.message ?? error);
+  }
 
   desktopHost = createDesktopHost({
     dataDir: app.getPath("userData"),
@@ -152,7 +165,12 @@ function createManagementWindow() {
   win.on("close", (event) => {
     if (!quitting) {
       event.preventDefault();
-      win.hide();
+      try {
+        closeActiveChat({ notifyRenderer: true });
+        win.hide();
+      } catch (error) {
+        console.error("管理窗关闭被聊天收尾失败阻止：", error?.message ?? error);
+      }
     }
   });
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
@@ -338,7 +356,7 @@ function handleCanvasAssetError(message) {
 }
 
 function handleCanvasNodeComplete(node) {
-  if (systemPaused || quitting || !rotationPending) {
+  if (systemPaused || quitting || !rotationPending || activeChat) {
     return;
   }
   if (desktopHost?.hasBoundaryWaiters()) {
@@ -357,7 +375,7 @@ function handleCanvasNodeComplete(node) {
 }
 
 function ensurePendingRotationCompletion() {
-  if (quitting || systemPaused) {
+  if (quitting || systemPaused || activeChat) {
     if (fallbackNodeTimer) {
       clearTimeout(fallbackNodeTimer);
       fallbackNodeTimer = null;
@@ -414,8 +432,12 @@ function startHeartbeat() {
     }
     try {
       const snapshot = companionship.getSnapshot();
-      const rotation = companionship.requestAutoRotation();
-      rotationPending = rotation.pending === true || snapshot.pendingRotation === true;
+      if (!activeChat) {
+        const rotation = companionship.requestAutoRotation();
+        rotationPending = rotation.pending === true || snapshot.pendingRotation === true;
+      } else {
+        rotationPending = snapshot.pendingRotation === true;
+      }
       ensurePendingRotationCompletion();
       syncDesktop();
       pushSnapshot();
@@ -436,6 +458,7 @@ function pauseForSystem() {
     fallbackNodeTimer = null;
   }
   try {
+    closeActiveChat({ refresh: false, notifyRenderer: true });
     companionship.markClosed();
     pushSnapshot();
   } catch (error) {
@@ -470,6 +493,167 @@ async function waitForPresentationBoundary() {
   }
   const result = await desktopHost.waitForNodeBoundary(boundaryTimeoutFor(presentation));
   assertBoundaryCompleted(result);
+}
+
+function acceptedCompanions() {
+  return companionship?.getSnapshot().characters ?? [];
+}
+
+/* 管理窗、系统暂停与退出共用的聊天收尾：取消在途、关闭会话、结束陪伴互动。
+   普通关闭必须在持久状态收尾成功后才清 activeChat；失败保留协调状态并返回错误。
+   退出可 bestEffort，由下一次启动的互动恢复兜底。 */
+function closeActiveChat({
+  refresh = true,
+  notifyRenderer = false,
+  bestEffort = false,
+} = {}) {
+  const current = activeChat;
+  if (!current) {
+    return { closed: false };
+  }
+  let conversationError = null;
+  let interactionError = null;
+  if (current.conversationId && store) {
+    try {
+      store.chat.closeConversation({
+        characterId: current.characterId,
+        conversationId: current.conversationId,
+      });
+    } catch (error) {
+      conversationError = error;
+      console.error("关闭聊天会话失败：", error?.message ?? error);
+    }
+  }
+  if ((!conversationError || bestEffort) && companionship) {
+    try {
+      companionship.endInteraction();
+      rotationPending = companionship.getSnapshot().pendingRotation;
+    } catch (error) {
+      interactionError = error;
+      console.error("结束聊天互动失败：", error?.message ?? error);
+    }
+  }
+  if ((conversationError || interactionError) && !bestEffort) {
+    throw new AppError("CHAT_CLOSE_FAILED", "聊天没有完全关闭，请重试。");
+  }
+  activeChat = null;
+  const degraded = Boolean(conversationError || interactionError);
+  if (
+    !degraded &&
+    notifyRenderer &&
+    mainWindow &&
+    !mainWindow.isDestroyed() &&
+    !mainWindow.webContents.isDestroyed()
+  ) {
+    mainWindow.webContents.send("bayper:chat-closed", {
+      characterId: current.characterId,
+      conversationId: current.conversationId,
+    });
+  }
+  if (refresh && !quitting && !degraded) {
+    syncDesktop();
+    pushSnapshot();
+    ensurePendingRotationCompletion();
+    tray?.refresh();
+  }
+  return {
+    closed: true,
+    characterId: current.characterId,
+    conversationId: current.conversationId,
+    degraded,
+  };
+}
+
+function startChat(characterId) {
+  if (systemPaused) {
+    throw new AppError("SYSTEM_PAUSED", "系统暂停中，暂时不能开始聊天。");
+  }
+  const character = acceptedCompanions().find((item) => item.characterId === characterId);
+  if (!character) {
+    throw new AppError("INVALID_CHARACTER", "这个角色不在已结识名单中。");
+  }
+  const history = store.chat.listConversations({ characterId, limit: 10 });
+  closeActiveChat({ refresh: false });
+  const interaction = companionship.startInteraction(characterId);
+  activeChat = { characterId, conversationId: null, requestId: null };
+  syncDesktop();
+  pushSnapshot();
+  return {
+    characterId,
+    displayName: character.displayName,
+    interaction,
+    history,
+  };
+}
+
+function ensureChatConversation() {
+  if (!activeChat) {
+    throw new AppError("CHAT_NOT_OPEN", "聊天面板没有打开。");
+  }
+  if (!activeChat.conversationId) {
+    const created = store.chat.openConversation({ characterId: activeChat.characterId });
+    activeChat.conversationId = created.conversation.id;
+  }
+  return activeChat;
+}
+
+async function sendChatMessage({ characterId, text, requestId } = {}) {
+  if (!activeChat || activeChat.characterId !== characterId) {
+    throw new AppError("CHAT_NOT_OPEN", "聊天面板没有打开或角色已切换。");
+  }
+  if (typeof text !== "string" || !text.trim()) {
+    throw new AppError("INVALID_INPUT", "消息不能为空。");
+  }
+  if (typeof requestId !== "string" || !requestId.trim()) {
+    throw new AppError("INVALID_INPUT", "请求ID无效。");
+  }
+  const chat = ensureChatConversation();
+  chat.requestId = requestId;
+  let result;
+  try {
+    result = await store.chat.sendMessage({
+      characterId,
+      conversationId: chat.conversationId,
+      text,
+      requestId,
+    });
+  } catch (error) {
+    if (activeChat === chat) {
+      chat.requestId = null;
+    }
+    throw error;
+  }
+  if (activeChat === chat) {
+    chat.requestId = result.status === "failed" ? requestId : null;
+  }
+  return result;
+}
+
+function cancelChatMessage({ characterId, requestId } = {}) {
+  if (!activeChat || activeChat.characterId !== characterId || activeChat.requestId !== requestId) {
+    throw new AppError("REQUEST_NOT_FOUND", "没有可取消的聊天请求。");
+  }
+  return store.chat.cancelRequest({ characterId, requestId });
+}
+
+async function retryChatMessage({ characterId, requestId } = {}) {
+  if (!activeChat || activeChat.characterId !== characterId || activeChat.requestId !== requestId) {
+    throw new AppError("REQUEST_NOT_FOUND", "没有可重试的聊天请求。");
+  }
+  const chat = activeChat;
+  let result;
+  try {
+    result = await store.chat.retryRequest({ characterId, requestId });
+  } catch (error) {
+    if (activeChat === chat) {
+      chat.requestId = requestId;
+    }
+    throw error;
+  }
+  if (activeChat === chat) {
+    chat.requestId = result.status === "failed" ? requestId : null;
+  }
+  return result;
 }
 
 function registerIpcHandlers() {
@@ -586,6 +770,68 @@ function registerIpcHandlers() {
       return failureResult(error);
     }
   });
+
+  ipcMain.handle("bayper:chat:open", (event, characterId) => {
+    try {
+      assertTrustedSender(event);
+      return { ok: true, ...startChat(characterId), snapshot: snapshotForRenderer() };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:chat:conversation", (event, characterId, conversationId) => {
+    try {
+      assertTrustedSender(event);
+      return {
+        ok: true,
+        ...store.chat.getConversation({ characterId, conversationId }),
+      };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:chat:send", async (event, payload) => {
+    try {
+      assertTrustedSender(event);
+      const result = await sendChatMessage(payload);
+      return { ok: true, result };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:chat:cancel", (event, payload) => {
+    try {
+      assertTrustedSender(event);
+      return { ok: true, ...cancelChatMessage(payload) };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:chat:retry", async (event, payload) => {
+    try {
+      assertTrustedSender(event);
+      return { ok: true, result: await retryChatMessage(payload) };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:chat:close", (event) => {
+    try {
+      assertTrustedSender(event);
+      return {
+        ok: true,
+        ...closeActiveChat(),
+        snapshot: snapshotForRenderer(),
+      };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
 }
 
 function requestQuit() {
@@ -629,6 +875,7 @@ async function cleanup() {
     tray.destroy();
     tray = null;
   }
+  closeActiveChat({ refresh: false, bestEffort: true });
   if (companionship) {
     try {
       companionship.markClosed();
@@ -642,6 +889,11 @@ async function cleanup() {
     desktopHost = null;
   }
   if (store) {
+    try {
+      await store.chat.dispose();
+    } catch (error) {
+      console.error("退出时结束聊天请求失败：", error?.message ?? error);
+    }
     store.close();
     store = null;
   }

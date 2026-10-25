@@ -101,6 +101,17 @@ function createChatStore(db) {
       VALUES (?, ?, ?, ?)
     `),
     getConversation: db.prepare("SELECT * FROM chat_conversations WHERE id = ?"),
+    listConversations: db.prepare(`
+      SELECT c.*,
+        (SELECT m.content FROM chat_messages m
+         WHERE m.conversation_id = c.id ORDER BY m.seq DESC, m.id DESC LIMIT 1) AS last_content,
+        (SELECT m.created_at FROM chat_messages m
+         WHERE m.conversation_id = c.id ORDER BY m.seq DESC, m.id DESC LIMIT 1) AS last_at
+      FROM chat_conversations c
+      WHERE c.character_id = ?
+      ORDER BY c.updated_at DESC, c.created_at DESC, c.id DESC
+      LIMIT ?
+    `),
     closeConversation: db.prepare(
       "UPDATE chat_conversations SET closed_at = ?, updated_at = ? WHERE id = ?",
     ),
@@ -182,6 +193,14 @@ function createChatStore(db) {
 
   function getConversation(id) {
     return mapConversation(statements.getConversation.get(id));
+  }
+
+  function listConversations(characterId, limit) {
+    return statements.listConversations.all(characterId, limit).map((row) => ({
+      ...mapConversation(row),
+      lastMessage: row.last_content ?? null,
+      lastMessageAt: row.last_at ?? null,
+    }));
   }
 
   function closeConversation(id, closedAt) {
@@ -266,6 +285,7 @@ function createChatStore(db) {
     transaction,
     createConversation,
     getConversation,
+    listConversations,
     closeConversation,
     insertMessage,
     getMessage,

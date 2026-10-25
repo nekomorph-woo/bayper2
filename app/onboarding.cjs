@@ -101,6 +101,33 @@ function buildSnapshot(store, candidates) {
   return snapshot;
 }
 
+/* 主进程内部凭据读取：只在调用请求时解密，返回对象不进入快照或 renderer。
+   聊天服务与“检查模型连接”共用这一条安全存储路径。 */
+async function readStoredModelCredentials({ store, safeStorage }) {
+  const model = store.getModelConfig();
+  if (!model) {
+    throw new AppError("NOT_CONFIGURED", "请先完成模型配置。");
+  }
+
+  let apiKey;
+  try {
+    const cipher = Buffer.isBuffer(model.keyCipher)
+      ? model.keyCipher
+      : Buffer.from(model.keyCipher);
+    const decrypted = await safeStorage.decryptStringAsync(cipher);
+    apiKey = typeof decrypted === "string" ? decrypted : decrypted?.result;
+  } catch {
+    apiKey = null;
+  }
+  if (typeof apiKey !== "string" || !apiKey) {
+    throw new AppError(
+      "SAFE_STORAGE_UNAVAILABLE",
+      "无法从系统安全存储读取 API Key，请重新配置模型。",
+    );
+  }
+  return { baseUrl: model.baseUrl, modelName: model.modelName, apiKey };
+}
+
 function createOnboardingService({ store, safeStorage, candidates }) {
   if (!Array.isArray(candidates) || candidates.length === 0) {
     throw new Error("角色内容为空，无法启动首次相遇。");
@@ -156,33 +183,8 @@ function createOnboardingService({ store, safeStorage, candidates }) {
   /* 从系统安全存储解密已保存的 Key，再次执行同一条固定连通检查。
      返回值与快照都不包含 Key；解密失败时要求重新配置。 */
   async function checkStoredModel() {
-    const model = store.getModelConfig();
-    if (!model) {
-      throw new AppError("NOT_CONFIGURED", "请先完成模型配置。");
-    }
-
-    let apiKey;
-    try {
-      const cipher = Buffer.isBuffer(model.keyCipher)
-        ? model.keyCipher
-        : Buffer.from(model.keyCipher);
-      const decrypted = await safeStorage.decryptStringAsync(cipher);
-      apiKey = typeof decrypted === "string" ? decrypted : decrypted?.result;
-    } catch {
-      apiKey = null;
-    }
-    if (typeof apiKey !== "string" || !apiKey) {
-      throw new AppError(
-        "SAFE_STORAGE_UNAVAILABLE",
-        "无法从系统安全存储读取 API Key，请重新配置模型。",
-      );
-    }
-
-    await checkModelConnection({
-      baseUrl: model.baseUrl,
-      modelName: model.modelName,
-      apiKey,
-    });
+    const credentials = await readStoredModelCredentials({ store, safeStorage });
+    await checkModelConnection(credentials);
     return { checkedAt: new Date().toISOString() };
   }
 
@@ -222,4 +224,5 @@ module.exports = {
   recommendCharacters,
   buildSnapshot,
   createOnboardingService,
+  readStoredModelCredentials,
 };
