@@ -6,10 +6,10 @@
 
 - [AGENTS.md](AGENTS.md)：项目协作规范。Codex 负责需求分析、任务拆解、调度、决策与独立验收，所有项目代码及测试代码由 Claude Code CLI 实现。
 - [CLAUDE.md](CLAUDE.md)：Claude Code 的开发者入口，要求任务开始前读取 AGENTS.md，并按开发者职责执行任务。
-- [.agents/skills/polaris](.agents/skills/polaris)：北极星 polaris skill 的项目级软链，用于业务设计、场景验收和交付。Codex 按项目授权担任 master。
+- [.agents/skills/polaris](.agents/skills/polaris)：北极星 polaris skill 的项目内独立副本，用于业务设计、场景验收和交付。Codex 按项目授权担任 master。
 - [VERSION](VERSION)：项目版本的唯一来源；每次非纯版本号的 snap 提交使 PATCH 加 1，MAJOR 与 MINOR 升级须由用户明确指定。
 
-polaris 软链指向同级仓库中的 `../hapilon/.hapilon/agents/skills/polaris`。在其他机器使用时，应保证该目录存在，或将软链重新指向实际的 skill 目录。
+polaris 已从原 hapilon skill 目录完整复制到本仓库，保留 `.agents/skills/polaris/SKILL.md` 及全部参考文件，Codex 继续通过原入口识别。项目使用不再依赖同级 hapilon 仓库，后续调整可在本项目副本中独立进行。
 
 ## 开始开发
 
