@@ -13,3 +13,8 @@ Claude仅实现尺寸：app/desktop/main.cjs、必要画布CSS、明确相关tes
 Codex读取实际diff并独立执行两项相关真实Electron验收，2/2通过，日志evidence/s02b-codex-size.log。初始画布与Rin→Hu后均128×192，窗口在workArea内；真实OS拖动/合成仍沿S02b边界未验证，不借尺寸断言冒称完成。
 
 用户随后认可master-pixel-v2并要求同步。已建立assets/characters/STYLE.md，更新AGENTS/CLAUDE、PRD/动画计划/初选记录、catalog源数据与SQLite派生库。Codex独立运行build.py，8张表行数与CSV一致，310维不减少、48候选不扩张、assets增加到2，当前参考路径存在，integrity_check=ok。数据库仍是造型资料，不是运行时自动生成或全部素材完成。
+
+
+## 最新尺寸目标（2026-10-26用户附图）
+
+用户明确理想桌面角色本体约128×128 pt，场景如果存在另算。此为当前有效目标；前文128×192是上一轮画布实测记录，不能据此宣称已符合新目标。下一轮按角色本体可见包围范围等比适配，保留头身比例，不强行拉伸或裁切；画布、交互命中区域与场景另行标定。需在实际桌面逻辑点尺寸下查看，并区分Retina物理像素。当前仅记录用户要求，未改运行代码或宣称已验收。
