@@ -5,8 +5,7 @@ const readline = require("node:readline");
 const { app, BrowserWindow, ipcMain, screen, session } = require("electron");
 
 const profileDir = process.env.BAYPER_DESKTOP_PROFILE;
-const DISPLAY_SCALE = 0.5;
-const DEFAULT_FRAME_SIZE = Object.freeze({ width: 256, height: 384 });
+const DEFAULT_WINDOW_SIZE = Object.freeze({ width: 128, height: 128 });
 if (!profileDir) {
   console.error("缺少 BAYPER_DESKTOP_PROFILE");
   app.quit();
@@ -16,6 +15,7 @@ let window = null;
 let latestState = null;
 let dragState = null;
 let activationPolicy = "unconfirmed";
+let lastReportedBoundsKey = "";
 
 app.setName("Bayper Canvas");
 if (profileDir) {
@@ -30,12 +30,15 @@ function send(message) {
   }
 }
 
-/* 源帧与 manifest 保持原始尺寸；桌面只把窗口和显示线性缩到 50%。
-   窗口同步缩小，透明边缘和拖动命中区域一致，不保留大片不可穿透空白。 */
-function displaySize(frameSize = DEFAULT_FRAME_SIZE) {
+/* 父进程按 manifest 的共同可见包围计算窗口、图片尺寸与偏移；
+   子进程只执行该布局，不重新拟合各帧。 */
+function displaySize(plan) {
+  if (!plan) {
+    return DEFAULT_WINDOW_SIZE;
+  }
   return {
-    width: Math.max(1, Math.round(frameSize.width * DISPLAY_SCALE)),
-    height: Math.max(1, Math.round(frameSize.height * DISPLAY_SCALE)),
+    width: Math.max(1, plan.windowWidth),
+    height: Math.max(1, plan.windowHeight),
   };
 }
 
@@ -78,11 +81,9 @@ function applyState(state) {
     return;
   }
 
-  const frameSize = state.animations?.idle?.frameSize ?? state.animations?.wave?.frameSize;
-  if (frameSize) {
-    const size = displaySize(frameSize);
-    window.setContentSize(size.width, size.height);
-  }
+  const display = state.animations?.display;
+  const size = displaySize(display);
+  window.setContentSize(size.width, size.height);
 
   window.webContents.send("canvas:state", {
     character: state.character,
@@ -105,12 +106,10 @@ function applyState(state) {
     window.showInactive();
   }
 
-  if (state.position || !window.__initialPositionApplied) {
-    if (!dragState) {
-      applyPosition(state.position);
-    }
-    window.__initialPositionApplied = true;
+  if (!dragState) {
+    applyPosition(state.position);
   }
+  reportBounds();
 }
 
 function handleParentLine(line) {
@@ -186,6 +185,38 @@ function registerIpc() {
   });
 }
 
+function sendReady() {
+  if (!window || window.isDestroyed()) {
+    return;
+  }
+  const bounds = window.getBounds();
+  lastReportedBoundsKey = `${bounds.x}:${bounds.y}:${bounds.width}:${bounds.height}`;
+  send({
+    type: "ready",
+    pid: process.pid,
+    bounds,
+    windowType: "panel",
+    focusable: window.isFocusable(),
+    transparent: true,
+    activationPolicy,
+  });
+}
+
+/* 几何变化只更新 bounds；ready 只表示进程/窗口初始化，不能借它重置
+   错误、最后节点或展示身份，也不触发父宿主重发 state。 */
+function reportBounds() {
+  if (!window || window.isDestroyed()) {
+    return;
+  }
+  const bounds = window.getBounds();
+  const key = `${bounds.x}:${bounds.y}:${bounds.width}:${bounds.height}`;
+  if (key === lastReportedBoundsKey) {
+    return;
+  }
+  lastReportedBoundsKey = key;
+  send({ type: "bounds", bounds });
+}
+
 function reanchorToDisplays() {
   if (!window || window.isDestroyed()) {
     return;
@@ -216,9 +247,7 @@ app.whenReady().then(() => {
     callback(false);
   });
 
-  const initialSize = displaySize(
-    latestState?.animations?.idle?.frameSize ?? DEFAULT_FRAME_SIZE,
-  );
+  const initialSize = displaySize(latestState?.animations?.display);
   window = new BrowserWindow({
     width: initialSize.width,
     height: initialSize.height,
@@ -254,16 +283,7 @@ app.whenReady().then(() => {
   window.loadFile(path.join(__dirname, "renderer", "index.html"));
 
   window.webContents.once("did-finish-load", () => {
-    const bounds = window.getBounds();
-    send({
-      type: "ready",
-      pid: process.pid,
-      bounds,
-      windowType: "panel",
-      focusable: window.isFocusable(),
-      transparent: true,
-      activationPolicy,
-    });
+    sendReady();
     if (latestState) {
       applyState(latestState);
     }

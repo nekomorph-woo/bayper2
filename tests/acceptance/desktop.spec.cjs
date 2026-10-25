@@ -6,9 +6,10 @@ const path = require("node:path");
 const { test } = require("node:test");
 const { DatabaseSync } = require("node:sqlite");
 const { pathToFileURL } = require("node:url");
-const { _electron: electron } = require("playwright");
+const { _electron: electron, chromium } = require("playwright");
 const { startModelServer } = require("./fixture-server.cjs");
 const { createDesktopHost, presentationAssetKey } = require("../../app/desktop-host.cjs");
+const { buildDesktopPresentation } = require("../../app/desktop-assets.cjs");
 
 const electronPath = require("electron");
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -24,6 +25,54 @@ function localDay(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function manifestDisplayPlan(characterId, animationNames) {
+  const characterDir = path.join(repoRoot, "assets", "characters", characterId, "animations");
+  const frames = [];
+  let frameSize = null;
+  for (const name of animationNames) {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(characterDir, name, "manifest.json"), "utf8"),
+    );
+    frameSize = manifest.atlas.frame_size;
+    frames.push(...manifest.frames);
+  }
+  const minX = Math.min(...frames.map((frame) => frame.paste.x));
+  const minY = Math.min(...frames.map((frame) => frame.paste.y));
+  const maxX = Math.max(...frames.map((frame) => frame.paste.x + frame.scaled_size.width));
+  const maxY = Math.max(...frames.map((frame) => frame.paste.y + frame.scaled_size.height));
+  const width = maxX - minX;
+  const height = maxY - minY;
+  const scale = 128 / Math.max(width, height);
+  return {
+    scale,
+    windowWidth: Math.ceil(width * scale - 1e-6),
+    windowHeight: Math.ceil(height * scale - 1e-6),
+    canvasWidth: frameSize.width * scale,
+    canvasHeight: frameSize.height * scale,
+    offsetX: minX * scale,
+    offsetY: minY * scale,
+    footAnchor: {
+      x: frames[0].output_foot_anchor.x * scale - minX * scale,
+      y: frames[0].output_foot_anchor.y * scale - minY * scale,
+    },
+  };
+}
+
+function assertWithinWorkArea(bounds, workArea) {
+  assert.ok(bounds.x >= workArea.x);
+  assert.ok(bounds.y >= workArea.y);
+  assert.ok(bounds.x + bounds.width <= workArea.x + workArea.width);
+  assert.ok(bounds.y + bounds.height <= workArea.y + workArea.height);
+}
+
+function assertDisplayPlan(desktop, plan, label) {
+  assert.equal(desktop.bounds.width, plan.windowWidth, `${label} 窗口宽度`);
+  assert.equal(desktop.bounds.height, plan.windowHeight, `${label} 窗口高度`);
+  assert.ok(plan.windowWidth <= 128, `${label} 宽度应约 128pt 以内`);
+  assert.ok(plan.windowHeight <= 128, `${label} 高度应约 128pt 以内`);
+  assert.ok(Math.abs(plan.footAnchor.y - plan.windowHeight) < 1, `${label} 落脚点应在窗口底部`);
 }
 
 async function setup() {
@@ -235,12 +284,16 @@ test("POL-DESKTOP-001/004 真实画布、管理窗口输入、关闭隐藏与退
     const page = first.page;
     await completeOnboarding(page, ctx.server.baseUrl);
 
+    const rinPlan = manifestDisplayPlan("rin", ["idle-pixel-v2", "wave-pixel-v1"]);
     const snapshot = await waitForSnapshot(
       page,
       (value) =>
         value.desktop?.state === "running" &&
         value.desktop?.assetState === "ready" &&
         value.desktop?.lastNode === "idle-loop" &&
+        value.desktop?.bounds?.width === rinPlan.windowWidth &&
+        value.desktop?.bounds?.height === rinPlan.windowHeight &&
+        value.desktop?.displayedFrame?.includes("/idle-pixel-v2/frame-") &&
         value.desktop?.pid,
     );
     assert.equal(snapshot.desktop.windowType, "panel");
@@ -249,13 +302,10 @@ test("POL-DESKTOP-001/004 真实画布、管理窗口输入、关闭隐藏与退
     assert.equal(snapshot.desktop.activationPolicy, "prohibited");
     assert.equal(snapshot.desktop.characterId, "rin");
     assert.equal(snapshot.desktop.lastNode, "idle-loop");
-    assert.equal(snapshot.desktop.bounds.width, 128, "画布窗口宽度应为 256 的一半");
-    assert.equal(snapshot.desktop.bounds.height, 192, "画布窗口高度应为 384 的一半");
+    assertDisplayPlan(snapshot.desktop, rinPlan, "Rin");
+    assert.match(snapshot.desktop.displayedFrame, /idle-pixel-v2\/frame-/);
     const workArea = await app.evaluate(({ screen }) => screen.getPrimaryDisplay().workArea);
-    assert.ok(snapshot.desktop.bounds.x >= workArea.x);
-    assert.ok(snapshot.desktop.bounds.y >= workArea.y);
-    assert.ok(snapshot.desktop.bounds.x + snapshot.desktop.bounds.width <= workArea.x + workArea.width);
-    assert.ok(snapshot.desktop.bounds.y + snapshot.desktop.bounds.height <= workArea.y + workArea.height);
+    assertWithinWorkArea(snapshot.desktop.bounds, workArea);
 
     const childPid = childPidFrom(snapshot);
     const children = desktopProcesses();
@@ -490,18 +540,25 @@ test("POL-DESKTOP-005 手动切换/休息等待真实自然节点并切到 Hu �
       "手动切换必须等待当前自然节点，不能瞬间换身份",
     );
 
+    const huPlan = manifestDisplayPlan("hu", ["idle-v1"]);
     const hu = await waitForSnapshot(
       page,
       (value) =>
         value.companionship?.current?.characterId === "hu" &&
         value.desktop?.characterId === "hu" &&
         value.desktop?.assetState === "ready" &&
-        value.desktop?.lastNode === "idle-loop",
+        value.desktop?.lastNode === "idle-loop" &&
+        value.desktop?.bounds?.width === huPlan.windowWidth &&
+        value.desktop?.bounds?.height === huPlan.windowHeight &&
+        value.desktop?.displayedFrame?.includes("/idle-v1/frame-"),
       10000,
     );
     assert.ok(hu.desktop.lastNodeAt > aligned.desktop.lastNodeAt);
-    assert.equal(hu.desktop.bounds.width, 128, "角色切换后窗口仍保持半尺寸");
-    assert.equal(hu.desktop.bounds.height, 192);
+    assertDisplayPlan(hu.desktop, huPlan, "Hu");
+    const huWorkArea = await app.evaluate(({ screen }) =>
+      screen.getPrimaryDisplay().workArea,
+    );
+    assertWithinWorkArea(hu.desktop.bounds, huWorkArea);
     await capture(page, "desktop-manual-hu");
 
     const huNode = await waitForSnapshot(
@@ -835,5 +892,293 @@ test("POL-DESKTOP-005 A→慢加载B→A缓存竞态与失败后返回已加载A
     }
     fs.rmSync(slow.directory, { recursive: true, force: true });
     fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("POL-DESKTOP-007 真实画布 DOM 按共同包围裁切，点击招呼回待机并切 Hu", async () => {
+  const dataDir = makeDataDir();
+  const profileDir = path.join(dataDir, "canvas-profile");
+  const childEnv = {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    TMPDIR: process.env.TMPDIR,
+    LANG: process.env.LANG || "zh_CN.UTF-8",
+    BAYPER_DESKTOP_PROFILE: profileDir,
+    BAYPER_DESKTOP_CHILD: "1",
+  };
+  let child = null;
+  let browser = null;
+  try {
+    const desktopDir = path.join(repoRoot, "app", "desktop");
+    child = spawn(
+      electronPath,
+      ["--remote-debugging-port=0", "--remote-allow-origins=*", desktopDir],
+      { env: childEnv, stdio: ["pipe", "pipe", "pipe"] },
+    );
+    const outputLines = [];
+    child.stdout.on("data", (chunk) => outputLines.push(chunk.toString()));
+    child.stderr.on("data", (chunk) => outputLines.push(chunk.toString()));
+
+    const portFile = path.join(profileDir, "DevToolsActivePort");
+    await waitFor(() => fs.existsSync(portFile), 10000);
+    const port = Number(fs.readFileSync(portFile, "utf8").split("\n")[0]);
+    browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+    let page = null;
+    await waitFor(() => {
+      const pages = browser.contexts().flatMap((context) => context.pages());
+      page = pages.find((candidate) =>
+        candidate.url().includes("/app/desktop/renderer/index.html"),
+      );
+      return Boolean(page);
+    }, 10000);
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(String(error)));
+    await page.waitForLoadState("domcontentloaded");
+    const stdin = child.stdin;
+
+    const rin = buildDesktopPresentation("rin", "凛");
+    const rinState = {
+      type: "state",
+      ...rin,
+      displayKey: "dom-rin",
+      mode: "companion",
+      visible: false,
+      ignoreMouse: false,
+      position: null,
+    };
+    stdin.write(`${JSON.stringify(rinState)}\n`);
+    await page.waitForFunction(
+      () =>
+        document.getElementById("sprite")?.complete &&
+        document.getElementById("sprite")?.src.includes("idle-pixel-v2"),
+      null,
+      { timeout: 10000 },
+    );
+
+    const rinPlan = manifestDisplayPlan("rin", ["idle-pixel-v2", "wave-pixel-v1"]);
+    const rinDom = await readCanvasDom(page);
+    assert.equal(rinDom.windowWidth, rinPlan.windowWidth);
+    assert.equal(rinDom.windowHeight, rinPlan.windowHeight);
+    assertClose(rinDom.imageWidth, rinPlan.canvasWidth, "Rin 图片宽");
+    assertClose(rinDom.imageHeight, rinPlan.canvasHeight, "Rin 图片高");
+    assertClose(rinDom.left, -rinPlan.offsetX, "Rin 图片左偏移");
+    assertClose(rinDom.top, -rinPlan.offsetY, "Rin 图片上偏移");
+    assert.match(rinDom.src, /idle-pixel-v2\/frame-/);
+    assert.ok(Math.abs(rinPlan.footAnchor.y - rinPlan.windowHeight) < 1);
+    await captureDirectChild(page, `${SCREENSHOT_PREFIX}-dom-rin.png`);
+
+    await page.locator("#stage").click({ position: { x: 10, y: 10 } });
+    await page.waitForFunction(
+      () => document.getElementById("sprite")?.src.includes("wave-pixel-v1"),
+      null,
+      { timeout: 5000 },
+    );
+    const waveDom = await readCanvasDom(page);
+    assert.equal(waveDom.windowWidth, rinPlan.windowWidth);
+    assert.equal(waveDom.windowHeight, rinPlan.windowHeight);
+    assertClose(waveDom.imageWidth, rinPlan.canvasWidth, "wave 图片宽");
+    assertClose(waveDom.imageHeight, rinPlan.canvasHeight, "wave 图片高");
+    assertClose(waveDom.left, -rinPlan.offsetX, "wave 左偏移");
+    await page.waitForFunction(
+      () => document.getElementById("sprite")?.src.includes("idle-pixel-v2"),
+      null,
+      { timeout: 6000 },
+    );
+    await waitFor(
+      () => outputLines.join("").includes('"node":"wave"'),
+      3000,
+    );
+
+    const hu = buildDesktopPresentation("hu", "琥珀");
+    stdin.write(
+      `${JSON.stringify({
+        type: "state",
+        ...hu,
+        displayKey: "dom-hu",
+        mode: "companion",
+        visible: false,
+        ignoreMouse: false,
+        position: null,
+      })}\n`,
+    );
+    await page.waitForFunction(
+      () => document.getElementById("sprite")?.src.includes("idle-v1"),
+      null,
+      { timeout: 10000 },
+    );
+    const huPlan = manifestDisplayPlan("hu", ["idle-v1"]);
+    const huDom = await readCanvasDom(page);
+    assert.equal(huDom.windowWidth, huPlan.windowWidth);
+    assert.equal(huDom.windowHeight, huPlan.windowHeight);
+    assertClose(huDom.imageWidth, huPlan.canvasWidth, "Hu 图片宽");
+    assertClose(huDom.imageHeight, huPlan.canvasHeight, "Hu 图片高");
+    assertClose(huDom.left, -huPlan.offsetX, "Hu 图片左偏移");
+    assertClose(huDom.top, -huPlan.offsetY, "Hu 图片上偏移");
+    await captureDirectChild(page, `${SCREENSHOT_PREFIX}-dom-hu.png`);
+
+    stdin.write(`${JSON.stringify(rinState)}\n`);
+    await page.waitForFunction(
+      () =>
+        document.getElementById("sprite")?.src.includes("idle-pixel-v2") &&
+        document.getElementById("sprite")?.complete,
+      null,
+      { timeout: 10000 },
+    );
+    const backDom = await readCanvasDom(page);
+    assert.equal(backDom.windowWidth, rinPlan.windowWidth);
+    assert.equal(backDom.windowHeight, rinPlan.windowHeight);
+    assertClose(backDom.imageWidth, rinPlan.canvasWidth, "返回 Rin 图片宽");
+    assertClose(backDom.left, -rinPlan.offsetX, "返回 Rin 偏移");
+    assert.equal(pageErrors.length, 0, pageErrors.join("\n"));
+    await captureDirectChild(page, `${SCREENSHOT_PREFIX}-dom-rin-return.png`);
+  } finally {
+    if (browser) {
+      await browser.close().catch(() => {});
+    }
+    if (child) {
+      child.stdin.end();
+      const exited = await waitForChildExit(child, 3000);
+      if (!exited) {
+        child.kill("SIGKILL");
+      }
+    }
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+async function waitForChildExit(child, timeoutMs) {
+  return new Promise((resolve) => {
+    if (child.exitCode !== null) {
+      resolve(true);
+      return;
+    }
+    const timer = setTimeout(() => resolve(false), timeoutMs);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
+}
+
+async function readCanvasDom(page) {
+  return page.evaluate(() => {
+    const sprite = document.getElementById("sprite");
+    const rect = sprite.getBoundingClientRect();
+    return {
+      windowWidth: window.innerWidth,
+      windowHeight: window.innerHeight,
+      imageWidth: rect.width,
+      imageHeight: rect.height,
+      left: rect.left,
+      top: rect.top,
+      src: sprite.src,
+    };
+  });
+}
+
+function assertClose(actual, expected, label) {
+  assert.ok(
+    Math.abs(actual - expected) < 0.6,
+    `${label}：期望 ${expected}，实际 ${actual}`,
+  );
+}
+
+async function captureDirectChild(page, name) {
+  fs.mkdirSync(evidenceDir, { recursive: true });
+  await page.screenshot({ path: path.join(evidenceDir, name) });
+}
+
+test("POL-DESKTOP-007 几何 bounds 更新不得重置素材错误/展示/节点", async () => {
+  const corruptDir = fs.mkdtempSync(path.join(os.tmpdir(), "bayper-bounds-corrupt-"));
+  const corruptFile = path.join(corruptDir, "broken.png");
+  fs.writeFileSync(corruptFile, Buffer.from("not a decodable PNG\n"));
+  let corruptHost = null;
+  let validHost = null;
+  const corruptDataDir = makeDataDir();
+  const validDataDir = makeDataDir();
+  try {
+    corruptHost = createDesktopHost({
+      dataDir: corruptDataDir,
+      electronPath,
+      onAssetError: () => {},
+    });
+    const corruptPresentation = {
+      character: { id: "bounds-corrupt", displayName: "损坏素材" },
+      animations: {
+        idle: {
+          frames: [pathToFileURL(corruptFile).href],
+          durations: [100],
+          frameSize: { width: 256, height: 384 },
+          loop: true,
+        },
+      },
+      assetState: "ready",
+      assetNote: "",
+      assetLabel: "损坏",
+      mode: "companion",
+      visible: false,
+      ignoreMouse: false,
+      position: null,
+    };
+    corruptHost.start(corruptPresentation);
+    await waitForSnapshotStatus(
+      () =>
+        corruptHost.getStatus().state === "running" &&
+        corruptHost.getStatus().assetState === "error",
+      10000,
+    );
+    const errorBefore = corruptHost.getStatus();
+    assert.ok(errorBefore.error);
+    assert.equal(errorBefore.displayedKind, "status");
+    corruptHost.update({ ...corruptPresentation, position: { x: 80, y: 80 } });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const errorAfter = corruptHost.getStatus();
+    assert.equal(errorAfter.assetState, "error", "几何更新不得清除素材错误");
+    assert.equal(errorAfter.error, errorBefore.error);
+    assert.equal(errorAfter.displayedKind, "status");
+    assert.equal(errorAfter.displayedAt, errorBefore.displayedAt);
+
+    validHost = createDesktopHost({
+      dataDir: validDataDir,
+      electronPath,
+      onAssetError: () => {},
+    });
+    const rin = buildDesktopPresentation("rin", "凛");
+    const validPresentation = {
+      ...rin,
+      displayKey: "bounds-rin",
+      mode: "companion",
+      visible: false,
+      ignoreMouse: false,
+      position: null,
+    };
+    validHost.start(validPresentation);
+    await waitForSnapshotStatus(
+      () =>
+        validHost.getStatus().state === "running" &&
+        validHost.getStatus().displayedKind === "character" &&
+        validHost.getStatus().lastNode === "idle-loop",
+      10000,
+    );
+    const validBefore = validHost.getStatus();
+    validHost.update({ ...validPresentation, position: { x: 90, y: 90 } });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const validAfter = validHost.getStatus();
+    assert.equal(validAfter.displayedKind, "character", "几何更新不得清除展示身份");
+    assert.equal(validAfter.displayedKey, validBefore.displayedKey);
+    assert.equal(validAfter.displayedFrame, validBefore.displayedFrame);
+    assert.equal(validAfter.lastNode, "idle-loop", "几何更新不得清除最后节点");
+    assert.equal(validAfter.lastNodeAt, validBefore.lastNodeAt);
+    assert.equal(validAfter.displayedAt, validBefore.displayedAt);
+  } finally {
+    if (corruptHost) {
+      await corruptHost.stop();
+    }
+    if (validHost) {
+      await validHost.stop();
+    }
+    fs.rmSync(corruptDir, { recursive: true, force: true });
+    fs.rmSync(corruptDataDir, { recursive: true, force: true });
+    fs.rmSync(validDataDir, { recursive: true, force: true });
   }
 });

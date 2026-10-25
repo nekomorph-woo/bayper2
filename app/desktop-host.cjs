@@ -204,6 +204,14 @@ function createDesktopHost({
       return;
     }
 
+    if (message.type === "bounds") {
+      if (message.bounds) {
+        // 几何更新只改变窗口边界，不清除加载错误、最后节点或展示身份。
+        setStatus({ bounds: message.bounds });
+      }
+      return;
+    }
+
     if (message.type === "display-state") {
       status = {
         ...status,

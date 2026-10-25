@@ -41,6 +41,20 @@ function showStatus(name, note) {
   }
 }
 
+function applyDisplayPlan(display) {
+  if (!display) {
+    sprite.style.width = "100%";
+    sprite.style.height = "100%";
+    sprite.style.left = "0px";
+    sprite.style.top = "0px";
+    return;
+  }
+  sprite.style.width = `${display.canvasWidth}px`;
+  sprite.style.height = `${display.canvasHeight}px`;
+  sprite.style.left = `${-display.offsetX}px`;
+  sprite.style.top = `${-display.offsetY}px`;
+}
+
 function preloadFrames(frames) {
   return Promise.all(
     frames.map(
@@ -143,6 +157,7 @@ async function applyState(state) {
     invalidateDisplay("");
     currentKey = "";
     failedKey = "";
+    applyDisplayPlan(null);
     showStatus("暂无同屏角色", "小窝会继续保留当前数据。");
     return;
   }
@@ -152,6 +167,7 @@ async function applyState(state) {
     invalidateDisplay(state.displayKey || `${state.character.id}:${state.assetState}`);
     currentKey = "";
     failedKey = "";
+    applyDisplayPlan(null);
     showStatus(characterName, state.assetNote || "该角色的正式桌面素材尚未完成");
     return;
   }
@@ -161,6 +177,7 @@ async function applyState(state) {
     const nextDisplayKey = state.displayKey || displayKey;
     if (assetReady && !sprite.hidden && nextDisplayKey === displayKey) {
       displayKey = nextDisplayKey;
+      applyDisplayPlan(state.animations.display);
       return;
     }
     // 缓存身份仍是 A，但 A 的画面已被后续加载隐藏：重新激活 A 并作废该加载。
@@ -168,6 +185,7 @@ async function applyState(state) {
     currentKey = key;
     idle = state.animations.idle;
     wave = state.animations.wave ?? null;
+    applyDisplayPlan(state.animations.display);
     sprite.alt = `${characterName}（桌面角色）`;
     startIdle(generation);
     return;
@@ -208,6 +226,7 @@ async function applyState(state) {
   currentKey = key;
   idle = state.animations.idle;
   wave = state.animations.wave ?? null;
+  applyDisplayPlan(state.animations.display);
   sprite.alt = `${characterName}（桌面角色）`;
   startIdle(generation);
 }

@@ -5,6 +5,7 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const CHARACTER_ROOT = path.resolve(__dirname, "..", "assets", "characters");
+const BODY_TARGET_PT = 128;
 
 function loadAnimation(characterId, name) {
   const directory = path.join(CHARACTER_ROOT, characterId, "animations", name);
@@ -17,12 +18,71 @@ function loadAnimation(characterId, name) {
     }
     return pathToFileURL(filePath).href;
   });
+
+  const boxes = manifest.frames.map((frame) => ({
+    x: frame.paste.x,
+    y: frame.paste.y,
+    right: frame.paste.x + frame.scaled_size.width,
+    bottom: frame.paste.y + frame.scaled_size.height,
+  }));
+  const footAnchors = manifest.frames.map((frame) => frame.output_foot_anchor);
+
   return {
-    frames,
-    durations: manifest.frame_durations_ms,
-    frameSize: manifest.atlas.frame_size,
-    loop: manifest.loop === true,
+    public: {
+      frames,
+      durations: manifest.frame_durations_ms,
+      frameSize: manifest.atlas.frame_size,
+      loop: manifest.loop === true,
+    },
+    box: {
+      x: Math.min(...boxes.map((box) => box.x)),
+      y: Math.min(...boxes.map((box) => box.y)),
+      right: Math.max(...boxes.map((box) => box.right)),
+      bottom: Math.max(...boxes.map((box) => box.bottom)),
+    },
+    footAnchor: footAnchors[0],
   };
+}
+
+/* 同角色所有已接入动作共用同一个可见包围和旋转原点；窗口按该范围裁切，
+   图片按同一线性尺度渲染，不用逐动作 fit 或运行时读取 PNG。 */
+function buildDisplayPlan(animations, frameSize) {
+  const boxes = animations.map((animation) => animation.box);
+  const minX = Math.min(...boxes.map((box) => box.x));
+  const minY = Math.min(...boxes.map((box) => box.y));
+  const maxX = Math.max(...boxes.map((box) => box.right));
+  const maxY = Math.max(...boxes.map((box) => box.bottom));
+  const width = maxX - minX;
+  const height = maxY - minY;
+  const scale = BODY_TARGET_PT / Math.max(width, height);
+  const footAnchor = animations[0].footAnchor;
+  const footStable = animations.every(
+    (animation) =>
+      animation.footAnchor.x === footAnchor.x && animation.footAnchor.y === footAnchor.y,
+  );
+  if (!footStable) {
+    throw new Error("已接入动作的落脚点不一致");
+  }
+
+  return {
+    scale,
+    targetPt: BODY_TARGET_PT,
+    windowWidth: Math.ceil(width * scale - 1e-6),
+    windowHeight: Math.ceil(height * scale - 1e-6),
+    canvasWidth: frameSize.width * scale,
+    canvasHeight: frameSize.height * scale,
+    offsetX: minX * scale,
+    offsetY: minY * scale,
+    visibleBox: { x: minX, y: minY, width, height },
+    footAnchor: {
+      x: footAnchor.x * scale - minX * scale,
+      y: footAnchor.y * scale - minY * scale,
+    },
+  };
+}
+
+function publicAnimation(animation) {
+  return animation.public;
 }
 
 const animationCache = new Map();
@@ -30,13 +90,18 @@ const animationCache = new Map();
 function getAnimations(characterId) {
   if (!animationCache.has(characterId)) {
     if (characterId === "rin") {
+      const idle = loadAnimation("rin", "idle-pixel-v2");
+      const wave = loadAnimation("rin", "wave-pixel-v1");
       animationCache.set(characterId, {
-        idle: loadAnimation("rin", "idle-v3"),
-        wave: { ...loadAnimation("rin", "wave-v2"), candidate: true },
+        idle: publicAnimation(idle),
+        wave: { ...publicAnimation(wave), candidate: true },
+        display: buildDisplayPlan([idle, wave], idle.public.frameSize),
       });
     } else if (characterId === "hu") {
+      const idle = loadAnimation("hu", "idle-v1");
       animationCache.set(characterId, {
-        idle: loadAnimation("hu", "idle-v1"),
+        idle: publicAnimation(idle),
+        display: buildDisplayPlan([idle], idle.public.frameSize),
       });
     } else {
       return null;
@@ -82,9 +147,9 @@ function buildDesktopPresentation(characterId, displayName) {
       assetState: "ready",
       assetNote:
         characterId === "rin"
-          ? "凛 idle-v3；wave-v2 为明确招呼候选"
-          : "琥珀 idle-v1 待机",
-      assetLabel: characterId === "rin" ? "idle-v3" : "idle-v1",
+          ? "凛 idle-pixel-v2；wave-pixel-v1 为明确招呼候选"
+          : "琥珀旧版 idle-v1 待机（新画风未完成）",
+      assetLabel: characterId === "rin" ? "idle-pixel-v2" : "idle-v1",
     };
   } catch (error) {
     return {
@@ -98,4 +163,9 @@ function buildDesktopPresentation(characterId, displayName) {
   }
 }
 
-module.exports = { buildDesktopPresentation, getRinAnimations, getHuAnimations };
+module.exports = {
+  buildDesktopPresentation,
+  getRinAnimations,
+  getHuAnimations,
+  BODY_TARGET_PT,
+};

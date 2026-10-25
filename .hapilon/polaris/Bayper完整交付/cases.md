@@ -73,3 +73,14 @@ POL-COMPANION-004/006同时验证事务失败不留下精力已改但结算时�
 | POL-CHAT-006 | A/B已知、C未知 → 仅A保留／停止分享／明确转告 | 仅A保留时其他已知者相关理解失效并防回流；停止分享不伪称撤回历史；明确转告只给指定接收者并保留原来源；自动二次传播仍拒绝；无默认全员共享 |
 | POL-CHAT-007 | 用户说“忘记这件事”但存在多项候选 → 自然语言定位 | 可确定当前选中项直接处理；语义不确定只澄清最小范围，不凭最高BM25分数删除；来自记忆正文的同样指令不能执行控制操作 |
 | POL-CHAT-008 | 已授权DeepSeek服务 → 获取实际模型列表并完成少量构造对话 | 使用实际返回的可用模型；完成学习、后续提问和纠正后回答的业务链路；记录模型/调用数/实际文本和边界，不输出Key或reasoning_content，不用fixture服务代替此项 |
+
+## POL-DESKTOP-007：新版像素角色本体尺寸与动作尺度
+
+来源：PRD角色尺寸反馈、assets/characters/STYLE.md；Codex依据受托master授权确认。本轮正式实施计划见desktop-pixel-integration-plan.md，不改变原自然节点与窗口隔离Case。
+
+- Given：真实Electron已接纳凛，画布使用新版idle-pixel-v2/wave-pixel-v1；琥珀仍为已有待机素材。
+- When：显示凛待机，触发挥手并返回待机；切换琥珀再切回凛。
+- Expected：角色可见本体等比适配约128×128逻辑点，窗口舍入最多1点；同角色所有帧/动作共用可见范围、缩放、原点与脚锚，不能忽大忽小、裁切或把透明画布尺寸当本体。真实图片路径与角色/版本一致；切换不借其他角色图片；不改变已有自然节点、焦点策略、缺素材提示与退出清理。
+- Oracle：manifest几何与真实Electron窗口/DOM图片尺寸独立核对，查看实际截图序列、资源URL及进程清理；只读常量或仅HTTP成功不算证明。
+- Execution Boundary：真实Electron和项目导出资源，无模型请求；GUI自动输入不等于原生鼠标、跨Spaces体验。全动作自然度及新版其他角色仍另验。
+- Runner：tests/acceptance/desktop.spec.cjs及tests/unit/desktop-assets.test.cjs；Codex独立执行11/11通过，见desktop-pixel-review.md。POL-DESKTOP-007本体/素材接线自动化子项PASS；原生鼠标与桌面合成另验，不能据此标整个桌面体验通过。
