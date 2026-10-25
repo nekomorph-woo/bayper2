@@ -1,0 +1,33 @@
+# S05e 在途代码预审
+
+24879仍在运行，本稿为Codex只读审查疑点，不是独立FAIL或接受结论。终态后先核对最终代码再真实Case验证；不干扰在途写入。
+
+## 观测与快照关联的时效边界
+
+当前connector-ledger.recordObservation以latestObservation.state判断sameEpisode；applySnapshot在更高sequence且状态变化时，只要latestObservation.state相同就关联并抑制新通知。latestObservation跨快照持续存在，尚未看到“已被哪个快照消费/关联”的时效边界。
+
+需要真实Case覆盖：初始working(seq1)→观察blocked→快照blocked(seq2，关联观测)→之后仅快照working(seq3)→仅快照blocked(seq4)。最后blocked是新的已确认变化，不能再次借最早blocked观测压掉提示。第三步之后若先收到新的blocked观测，也不能因旧latestObservation仍blocked而当同一episode。
+
+若处在不可恢复事件断档，不声称完整中间序列，但此次快照明确证明working→blocked，必须保留新的变化与相应通知。最小修复应记录/使用观测已关联边界或等价的当前episode依据；禁止给无seq观测捏造服务端seq，禁止删除旧观测。既有同流working→blocked→working与重复同状态不轰炸仍须保留。
+
+## 其他待终态核对
+
+adapter有新旧订阅短暂重叠；同源事件没有共同ID，实际证据应说明去重能证明的范围。不要从固定fixture得出exactly-once保证。真实Herdr Case006的cleanup与状态原始映射需逐项核对后才接受。当前生产adapter约504行、测试约1252行，高于测试规模预期；最终审查关注是否重复堆探针框架，以及维护成本是否必要。
+
+## 首次连接失败的恢复
+
+在途代码connect先ping再registerInstance。全新ledger首次ping失败后，noteDisconnected调用markDisconnected得到UNKNOWN_INSTANCE并直接return；scheduleRetry也拒绝不存在或offline的实例。需要补真实socket Case：已合法登记adapter首次ping超时/端点暂未监听，之后端点恢复；不用人工refresh，应按既定退避自动建立第一次连接，且此前不能伪造上线/下线通知。disabled/stopped/stale必须仍停止重试。若上层另有恢复职责，须明确正式调用链契约而非靠测试手动refresh掩盖；当前规格将自动重试归adapter。先复现，不在本稿声称已FAIL。
+
+## 首轮终态与独立验证
+
+24879已终态，Codex独立串行运行adapter6+ledger7+transport4，共17/17、无skip、exit0，evidence/s05e-codex-first.log。上述两条缺口现有Case未覆盖。最终recordObservation新增historical/current判断只部分处理往返；applySnapshot仍允许historical且pending的旧观测解释新的同状态快照，不能仅靠开发摘要判已解决。
+
+返修追加POL-ADAPTER-007验证最早blocked观测已被seq2解释、seq3 working、seq4 blocked的纯快照回转，以及通知已presented后的观测回转；新的blocked必须有新episode表达，不能挂到已解释旧ID。再追加POL-ADAPTER-008首次ping失败后自动重连，无人工refresh、无假online，dispose/disabled/stale仍生效。必须先保存失败，再最小修复；重跑8Case及ledger/transport。不要新增GUI、main或插件功能，不更改Expected。
+
+## 返修独立接受（适配切片）
+
+68386终态，007/008先真实失败均保留batch346130；旧presented观测未消费、首次失败无timer已复现。修复后Codex独立86068串行adapter8+ledger7+transport4共19/19无skip、exit0（evidence/s05e-codex-repair.log）。独立真实Herdr batch5a22a9：server47597正常exit0、无强杀、socket与临时根删除。
+
+核对最终代码：所有未消费观测包括presented均在权威状态离开后历史化；快照只联结未消费观测。首次无实例失败允许退避，timer触发前核对disabled/offline/stale，成功后才登记online；dispose取消。既有断联时间窗、snapshot串行和同run上线去重回归通过。Codex接受registry→transport→ledger适配模块，不接受尚未实现的main发现/插件安装/气泡展示链。
+
+adapter598行与测试1524行超过预期，主要是协议/时间/生命周期的必要场景与fixture；没有新增SDK或层层框架。暂保留可追踪单测文件，后续支持复用时再按职责整理，不为规模数字压缩语句。协议没有共同事件ID，跨连接历史不可恢复，不声称exactly-once。pane-only归属与pane.exited尚无独立专门Case，最终集成必须保留unknown/身份依据，不能把未经核实退出当done。

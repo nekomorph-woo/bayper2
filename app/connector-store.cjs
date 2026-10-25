@@ -33,6 +33,9 @@ const SCHEMA = `
     source_event_id TEXT, priority INTEGER, historical INTEGER NOT NULL DEFAULT 0,
     reconciled INTEGER NOT NULL DEFAULT 0, gapped INTEGER NOT NULL DEFAULT 0,
     notification_status TEXT NOT NULL DEFAULT 'none', linked_event_id INTEGER,
+    observation_id TEXT, subscription_id TEXT, subscription_uuid TEXT, local_index INTEGER,
+    source_pane_id TEXT, source_terminal_id TEXT, source_workspace_id TEXT, source_tab_id TEXT,
+    attribution TEXT, linked_observation_id TEXT,
     occurred_at INTEGER, received_at INTEGER NOT NULL
   );
   /* 来源事件身份只在同一 instance/run 代次内唯一；新 episode 使用新 eventId。 */
@@ -50,9 +53,45 @@ const SCHEMA = `
     ON connector_events (instance_id, run_id, agent_id, sequence, state);
 `;
 
+/* 观测身份只在同一 instance/run 内唯一；旧库需要先补列再建索引。 */
+const OBSERVATION_INDEXES = `
+  CREATE UNIQUE INDEX IF NOT EXISTS connector_events_observation_once
+    ON connector_events (instance_id, run_id, observation_id)
+    WHERE observation_id IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS connector_events_observation_latest
+    ON connector_events (instance_id, run_id, agent_id, id)
+    WHERE kind = 'observation';
+`;
+
+const OBSERVATION_COLUMNS = {
+  observation_id: "TEXT",
+  subscription_id: "TEXT",
+  subscription_uuid: "TEXT",
+  local_index: "INTEGER",
+  source_pane_id: "TEXT",
+  source_terminal_id: "TEXT",
+  source_workspace_id: "TEXT",
+  source_tab_id: "TEXT",
+  attribution: "TEXT",
+  linked_observation_id: "TEXT",
+};
+
+function ensureObservationColumns(db) {
+  const existing = new Set(
+    db.prepare("PRAGMA table_info(connector_events)").all().map((row) => row.name),
+  );
+  for (const [name, type] of Object.entries(OBSERVATION_COLUMNS)) {
+    if (!existing.has(name)) {
+      db.exec(`ALTER TABLE connector_events ADD COLUMN ${name} ${type}`);
+    }
+  }
+}
+
 function createConnectorStore({ db, appRunId }) {
   db.exec("PRAGMA foreign_keys = ON");
   db.exec(SCHEMA);
+  ensureObservationColumns(db);
+  db.exec(OBSERVATION_INDEXES);
   /* 新 appRunId 启动后，上一 app 进程的在线记录先变为待重连；只有来源重新登记
      才算连接，不把上次 online 当已连接，也不为没有来源的实例伪造记录。 */
   db.prepare(`
@@ -84,7 +123,7 @@ function createConnectorStore({ db, appRunId }) {
     retireRun: db.prepare("UPDATE connector_runs SET online = 0, state = 'offline' WHERE instance_id = ? AND run_id = ?"),
     adoptRun: db.prepare("UPDATE connector_runs SET app_run_id = ?, online = 1, state = 'online', online_at = ?, disconnected_at = NULL, disconnect_notified = 0, gap_open = 0 WHERE instance_id = ? AND run_id = ?"),
     reconnectRun: db.prepare("UPDATE connector_runs SET online = 1, state = 'online', online_at = ?, disconnected_at = NULL, disconnect_notified = 0 WHERE instance_id = ? AND run_id = ?"),
-    disconnectRun: db.prepare("UPDATE connector_runs SET online = 0, state = 'reconnecting', disconnected_at = ?, disconnect_notified = 0 WHERE instance_id = ? AND run_id = ?"),
+    disconnectRun: db.prepare("UPDATE connector_runs SET online = 0, state = 'reconnecting', disconnected_at = ?, disconnect_notified = ? WHERE instance_id = ? AND run_id = ?"),
     markDisconnectNotified: db.prepare("UPDATE connector_runs SET disconnect_notified = 1 WHERE instance_id = ? AND run_id = ?"),
     stopRun: db.prepare("UPDATE connector_runs SET online = 0, state = 'offline', stopped_at = ?, disconnected_at = NULL, disconnect_notified = 0 WHERE instance_id = ? AND run_id = ?"),
     disableRun: db.prepare("UPDATE connector_runs SET online = 0, state = 'offline', disconnected_at = NULL, disconnect_notified = 0 WHERE instance_id = ? AND run_id = ?"),
@@ -107,10 +146,33 @@ function createConnectorStore({ db, appRunId }) {
       INSERT INTO connector_events (
         app_run_id, instance_id, run_id, agent_id, kind, state, raw_state, sequence,
         source_event_id, priority, historical, reconciled, gapped, notification_status,
-        linked_event_id, occurred_at, received_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        linked_event_id, observation_id, subscription_id, subscription_uuid, local_index,
+        source_pane_id, source_terminal_id, source_workspace_id, source_tab_id,
+        attribution, linked_observation_id, occurred_at, received_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     eventBySource: db.prepare("SELECT * FROM connector_events WHERE instance_id = ? AND run_id = ? AND source_event_id = ?"),
+    observationById: db.prepare(
+      "SELECT * FROM connector_events WHERE instance_id = ? AND run_id = ? AND observation_id = ?",
+    ),
+    latestObservation: db.prepare(`
+      SELECT * FROM connector_events
+      WHERE instance_id = ? AND run_id = ? AND agent_id = ? AND kind = 'observation'
+      ORDER BY id DESC LIMIT 1
+    `),
+    unsettledObservations: db.prepare(`
+      SELECT * FROM connector_events
+      WHERE instance_id = ? AND run_id = ? AND agent_id = ? AND kind = 'observation'
+        AND historical = 0
+      ORDER BY id ASC
+    `),
+    settleObservation: db.prepare(`
+      UPDATE connector_events
+      SET historical = 1,
+          priority = CASE WHEN notification_status = 'pending' AND state = 'needs_attention'
+            THEN 1 ELSE priority END
+      WHERE id = ? AND kind = 'observation' AND historical = 0
+    `),
     onlineEvent: db.prepare("SELECT id FROM connector_events WHERE app_run_id = ? AND instance_id = ? AND run_id = ? AND kind = 'online'"),
     offlineEvent: db.prepare("SELECT id FROM connector_events WHERE app_run_id = ? AND instance_id = ? AND run_id = ? AND kind = 'offline'"),
     episode: db.prepare(`
@@ -153,6 +215,11 @@ function createConnectorStore({ db, appRunId }) {
       event.state ?? null, event.rawState ?? null, event.sequence ?? null, event.sourceEventId ?? null,
       event.priority ?? null, event.historical ? 1 : 0, event.reconciled ? 1 : 0, event.gapped ? 1 : 0,
       event.notificationStatus ?? "none", event.linkedEventId ?? null,
+      event.observationId ?? null, event.subscriptionId ?? null,
+      event.subscriptionUuid ?? null, event.localIndex ?? null,
+      event.sourcePaneId ?? null, event.sourceTerminalId ?? null,
+      event.sourceWorkspaceId ?? null, event.sourceTabId ?? null,
+      event.attribution ?? null, event.linkedObservationId ?? null,
       event.occurredAt ?? null, event.receivedAt,
     ).lastInsertRowid;
   }
@@ -164,8 +231,13 @@ function createConnectorStore({ db, appRunId }) {
       sequence: row.sequence, eventId: row.source_event_id, priority: row.priority,
       historical: row.historical === 1, reconciled: row.reconciled === 1,
       gapped: row.gapped === 1, notificationStatus: row.notification_status,
-      linkedEventId: row.linked_event_id, occurredAt: row.occurred_at,
-      receivedAt: row.received_at,
+      linkedEventId: row.linked_event_id, observationId: row.observation_id,
+      subscriptionId: row.subscription_id, subscriptionUuid: row.subscription_uuid,
+      localIndex: row.local_index,
+      sourcePaneId: row.source_pane_id, sourceTerminalId: row.source_terminal_id,
+      sourceWorkspaceId: row.source_workspace_id, sourceTabId: row.source_tab_id,
+      attribution: row.attribution, linkedObservationId: row.linked_observation_id,
+      occurredAt: row.occurred_at, receivedAt: row.received_at,
     };
   }
 

@@ -111,6 +111,102 @@ function createConnectorLedger({ db, now = () => Date.now(), appRunId } = {}) {
     }
   }
 
+  /* 观测是独立于快照权威 sequence 的事实：只入账/通知，不改当前 Agent。
+     当权威当前离开某个观测状态时，所有未消费观测（含已 presented）都标 historical；
+     historical 观测不能再解释后续同状态快照/事件。 */
+  function settlePassedObservations(instanceId, runId, agentId, currentState) {
+    if (!agentId || currentState === "unknown") return 0;
+    let settled = 0;
+    for (const observation of q.unsettledObservations.all(instanceId, runId, agentId)) {
+      if (observation.state !== currentState) {
+        settled += Number(q.settleObservation.run(observation.id).changes);
+      }
+    }
+    return settled;
+  }
+
+  function recordObservation({
+    instanceId, runId, agentId = null, state, rawState = null, observationId,
+    subscriptionId = null, subscriptionUuid = null, localIndex = null,
+    sourcePaneId = null, sourceTerminalId = null, sourceWorkspaceId = null,
+    sourceTabId = null, occurredAt = null,
+  }) {
+    const iid = cleanId(instanceId, "instanceId");
+    const rid = cleanId(runId, "runId");
+    const aid = agentId === null || agentId === undefined ? null : cleanId(agentId, "agentId");
+    const pane = cleanText(sourcePaneId, "sourcePaneId");
+    if (!aid && !pane) throw invalid("观测必须提供 agentId 或 sourcePaneId。");
+    const nextState = cleanState(state);
+    const raw = cleanText(rawState, "rawState");
+    const obsId = cleanId(observationId, "observationId");
+    const subId = cleanText(subscriptionId, "subscriptionId");
+    const subUuid = cleanText(subscriptionUuid, "subscriptionUuid");
+    const index = Number.isInteger(localIndex) && localIndex >= 0 ? localIndex : null;
+    const workspace = cleanText(sourceWorkspaceId, "sourceWorkspaceId");
+    const tab = cleanText(sourceTabId, "sourceTabId");
+    const terminal = aid
+      ? cleanText(sourceTerminalId ?? aid, "sourceTerminalId")
+      : cleanText(sourceTerminalId, "sourceTerminalId");
+    const occurred = cleanTime(occurredAt, "occurredAt");
+
+    return tx(() => {
+      const resolved = resolveRun(iid, rid);
+      if (resolved.reason) return { accepted: false, reason: resolved.reason };
+      if (q.observationById.get(iid, rid, obsId)) {
+        return { accepted: false, reason: "DUPLICATE_OBSERVATION", observationId: obsId };
+      }
+      const when = at();
+      const base = {
+        instanceId: iid, runId: rid, agentId: aid, kind: "observation", state: nextState,
+        rawState: raw, observationId: obsId, subscriptionId: subId,
+        subscriptionUuid: subUuid, localIndex: index,
+        sourcePaneId: pane, sourceTerminalId: terminal, sourceWorkspaceId: workspace,
+        sourceTabId: tab, occurredAt: occurred, receivedAt: when,
+      };
+      if (!aid) {
+        addEvent({
+          ...base, attribution: "pane", notificationStatus: "none",
+        });
+        return {
+          accepted: true, appliedCurrent: false, notified: false,
+          observationId: obsId, attribution: "pane",
+        };
+      }
+      if (resolved.run.online !== 1 || resolved.run.state !== "online") {
+        addEvent({
+          ...base, attribution: "terminal", historical: true, notificationStatus: "none",
+        });
+        return {
+          accepted: true, appliedCurrent: false, notified: false,
+          observationId: obsId, reason: "DISCONNECTED_OBSERVATION",
+        };
+      }
+
+      const last = q.latestObservation.get(iid, rid, aid);
+      const current = q.agent.get(iid, rid, aid);
+      const currentState = current?.effective_state ?? null;
+      /* 已过去并被快照确认离开的状态再次出现，是新往返而不是重复观测。 */
+      const sameEpisode = Boolean(
+        last && last.state === nextState
+        && !(last.historical === 1 && currentState && currentState !== nextState),
+      );
+      const baseline = Boolean(!last && currentState === nextState);
+      const notified = !sameEpisode && !baseline;
+      const settled = notified
+        ? settlePassedObservations(iid, rid, aid, nextState)
+        : 0;
+      addEvent({
+        ...base, attribution: "terminal",
+        priority: notified ? PRIORITY[nextState] : null,
+        notificationStatus: notified ? "pending" : "none",
+      });
+      return {
+        accepted: true, appliedCurrent: false, notified, sameEpisode: sameEpisode || baseline,
+        observationId: obsId, state: nextState, sequence: null, settled,
+      };
+    });
+  }
+
   function ensureOnline(instanceId, runId, when) {
     if (q.onlineEvent.get(runScope, instanceId, runId)) return false;
     addEvent({
@@ -200,19 +296,27 @@ function createConnectorLedger({ db, now = () => Date.now(), appRunId } = {}) {
     });
   }
 
-  function markDisconnected({ instanceId, runId }) {
+  function markDisconnected({ instanceId, runId, disconnectedAt = null, notified = null }) {
     const iid = cleanId(instanceId, "instanceId");
     const rid = cleanId(runId, "runId");
+    const since = cleanTime(disconnectedAt, "disconnectedAt");
+    if (notified !== null && typeof notified !== "boolean") {
+      throw invalid("notified 必须是布尔值或空值。");
+    }
     return tx(() => {
       const resolved = resolveRun(iid, rid);
       if (resolved.reason) return { accepted: false, reason: resolved.reason };
       if (resolved.run.state === "offline") return { accepted: false, reason: "STOPPED" };
       if (resolved.run.online === 1) {
         const when = at();
-        q.disconnectRun.run(when, iid, rid);
+        const time = since ?? when;
+        const notifiedFlag = notified === true ? 1 : 0;
+        q.disconnectRun.run(time, notifiedFlag, iid, rid);
         /* 断联不伪造 Agent 终态：只把当前有效状态置 unknown，保留 lastKnown。 */
         q.agentsUnknown.run(iid, rid);
-        return { accepted: true, first: true, disconnectedAt: when, notified: false };
+        return {
+          accepted: true, first: true, disconnectedAt: time, notified: notifiedFlag === 1,
+        };
       }
       /* 重复 EOF 保留首次断联时间，不能延后 3000ms 的提示计时。 */
       return {
@@ -422,7 +526,7 @@ function createConnectorLedger({ db, now = () => Date.now(), appRunId } = {}) {
 
       const result = {
         accepted: true, baseline: false, gapRecorded, added: [], updated: 0, reconciled: 0,
-        conflicts: [], missing: [], stale: [],
+        linked: 0, conflicts: [], missing: [], stale: [],
       };
       if (q.agents.all(iid, rid).length === 0) {
         for (const agent of incoming) {
@@ -460,6 +564,7 @@ function createConnectorLedger({ db, now = () => Date.now(), appRunId } = {}) {
         if (agent.sequence === existing.max_sequence) {
           if (agent.state === existing.effective_state) {
             q.touchSnapshotAgent.run(agent.label, iid, rid, agent.agentId);
+            settlePassedObservations(iid, rid, agent.agentId, agent.state);
             result.updated += 1;
             continue;
           }
@@ -473,22 +578,44 @@ function createConnectorLedger({ db, now = () => Date.now(), appRunId } = {}) {
           }
         }
         /* 更高 sequence 的真实变化，或曾被完整快照遗漏的 Agent 重新出现。 */
-        if (agent.sequence > existing.max_sequence && agent.state !== existing.effective_state) {
-          const episode = q.episode.get(iid, rid, agent.agentId, agent.sequence, agent.state);
-          if (!episode) {
+        if (
+          agent.sequence > existing.max_sequence
+          && agent.state !== existing.effective_state
+        ) {
+          const latest = q.latestObservation.get(iid, rid, agent.agentId);
+          const explained = latest && latest.state === agent.state
+            && latest.historical === 0;
+          if (explained) {
+            /* 快照最终状态已由同一条观测解释：只联结，不追加同义通知。
+               断联时只入库不通知的观测不算已解释，仍需由快照产生当前通知。 */
             addEvent({
               instanceId: iid, runId: rid, agentId: agent.agentId, kind: "reconciled",
               state: agent.state, rawState: agent.rawState, sequence: agent.sequence,
-              priority: PRIORITY[agent.state], reconciled: true, gapped: true,
-              notificationStatus: "pending", occurredAt: agent.occurredAt, receivedAt: when,
+              priority: null, reconciled: true, gapped: true, notificationStatus: "none",
+              linkedEventId: latest.id, linkedObservationId: latest.observation_id,
+              occurredAt: agent.occurredAt, receivedAt: when,
             });
-            result.reconciled += 1;
-          } else if (episode.historical === 1 && episode.notification_status === "pending") {
-            /* 断联历史被新快照确认成当前：升级原通知，不新增第二条。 */
-            q.promoteEpisode.run(PRIORITY[agent.state], episode.id);
-            result.reconciled += 1;
+            result.linked += 1;
+          } else {
+            const episode = q.episode.get(
+              iid, rid, agent.agentId, agent.sequence, agent.state,
+            );
+            if (!episode) {
+              addEvent({
+                instanceId: iid, runId: rid, agentId: agent.agentId, kind: "reconciled",
+                state: agent.state, rawState: agent.rawState, sequence: agent.sequence,
+                priority: PRIORITY[agent.state], reconciled: true, gapped: true,
+                notificationStatus: "pending", occurredAt: agent.occurredAt, receivedAt: when,
+              });
+              result.reconciled += 1;
+            } else if (episode.historical === 1 && episode.notification_status === "pending") {
+              /* 断联历史被新快照确认成当前：升级原通知，不新增第二条。 */
+              q.promoteEpisode.run(PRIORITY[agent.state], episode.id);
+              result.reconciled += 1;
+            }
           }
         }
+        settlePassedObservations(iid, rid, agent.agentId, agent.state);
         const occurred = agent.sequence > existing.max_sequence
           ? agent.occurredAt
           : agent.occurredAt ?? existing.occurred_at;
@@ -562,8 +689,8 @@ function createConnectorLedger({ db, now = () => Date.now(), appRunId } = {}) {
 
   return {
     appRunId: runScope, registerInstance, markDisconnected, tick, confirmStopped,
-    disableInstance, enableInstance, recordAgentChange, applySnapshot, getInstance,
-    listAgents, listEvents, listPending, markPresented,
+    disableInstance, enableInstance, recordAgentChange, recordObservation, applySnapshot,
+    getInstance, listAgents, listEvents, listPending, markPresented,
   };
 }
 
