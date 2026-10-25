@@ -73,3 +73,19 @@ PYTHONDONTWRITEBYTECODE=1 python3 research/herdr/observe_real.py --root "$BAYPER
 ```
 
 BAYPER_REAL_PANE_ID 必须来自实际创建结果。出现 READY 后才进行操作；默认 120 秒内完成任务并 focus。原始数据追加到 real-cli-followup-trace.jsonl，结果写入 real-cli-followup-result.json；同一根目录重跑前应先归档上一批结果。实测样本与清理记录见 [HDR-11 补测](../../.hapilon/polaris/Bayper前期调研/real-cli-followup.md)。
+
+## 事件恢复实验
+
+另用全新的隔离根目录，按上述环境初始化配置，只启动 named session a，并创建一个 focused control workspace。此组不运行 inspect、不注册插件、不需要 session b 或真实 AI。技术判据与边界见 [恢复实验合同](../../.hapilon/polaris/Bayper前期调研/event-recovery-cases.md)，实际结果见 [恢复报告](../../.hapilon/polaris/Bayper前期调研/event-recovery.md)。
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 research/herdr/recover_events.py --root "$BAYPER_RESEARCH_ROOT"
+PYTHONDONTWRITEBYTECODE=1 python3 research/herdr/force_event_loss.py --root "$BAYPER_RESEARCH_ROOT"
+PYTHONDONTWRITEBYTECODE=1 python3 research/herdr/restart_recovery.py --root "$BAYPER_RESEARCH_ROOT"
+```
+
+最后一个脚本出现 READY 后，在 30 秒内于另一终端停止测试 a，等待 server 退出，再用同一环境重启 a；不要另建 root 或 control workspace。脚本只负责监听和对账，不代为启动或停止 server。重启后恢复布局的 pane 是新终端，脚本会重新启动 sleep 载体并上报受控状态。
+
+洪峰为固定 1,024 次 metadata 更新、64 个并发请求，每批 128 次；暂停读取慢订阅，同时持续消费健康订阅。每批前检查 20 秒阶段期限，单请求另有 3 秒超时；不是严格的全进程 20 秒硬截止。只有收到真实 events_lost 和随后 EOF 才确认复现，普通超时不算成功。没有保证每台机器均能在写超时之前触发相同结果。
+
+各脚本结果和原始 trace 写入 root。重跑前先归档上一批，避免覆盖结果或将追加 trace 混为一批。结束时执行 `herdr --session a server stop`，确认 server、sleep 载体与订阅退出、socket 消失，归档证据后删除该次临时目录。研究计数器不是系统通知，也不提供通用 exactly-once 保证。
