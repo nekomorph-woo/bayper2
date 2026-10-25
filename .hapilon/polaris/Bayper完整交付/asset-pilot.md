@@ -28,3 +28,11 @@ Codex受托批准 v1，2026-10-25；在S01实现期间独立推进。业务依�
 - 已分别查看真实浅/深棋盘合成图：无灰底、无裁切，脸/服装/耳尾稳定，眨眼帧完整。原先从生成预览判断灰底不透明属于误判，依据alpha和真实合成结果更正。
 - POL-ASSET-001：PASS（切帧与静态边缘范围）。证据为`assets/characters/rin/animations/idle-v3/`及源图；不扩大为播放质量通过。
 - POL-ASSET-002：NOT_COVERED，仍需实际Electron播放、慢放与循环审查。
+
+## 播放器与受托审查（2026-10-25）
+
+- Claude实现自包含Electron播放器；Codex退回了脱离父进程的清理轮询，改为launcher持有临时目录、转发信号并在子进程退出后清理。
+- Codex独立执行`node tools/sprite-pipeline/verify-player.cjs --manifest assets/characters/rin/animations/idle-v3/manifest.json --evidence tools/sprite-pipeline/evidence/codex-idle-v3.json`：正常推进、暂停、前后帧、0.25倍速、深浅背景、隔离renderer、导航拦截及退出清理均通过。证据归工具内部。
+- Codex通过原生UI实际打开播放器，查看1倍播放、暂停比较第7/8/1帧接缝与第4/5帧眨眼，切换深底和0.25倍播放。角色耳尾、服装、脸型保持可辨认的同一身份，双脚位置稳定，无矩形白底或尾巴截断；发梢、裙边有少量生成细节变化。
+- 观察方式是运行窗口的截图序列和逐帧操作，并非人类连续视频体验。播放能力与可读性接受；默认1.88秒循环的长期自然度仍待桌面集成后调整，不据此声称全部动态质量通过。POL-ASSET-002保留PARTIAL，下一步桌面实际尺寸和连续播放节奏复验。
+- 关闭本轮窗口后launcher退出0，进程核对无该播放器残留；自动检查已确认其临时目录删除。

@@ -1,11 +1,13 @@
 # sprite-pipeline
 
-固定网格角色 spritesheet 的切帧、统一缩放和脚底中点对齐工具。只处理位图素材：不重绘、不补画、不自动染色，也不包含播放器或视觉验收。
+固定网格角色 spritesheet 的切帧、统一缩放和脚底中点对齐工具，并附带一个极简 Electron 审查播放器。工具不重绘、不补画、不自动染色；播放器只做审查，不构成视觉验收。
 
 ## 依赖
 
 - Python 3
 - Pillow（已用 12.3.0 验证）
+- 审查播放器使用根目录已有的 `node_modules/electron`，不额外安装依赖。
+- 自动验证复用根目录已有的 `playwright`，不新增依赖。
 
 ## 命令
 
@@ -45,6 +47,31 @@ python3 tools/sprite-pipeline/sprite_pipeline.py \
 - `manifest.json`：源哈希、网格/画布/阈值/统一缩放、`padding`、脚带比例、每帧源 bbox、源脚锚点、输出脚锚点、缩放后尺寸、粘贴位置、时长和 loop；
 - `contact-sheet-light.png`、`contact-sheet-dark.png`：浅/深棋盘对照图，仅用于检查透明边缘和帧位置。
 
+## 审查播放器
+
+在项目根目录启动：
+
+```bash
+node tools/sprite-pipeline/preview.cjs \
+  --manifest assets/characters/rin/animations/idle-v3/manifest.json
+```
+
+`--manifest` 接受任意本工具生成的 manifest，不硬编码素材路径。窗口约 720×620，按 manifest 的 `spec.frame_size` 以实际像素显示帧（idle-v3 为 256×384）。播放器读取每帧 `duration_ms`，用 `requestAnimationFrame` 推进，支持正常/0.25×速度、暂停、上一帧/下一帧、浅/深背景、帧号和循环数；关闭窗口即退出。
+
+安全边界：`nodeIntegration` 关闭，`contextIsolation` 与 `sandbox` 开启；preload 只通过固定启动参数暴露已读取的 manifest 和本地帧 `file://` URL，没有任意 IPC 或文件接口。外部导航与新窗口被拦截。
+
+`preview.cjs` 用 `fs.mkdtempSync` 创建本轮临时目录并传给 Electron 的 `--data-dir`，同时转发退出信号；Electron 退出或启动失败后由 launcher 同步删除自己的目录。`player.cjs` 只使用传入的 `userData/sessionData`，不负责创建或删除，也不写默认 Electron 用户目录。
+
+自动验证入口：
+
+```bash
+node tools/sprite-pipeline/verify-player.cjs \
+  --manifest assets/characters/rin/animations/idle-v3/manifest.json \
+  --evidence tools/sprite-pipeline/evidence/player-evidence.json
+```
+
+脚本自行创建临时目录并传给播放器，在 `finally` 关闭 Electron 后同步删除并断言目录消失；同时检查正常推进、暂停、逐帧、0.25×速、背景切换、外部导航拦截和退出码，截图与状态日志写到 evidence 同目录。当前证据为 `evidence/player-evidence.json`、`.log`、`-light.png`、`-dark.png`。这些只证明播放入口行为，不代替 Codex 实际观看播放。
+
 ## 测试
 
 ```bash
@@ -55,4 +82,4 @@ python3 tools/sprite-pipeline/test_sprite_pipeline.py -v
 
 ## 当前状态
 
-已对`assets/characters/rin/source/idle-v3.png`实际导出8帧并核对源哈希、脚锚点及深浅背景合成图。此前v1/v2因格边触尾被拒绝。contact sheet只证明静态检查，不能代替播放器体验；默认时序仍未经播放验证。
+已对 `assets/characters/rin/source/idle-v3.png` 实际导出并完成静态检查；此前 v1/v2 因格边触尾被拒绝。审查播放器已自动验证帧号推进、暂停、逐帧、0.25×速、深浅背景切换、单窗口与退出清理。Codex已通过真实窗口截图序列和逐帧操作审查身份、接缝及深浅背景，并操作0.25×播放；未冒称人类连续观看。默认时序的长期自然度仍待桌面集成复验。独立自动证据见`evidence/codex-idle-v3.json`。
