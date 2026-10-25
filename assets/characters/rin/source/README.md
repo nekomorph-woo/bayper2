@@ -25,3 +25,29 @@ Use case: identity-preserve. Asset: Bayper production character master candidate
 ```text
 Use case: identity-preserve. Production reference turnaround for the exact character in input: Rin, an original adult feminine catgirl maid mascot. Four full body views in a single horizontal row with equal cells and generous separation: FRONT, front THREE-QUARTER matching reference, SIDE facing left, BACK. No text or labels. Genuine transparent background. Every character equal height and consistent compact proportions, identical gold eyes, plum-black short bob with side locks, two black/pink cat ears, ivory ruffled maid headband, burgundy bow, black and ivory maid dress, ivory apron, dark tights, gold buckle black shoes, ONE black curved tail. Back view has large ivory apron tie and clear tail emerging at lower back, coherent with reference. Same detailed crisp anime pixel art with ordered dithering shadows and stepped edges as input, no smooth painting, no 3D. Strict identity and outfit continuity. Neutral arms relaxed; feet, ears and tail fully inside each cell, no overlap. This is a structural reference, not animation frames.
 ```
+
+## idle-v1.png / idle-v2.png
+
+内置imagegen，8帧4列2行呼吸/眨眼候选，1536×1024。v1原件`exec-45e3a89b-d664-4667-94b3-9a2223574fd8.png`，v2原件`exec-73e5107a-9c55-4e52-bfdf-c9c0d7b084f6.png`。原始路径均为上面生成目录。
+
+初看工具预览疑似灰色背景，因而请求透明边缘返修；随后实际读取PNG发现角落及帧间背景alpha=0，不能把预览RGB直接视作不透明背景FAIL。v2仍需要真实合成审查；v1像素纹理较强，优先作为切帧候选，v2仅为备选，不静默替换。未验收播放和首尾接缝。
+
+v1提示词：
+
+```text
+Use case identity-preserve. Make an actual 8-frame idle breathing and blink sprite sheet for EXACT SAME Rin catgirl maid in reference. Transparent canvas, exactly 4 columns by 2 rows of equal rectangular cells, reading order left to right then next row. No borders, text or labels. Each cell holds ONE complete same-scale full-body character, front three-quarter view exactly as master, feet on identical local baseline, center aligned. Preserve identical face proportions, gold eyes, short black-plum bob, two pink-inner black cat ears, ivory frilled headband, burgundy neck bow, black dress and ivory apron, dark tights, gold buckle shoes and ONE tail curled to viewer right. Keep pixel texture and detailed stepped pixel edges from reference. This is one continuous subtle loop, not eight different designs/poses. Foot positions fixed, no body scaling or viewpoint change. Arms stay naturally at sides. Frame1 neutral eyes open and relaxed shoulders; frame2 subtle breathing in, shoulders/apron lift only a tiny amount; frame3 breathing apex eyes open; frame4 eyelids halfway lowering; frame5 eyelids closed gentle blink; frame6 eyelids half opening; frame7 eyes open, chest settling; frame8 returns almost exactly to frame1 to loop cleanly. Hair and tail subtly follow breathing, no large gestures. Consistent clothing geometry, identical hands/fingers, same head size and silhouette. Generous clear transparent margin around every cell; no overlap, cropped ears/feet or cast shadow. Render very crisp high-detail 2D anime pixel-art at consistent pixel grid. No smoothing, no painted gradients.
+```
+
+v2参考v1，提示词：
+
+```text
+Use case background-extraction. Change ONLY the background of this exact eight-frame sprite sheet. Remove ALL grey/purple gradient, glow and cast shadow completely to genuine alpha=0 transparency. Preserve the eight Rin character sprites exactly, same pixels, scale, layout, faces, expressions, outfit and 4x2 equal-cell arrangement. Keep black/plum hair, ears, dress, stockings and tail OPAQUE; ivory apron remains opaque. Do not repaint or move characters. Transparent gaps between all characters; no checkerboard baked into pixels, no replacement backdrop, no edge glow/halo. The previous background was an error; this asset must be clean RGBA sprites on fully transparent pixels.
+```
+
+## idle-v3.png
+
+v1和v2被实际切帧命令拒绝：第0格尾巴触到右边界，不能作为安全等分网格导出。v3参考v1缩小主体并增加格内留边，原件`exec-6cdbbf22-d6fa-478c-ba77-f935d300d2b1.png`，仍待实际导出与播放验收。
+
+```text
+Edit this exact eight-frame sprite sheet for production grid safety. Preserve Rin's identity, pixel-art rendering, outfit, and all eight animation poses in reading order. Keep canvas 4 equal columns by 2 equal rows. CRITICAL: every sprite including tail MUST fit completely inside its own equal grid cell with at least 12% fully TRANSPARENT padding left AND right and 8% padding above AND below. Uniformly reduce the same scale of ALL eight sprites to approximately 75 percent of their current scale around each cell center; do not distort proportions. The first tail currently crosses its equal cell boundary; fix this with more space, NOT clipping tail. All feet share the same local baseline with visible transparent space beneath. Genuine clear alpha background, no painted gradient, no checkerboard, no text/gridlines. Keep crisp small pixel clusters, detailed face and dithered skirt from original, not smooth painting. Do not change poses or expressions. Eight separate equally spaced complete characters, 4x2.
+```
