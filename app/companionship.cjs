@@ -191,6 +191,7 @@ function createCompanionshipService({
       applyOfflineRecovery(nowMs);
 
       initState(nowMs);
+      store.settleMoods(nowMs);
       if (store.listCompanions().length > 0) {
         ensureDailyRoster(nowDate);
         applyStoredModes(nowMs);
@@ -203,6 +204,7 @@ function createCompanionshipService({
     // 反复 start 时先把旧模式下的区间结算掉，再切换模式和推进锚点。
     initState(nowMs);
     settleAll(nowMs);
+    store.settleMoods(nowMs);
     if (store.listCompanions().length > 0) {
       ensureDailyRoster(nowDate);
       applyStoredModes(nowMs);
@@ -247,6 +249,7 @@ function createCompanionshipService({
     applyOfflineRecovery(nowMs);
     initState(nowMs);
     settleAll(nowMs);
+    store.settleMoods(nowMs);
     if (store.listCompanions().length > 0) {
       ensureDailyRoster(nowDate);
       applyStoredModes(nowMs);
@@ -310,6 +313,7 @@ function createCompanionshipService({
     const nowMs = nowDate.getTime();
     initState(nowMs);
     settleAll(nowMs);
+    store.settleMoods(nowMs);
     const roster = ensureDailyRoster(nowDate);
     touchActive(nowMs);
     return { day: localDay(nowDate), nowMs, roster };
@@ -745,6 +749,7 @@ function createCompanionshipService({
     const nowMs = nowDate.getTime();
     initState(nowMs);
     settleAll(nowMs);
+    store.settleMoods(nowMs);
     touchActive(nowMs);
   }
 

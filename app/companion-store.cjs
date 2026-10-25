@@ -1,6 +1,8 @@
 /* S02a 陪伴数据。与 S01 共用同一个 SQLite 连接，负责名单、运行时状态与互动会话。
    迁移只做当前需要的结构：旧 S01 库保留模型密文、关系、数值和 fixed 名单，
    名单表扩展为 fixed + random_1..4，由 UNIQUE(day, character_id) 保证不重复。 */
+const { createRelationshipEffects } = require("./relationship-effects.cjs");
+
 const SCHEMA_VERSION = 1;
 const SLOTS = ["fixed", "random_1", "random_2", "random_3", "random_4"];
 
@@ -35,6 +37,7 @@ const ROSTER_SCHEMA = `
 
 function createCompanionStore(db) {
   migrate(db);
+  const relationshipEffects = createRelationshipEffects(db);
 
   const statements = {
     listCompanions: db.prepare(`
@@ -236,6 +239,8 @@ function createCompanionStore(db) {
     getInteraction,
     saveInteraction,
     clearInteraction,
+    settleMoods: relationshipEffects.settleMoods,
+    recordRelationshipEvent: relationshipEffects.recordRelationshipEvent,
   };
 }
 
