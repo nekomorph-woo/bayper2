@@ -1,0 +1,542 @@
+{
+  "inputs": {
+    "idle": {
+      "path": "assets/idle-raw.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "sha256": "dd6a8078f9e3ee5d7b87f32325a77275a53139ea1319cf4262f6230306da8d5f",
+      "alpha": {
+        "zero": 850649,
+        "full": 0,
+        "semi": 722215,
+        "zero_ratio": 0.5408,
+        "semi_ratio": 0.4592
+      }
+    },
+    "views": {
+      "path": "assets/views-raw.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "sha256": "35b4d554950720ce68720d621e61bd765af4586bdb6baddee003ebbb0099ef24",
+      "alpha": {
+        "zero": 1043791,
+        "full": 1,
+        "semi": 529072,
+        "zero_ratio": 0.6636,
+        "semi_ratio": 0.3364
+      }
+    }
+  },
+  "visible_alpha_threshold": 128,
+  "animation": {
+    "grid": [
+      3,
+      2
+    ],
+    "cell_source": 512,
+    "canvas": 512,
+    "scale": 0.5,
+    "frame_size": 256,
+    "baseline_source": 496,
+    "baseline_output": 248.0,
+    "atlas_size": [
+      768,
+      512
+    ],
+    "frames": [
+      {
+        "index": 0,
+        "source_cell": [
+          0,
+          0,
+          512,
+          512
+        ],
+        "visible_bbox": [
+          109,
+          47,
+          438,
+          495
+        ],
+        "offset": [
+          -54,
+          1
+        ],
+        "foot_anchor_source": 310.0,
+        "foot_anchor_output": 128.0,
+        "low_alpha": {
+          "total": 12742,
+          "clipped": 17
+        },
+        "alpha_source": {
+          "zero": 144316,
+          "full": 0,
+          "semi": 117828,
+          "zero_ratio": 0.5505,
+          "semi_ratio": 0.4495
+        },
+        "output_visible_bbox": [
+          27,
+          24,
+          192,
+          248
+        ],
+        "output_alpha_bbox": [
+          1,
+          20,
+          213,
+          250
+        ],
+        "alpha_output": {
+          "zero": 36107,
+          "full": 0,
+          "semi": 29429,
+          "zero_ratio": 0.5509,
+          "semi_ratio": 0.4491
+        },
+        "hash": "a6a7d46fb32b45b0"
+      },
+      {
+        "index": 1,
+        "source_cell": [
+          512,
+          0,
+          1024,
+          512
+        ],
+        "visible_bbox": [
+          571,
+          46,
+          909,
+          495
+        ],
+        "offset": [
+          -10,
+          1
+        ],
+        "foot_anchor_source": 778.5,
+        "foot_anchor_output": 128.25,
+        "low_alpha": {
+          "total": 13495,
+          "clipped": 6
+        },
+        "alpha_source": {
+          "zero": 141651,
+          "full": 0,
+          "semi": 120493,
+          "zero_ratio": 0.5404,
+          "semi_ratio": 0.4596
+        },
+        "output_visible_bbox": [
+          24,
+          23,
+          193,
+          248
+        ],
+        "output_alpha_bbox": [
+          3,
+          22,
+          251,
+          251
+        ],
+        "alpha_output": {
+          "zero": 35427,
+          "full": 0,
+          "semi": 30109,
+          "zero_ratio": 0.5406,
+          "semi_ratio": 0.4594
+        },
+        "hash": "7cd4497cef79229c"
+      },
+      {
+        "index": 2,
+        "source_cell": [
+          1024,
+          0,
+          1536,
+          512
+        ],
+        "visible_bbox": [
+          1074,
+          46,
+          1405,
+          495
+        ],
+        "offset": [
+          6,
+          1
+        ],
+        "foot_anchor_source": 1274.5,
+        "foot_anchor_output": 128.25,
+        "low_alpha": {
+          "total": 12969,
+          "clipped": 1
+        },
+        "alpha_source": {
+          "zero": 142580,
+          "full": 0,
+          "semi": 119564,
+          "zero_ratio": 0.5439,
+          "semi_ratio": 0.4561
+        },
+        "output_visible_bbox": [
+          28,
+          23,
+          193,
+          248
+        ],
+        "output_alpha_bbox": [
+          3,
+          20,
+          251,
+          250
+        ],
+        "alpha_output": {
+          "zero": 35634,
+          "full": 0,
+          "semi": 29902,
+          "zero_ratio": 0.5437,
+          "semi_ratio": 0.4563
+        },
+        "hash": "916ac71c6bb75948"
+      },
+      {
+        "index": 3,
+        "source_cell": [
+          0,
+          512,
+          512,
+          1024
+        ],
+        "visible_bbox": [
+          96,
+          539,
+          438,
+          983
+        ],
+        "offset": [
+          -52,
+          25
+        ],
+        "foot_anchor_source": 308.0,
+        "foot_anchor_output": 128.0,
+        "low_alpha": {
+          "total": 15507,
+          "clipped": 343
+        },
+        "alpha_source": {
+          "zero": 139996,
+          "full": 0,
+          "semi": 122148,
+          "zero_ratio": 0.534,
+          "semi_ratio": 0.466
+        },
+        "output_visible_bbox": [
+          22,
+          26,
+          193,
+          248
+        ],
+        "output_alpha_bbox": [
+          6,
+          16,
+          219,
+          254
+        ],
+        "alpha_output": {
+          "zero": 35059,
+          "full": 0,
+          "semi": 30477,
+          "zero_ratio": 0.535,
+          "semi_ratio": 0.465
+        },
+        "hash": "2d65b7e39ae00fbc"
+      },
+      {
+        "index": 4,
+        "source_cell": [
+          512,
+          512,
+          1024,
+          1024
+        ],
+        "visible_bbox": [
+          571,
+          539,
+          909,
+          984
+        ],
+        "offset": [
+          -11,
+          24
+        ],
+        "foot_anchor_source": 779.0,
+        "foot_anchor_output": 128.0,
+        "low_alpha": {
+          "total": 14468,
+          "clipped": 15
+        },
+        "alpha_source": {
+          "zero": 140909,
+          "full": 0,
+          "semi": 121235,
+          "zero_ratio": 0.5375,
+          "semi_ratio": 0.4625
+        },
+        "output_visible_bbox": [
+          24,
+          25,
+          193,
+          248
+        ],
+        "output_alpha_bbox": [
+          2,
+          23,
+          249,
+          253
+        ],
+        "alpha_output": {
+          "zero": 35295,
+          "full": 0,
+          "semi": 30241,
+          "zero_ratio": 0.5386,
+          "semi_ratio": 0.4614
+        },
+        "hash": "5e0248abf1563084"
+      },
+      {
+        "index": 5,
+        "source_cell": [
+          1024,
+          512,
+          1536,
+          1024
+        ],
+        "visible_bbox": [
+          1074,
+          539,
+          1410,
+          984
+        ],
+        "offset": [
+          1,
+          24
+        ],
+        "foot_anchor_source": 1279.0,
+        "foot_anchor_output": 128.0,
+        "low_alpha": {
+          "total": 14650,
+          "clipped": 0
+        },
+        "alpha_source": {
+          "zero": 141197,
+          "full": 0,
+          "semi": 120947,
+          "zero_ratio": 0.5386,
+          "semi_ratio": 0.4614
+        },
+        "output_visible_bbox": [
+          25,
+          25,
+          193,
+          248
+        ],
+        "output_alpha_bbox": [
+          22,
+          21,
+          195,
+          253
+        ],
+        "alpha_output": {
+          "zero": 35318,
+          "full": 0,
+          "semi": 30218,
+          "zero_ratio": 0.5389,
+          "semi_ratio": 0.4611
+        },
+        "hash": "35ca349e1b2d1032"
+      }
+    ],
+    "distinct_hashes": 6,
+    "adjacent_diff": [
+      {
+        "pair": [
+          0,
+          1
+        ],
+        "changed_ratio": 0.156
+      },
+      {
+        "pair": [
+          1,
+          2
+        ],
+        "changed_ratio": 0.1405
+      },
+      {
+        "pair": [
+          2,
+          3
+        ],
+        "changed_ratio": 0.2126
+      },
+      {
+        "pair": [
+          3,
+          4
+        ],
+        "changed_ratio": 0.1394
+      },
+      {
+        "pair": [
+          4,
+          5
+        ],
+        "changed_ratio": 0.1222
+      }
+    ],
+    "first_last_diff": 0.196,
+    "diff_note": "changed_ratio 为相同不透明灰底合成后的可见 RGB 差异占比，仅作描述，不作为质量通过阈值。"
+  },
+  "views": {
+    "grid": [
+      4,
+      1
+    ],
+    "cell": [
+      512,
+      1024
+    ],
+    "baseline": 750,
+    "bounds": [
+      0,
+      354,
+      780,
+      1153,
+      1536
+    ],
+    "note": "按实测空隙切分为四个独立 512×1024 透明格，再平移拼接；不缩放、不参与动画。",
+    "views": [
+      {
+        "index": 0,
+        "cell": [
+          0,
+          0,
+          354,
+          1024
+        ],
+        "segment_width": 354,
+        "visible_bbox_global": [
+          5,
+          243,
+          336,
+          749
+        ],
+        "offset": [
+          86,
+          1
+        ],
+        "edge_touch": {
+          "left": false,
+          "top": false,
+          "right": false,
+          "bottom": false
+        }
+      },
+      {
+        "index": 1,
+        "cell": [
+          354,
+          0,
+          780,
+          1024
+        ],
+        "segment_width": 426,
+        "visible_bbox_global": [
+          374,
+          238,
+          751,
+          749
+        ],
+        "offset": [
+          48,
+          1
+        ],
+        "edge_touch": {
+          "left": false,
+          "top": false,
+          "right": false,
+          "bottom": false
+        }
+      },
+      {
+        "index": 2,
+        "cell": [
+          780,
+          0,
+          1153,
+          1024
+        ],
+        "segment_width": 373,
+        "visible_bbox_global": [
+          808,
+          244,
+          1148,
+          749
+        ],
+        "offset": [
+          58,
+          1
+        ],
+        "edge_touch": {
+          "left": false,
+          "top": false,
+          "right": false,
+          "bottom": false
+        }
+      },
+      {
+        "index": 3,
+        "cell": [
+          1153,
+          0,
+          1536,
+          1024
+        ],
+        "segment_width": 383,
+        "visible_bbox_global": [
+          1159,
+          239,
+          1522,
+          749
+        ],
+        "offset": [
+          68,
+          1
+        ],
+        "edge_touch": {
+          "left": false,
+          "top": false,
+          "right": false,
+          "bottom": false
+        }
+      }
+    ]
+  },
+  "gif": {
+    "duration_ms": 120,
+    "transparency_threshold": 128,
+    "alpha_loss": "GIF 不支持半透明：alpha>=128 不透明、其余透明，软边和低 alpha 噪点丢失；PNG 图集为真实入口。"
+  },
+  "outputs": [
+    "atlas.png",
+    "views.png",
+    "contact.png",
+    "preview.gif",
+    "measurements.json"
+  ]
+}

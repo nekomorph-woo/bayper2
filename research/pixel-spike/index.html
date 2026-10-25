@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>像素动画探针 · 六帧循环</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 24px; background: #1b1b1f; color: #e5e5e8;
+         font: 14px/1.6 -apple-system, "PingFang SC", sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 24px 0 8px; color: #cfcfd6; }
+  .hint { margin: 0 0 16px; color: #9b9ba6; }
+  .stage { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  canvas { display: block; width: 512px; max-width: 100%; height: auto;
+           background: repeating-conic-gradient(#44444a 0% 25%, #333338 0% 50%) 0 0 / 16px 16px;
+           border: 1px solid #55555d; image-rendering: pixelated; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+  button, select { background: #2c2c33; color: #e5e5e8; border: 1px solid #55555d;
+                   border-radius: 4px; padding: 5px 12px; font: inherit; }
+  #status { color: #b9d7b0; font-variant-numeric: tabular-nums; }
+  #views, #contact { image-rendering: pixelated; max-width: 100%; }
+  #views { width: 1024px; }
+  #contact { width: 816px; }
+  .view-labels { display: grid; grid-template-columns: repeat(4, 1fr); width: 1024px; max-width: 100%;
+                 text-align: center; color: #9b9ba6; }
+</style>
+</head>
+<body>
+<h1>像素动画探针 · 六帧循环</h1>
+<p class="hint">源图固定 3×2 切分，512×512 统一画布后整体 NEAREST 0.5 缩放为 256×256。透明 PNG 为真实入口，GIF 仅作预览。</p>
+
+<div class="stage">
+  <div>
+    <canvas id="sprite" width="512" height="512" aria-label="六帧动画画布"></canvas>
+    <div class="controls">
+      <button id="toggle">暂停</button>
+      <button id="prev">上一帧</button>
+      <button id="next">下一帧</button>
+      <label>速度
+        <select id="fps">
+          <option value="4">4 帧/秒</option>
+          <option value="8" selected>8 帧/秒</option>
+          <option value="12">12 帧/秒</option>
+        </select>
+      </label>
+      <span id="status">第 1 / 6 帧</span>
+    </div>
+  </div>
+  <div>
+    <h2 style="margin-top:0">六帧接触图</h2>
+    <img id="contact" src="assets/processed/contact.png" alt="六帧接触图">
+    <p class="hint">灰底用于检查轮廓；透明效果请看左侧棋盘画布。帧号 F1–F6 对应图集顺序。</p>
+  </div>
+</div>
+
+<h2>四视图参考（不参与动画）</h2>
+<p class="hint">按实测空隙切分为四个独立 512×1024 透明格，再按可见区域平移排齐；未缩放、未重画。</p>
+<img id="views" src="assets/processed/views.png" alt="正、右、后、左四视图">
+<div class="view-labels"><span>正</span><span>右</span><span>后</span><span>左</span></div>
+
+<script>
+"use strict";
+const FRAME_COUNT = 6, COLS = 3, CELL = 256;
+const canvas = document.getElementById("sprite");
+const ctx = canvas.getContext("2d");
+const statusEl = document.getElementById("status");
+const toggleBtn = document.getElementById("toggle");
+const fpsSelect = document.getElementById("fps");
+const atlas = new Image();
+let frame = 0, loop = 0, playing = true, elapsed = 0, interval = 1000 / 8;
+let lastTime = performance.now();
+
+atlas.onerror = () => { statusEl.textContent = "图集加载失败"; };
+atlas.onload = () => { lastTime = performance.now(); requestAnimationFrame(tick); };
+atlas.src = "assets/processed/atlas.png";
+
+function setupCanvas() {
+  // DPR 上限 2；逻辑尺寸 512×512，源帧 256 按 2 倍 NEAREST 放大。
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = 512 * dpr;
+  canvas.height = 512 * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+}
+
+function draw() {
+  ctx.clearRect(0, 0, 512, 512);
+  const sx = (frame % COLS) * CELL, sy = Math.floor(frame / COLS) * CELL;
+  ctx.drawImage(atlas, sx, sy, CELL, CELL, 0, 0, 512, 512);
+}
+
+function updateStatus() {
+  statusEl.textContent = `第 ${frame + 1} / ${FRAME_COUNT} 帧 · 循环 ${loop} · ${playing ? "播放中" : "已暂停"}`;
+  toggleBtn.textContent = playing ? "暂停" : "继续";
+}
+
+function advance(step) {
+  frame = (frame + step + FRAME_COUNT) % FRAME_COUNT;
+  if (step > 0 && frame === 0) loop += 1;
+  if (step < 0 && frame === FRAME_COUNT - 1 && loop > 0) loop -= 1;
+}
+
+function tick(now) {
+  const dt = Math.min(now - lastTime, 250);  // 标签页恢复时不做长跳帧
+  lastTime = now;
+  if (playing) {
+    elapsed += dt;
+    while (elapsed >= interval) { elapsed -= interval; advance(1); }
+    updateStatus();
+  }
+  draw();
+  requestAnimationFrame(tick);
+}
+
+toggleBtn.addEventListener("click", () => {
+  playing = !playing;
+  elapsed = 0;
+  lastTime = performance.now();
+  updateStatus();
+});
+document.getElementById("prev").addEventListener("click", () => {
+  advance(-1); elapsed = 0; updateStatus(); draw();
+});
+document.getElementById("next").addEventListener("click", () => {
+  advance(1); elapsed = 0; updateStatus(); draw();
+});
+fpsSelect.addEventListener("change", () => {
+  interval = 1000 / Number(fpsSelect.value);
+  elapsed = Math.min(elapsed, interval);
+});
+
+// 只读探针，便于外部核对播放状态，不提供写入口。
+window.probe = {
+  get frame() { return frame; },
+  get loop() { return loop; },
+  get playing() { return playing; }
+};
+
+setupCanvas();
+window.addEventListener("resize", setupCanvas);
+updateStatus();
+</script>
+</body>
+</html>
