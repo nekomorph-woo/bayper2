@@ -26,6 +26,14 @@ function isWithin(base, target) {
   return target === base || target.startsWith(base + path.sep);
 }
 
+function sha256Text(value) {
+  return crypto.createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function sha256Buffer(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
 function createSessionSourceReader({ permissions } = {}) {
   if (
     !permissions ||
@@ -45,6 +53,27 @@ function createSessionSourceReader({ permissions } = {}) {
 
   function sourcePathOf(canonicalRoot, resolvedPath) {
     return path.relative(canonicalRoot, resolvedPath).split(path.sep).join("/");
+  }
+
+  function fileKeyOf(snapshot, sourcePath) {
+    return `${snapshot.provider}:${sha256Text(snapshot.canonicalPath).slice(0, 32)}:${sourcePath}`;
+  }
+
+  function sessionPath(permit, relativePath) {
+    if (typeof relativePath !== "string" || relativePath.length === 0) {
+      throw new AppError("INVALID_INPUT", "会话相对路径必须是字符串。");
+    }
+    const snapshot = permissions.validateReadPermit(permit);
+    const adapter = adapterFor(snapshot);
+    const resolved = permissions.resolveAuthorizedFile(permit, relativePath);
+    const sourcePath = sourcePathOf(snapshot.canonicalPath, resolved);
+    if (!adapter.matchesFile(sourcePath)) {
+      if (UNSUPPORTED_FILE.test(sourcePath)) {
+        throw new AppError("UNSUPPORTED_FORMAT", "暂不支持压缩归档、附件或二进制文件。");
+      }
+      throw new AppError("NOT_SESSION_FILE", "该文件不是受支持的会话记录。");
+    }
+    return { snapshot, adapter, resolved, sourcePath };
   }
 
   function directoryError(error) {
@@ -360,19 +389,7 @@ function createSessionSourceReader({ permissions } = {}) {
   }
 
   function readSession(permit, relativePath) {
-    if (typeof relativePath !== "string" || relativePath.length === 0) {
-      throw new AppError("INVALID_INPUT", "会话相对路径必须是字符串。");
-    }
-    const snapshot = permissions.validateReadPermit(permit);
-    const adapter = adapterFor(snapshot);
-    const resolved = permissions.resolveAuthorizedFile(permit, relativePath);
-    const sourcePath = sourcePathOf(snapshot.canonicalPath, resolved);
-    if (!adapter.matchesFile(sourcePath)) {
-      if (UNSUPPORTED_FILE.test(sourcePath)) {
-        throw new AppError("UNSUPPORTED_FORMAT", "暂不支持压缩归档、附件或二进制文件。");
-      }
-      throw new AppError("NOT_SESSION_FILE", "该文件不是受支持的会话记录。");
-    }
+    const { snapshot, adapter, resolved, sourcePath } = sessionPath(permit, relativePath);
 
     let fd;
     try {
@@ -443,6 +460,15 @@ function createSessionSourceReader({ permissions } = {}) {
         }
       }
       diagnostics.appendedDuringRead = finalSize > size;
+      const checkpoint = {
+        fileKey: fileKeyOf(snapshot, sourcePath),
+        bodyStart: window.bodyStart,
+        byteLength: window.body.length,
+        regionSha256: sha256Buffer(window.body),
+        dev: String(opened.dev),
+        ino: String(opened.ino),
+        snapshotBytes: size,
+      };
       return {
         provider: snapshot.provider,
         relativePath: sourcePath,
@@ -450,6 +476,7 @@ function createSessionSourceReader({ permissions } = {}) {
         diagnostics,
         truncated,
         snapshotBytes: size,
+        checkpoint,
       };
     } catch (error) {
       throw fileError(error);
@@ -464,7 +491,129 @@ function createSessionSourceReader({ permissions } = {}) {
     }
   }
 
-  return { listSessionFiles, readSession };
+  function fileKey(permit, relativePath) {
+    const { snapshot, sourcePath } = sessionPath(permit, relativePath);
+    return {
+      fileKey: fileKeyOf(snapshot, sourcePath),
+      provider: snapshot.provider,
+      relativePath: sourcePath,
+    };
+  }
+
+  function validCheckpoint(checkpoint) {
+    if (!checkpoint || typeof checkpoint !== "object") {
+      return false;
+    }
+    const {
+      fileKey: key,
+      bodyStart,
+      byteLength,
+      regionSha256,
+      dev,
+      ino,
+      snapshotBytes,
+    } = checkpoint;
+    return (
+      typeof key === "string" &&
+      key.length > 0 &&
+      Number.isSafeInteger(bodyStart) &&
+      bodyStart >= 0 &&
+      Number.isSafeInteger(byteLength) &&
+      byteLength >= 0 &&
+      byteLength <= LIMITS.tailBytes &&
+      Number.isSafeInteger(bodyStart + byteLength) &&
+      Number.isSafeInteger(snapshotBytes) &&
+      snapshotBytes >= bodyStart + byteLength &&
+      typeof regionSha256 === "string" &&
+      /^[0-9a-f]{64}$/u.test(regionSha256) &&
+      typeof dev === "string" &&
+      dev.length > 0 &&
+      typeof ino === "string" &&
+      ino.length > 0
+    );
+  }
+
+  /* 只校验有界历史/本次读取区段，不返回正文。前插、改写、截断、替换或
+     路径改向返回 verified:false；授权/打开失败则抛业务错误，不能当通过。 */
+  function verifyCheckpoint(permit, relativePath, checkpoint) {
+    const { snapshot, resolved, sourcePath } = sessionPath(permit, relativePath);
+    const expectedKey = fileKeyOf(snapshot, sourcePath);
+    if (!validCheckpoint(checkpoint)) {
+      return { verified: false, reason: "CHECKPOINT_INVALID" };
+    }
+    if (checkpoint.fileKey !== expectedKey) {
+      return { verified: false, reason: "CHECKPOINT_MISMATCH" };
+    }
+
+    let fd;
+    try {
+      let before;
+      try {
+        before = fs.lstatSync(resolved, { bigint: true });
+      } catch (error) {
+        throw fileError(error);
+      }
+      if (!before.isFile() || before.isSymbolicLink()) {
+        return { verified: false, reason: "FILE_CHANGED" };
+      }
+      try {
+        fd = fs.openSync(resolved, fs.constants.O_RDONLY | NOFOLLOW);
+      } catch (error) {
+        throw fileError(error);
+      }
+      const opened = fs.fstatSync(fd, { bigint: true });
+      if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino) {
+        return { verified: false, reason: "FILE_CHANGED" };
+      }
+      if (String(opened.dev) !== checkpoint.dev || String(opened.ino) !== checkpoint.ino) {
+        return { verified: false, reason: "FILE_REPLACED" };
+      }
+
+      const size = Number(opened.size);
+      if (checkpoint.bodyStart + checkpoint.byteLength > size) {
+        return { verified: false, reason: "REGION_CHANGED" };
+      }
+      let bytes;
+      try {
+        bytes = readAt(fd, checkpoint.bodyStart, checkpoint.byteLength);
+      } catch (error) {
+        if (error?.code === "FILE_CHANGED") {
+          return { verified: false, reason: "REGION_CHANGED" };
+        }
+        throw error;
+      }
+      if (sha256Buffer(bytes) !== checkpoint.regionSha256) {
+        return { verified: false, reason: "REGION_CHANGED" };
+      }
+
+      const finalResolved = permissions.resolveAuthorizedFile(permit, relativePath);
+      if (finalResolved !== resolved) {
+        return { verified: false, reason: "PATH_CHANGED" };
+      }
+      try {
+        verifyIdentity(finalResolved, opened);
+      } catch (error) {
+        if (error?.code === "FILE_CHANGED") {
+          return { verified: false, reason: "FILE_CHANGED" };
+        }
+        throw error;
+      }
+      permissions.validateReadPermit(permit);
+      return { verified: true };
+    } catch (error) {
+      throw fileError(error);
+    } finally {
+      if (fd !== undefined) {
+        try {
+          fs.closeSync(fd);
+        } catch {
+          // 关闭失败不覆盖校验结果。
+        }
+      }
+    }
+  }
+
+  return { listSessionFiles, readSession, fileKey, verifyCheckpoint };
 }
 
 module.exports = { createSessionSourceReader };

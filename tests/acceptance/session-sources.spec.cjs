@@ -636,3 +636,116 @@ test("POL-SOURCE-012 中途改向/改写/截断拒绝，追加给出快照边界
   assert.equal(appended.diagnostics.appendedDuringRead, true);
   assert.equal(JSON.stringify(appended).includes("追加数据"), false);
 });
+
+test("POL-SOURCE-013 checkpoint 只校验有界读取区段", (t) => {
+  const ctx = makeContext(t);
+  const root = ctx.dir("checkpoints");
+  const project = path.join(root, "project");
+  const grant = ctx.permissions.grantDirectory("claude-code", root);
+  const permit = ctx.permissions.issueReadPermit(grant.id);
+
+  function makeFile(name, text = "我喜欢茉莉花茶。") {
+    const file = path.join(project, name);
+    writeJsonl(file, [claudeUser(`u-${name}`, text), {
+      type: "assistant",
+      uuid: `a-${name}`,
+      message: { role: "assistant", content: "好的。" },
+    }]);
+    return file;
+  }
+
+  function checkpointOf(name) {
+    return ctx.reader.readSession(permit, `project/${name}`).checkpoint;
+  }
+
+  const plainFile = makeFile("plain.jsonl");
+  const plainSize = fs.statSync(plainFile).size;
+  const plain = checkpointOf("plain.jsonl");
+  assert.equal(typeof plain.fileKey, "string");
+  assert.equal(plain.bodyStart, 0);
+  assert.equal(plain.byteLength, plainSize);
+  assert.equal(plain.snapshotBytes, plainSize);
+  assert.match(plain.regionSha256, /^[0-9a-f]{64}$/);
+  assert.equal(typeof plain.dev, "string");
+  assert.equal(typeof plain.ino, "string");
+  assert.equal(
+    ctx.reader.fileKey(permit, "project/plain.jsonl").fileKey,
+    plain.fileKey,
+  );
+  assert.deepEqual(
+    ctx.reader.verifyCheckpoint(permit, "project/plain.jsonl", plain),
+    { verified: true },
+  );
+
+  // 纯追加不改变旧区段。
+  fs.appendFileSync(plainFile, `${JSON.stringify(claudeUser("plain-more", "追加"))}\n`);
+  assert.deepEqual(
+    ctx.reader.verifyCheckpoint(permit, "project/plain.jsonl", plain),
+    { verified: true },
+  );
+
+  const prependFile = makeFile("prepend.jsonl");
+  const prepend = checkpointOf("prepend.jsonl");
+  fs.writeFileSync(
+    prependFile,
+    `${JSON.stringify({ type: "assistant", message: { role: "assistant", content: "前置" } })}\n` +
+      fs.readFileSync(prependFile, "utf8"),
+  );
+  assert.equal(
+    ctx.reader.verifyCheckpoint(permit, "project/prepend.jsonl", prepend).reason,
+    "REGION_CHANGED",
+  );
+
+  const rewriteFile = makeFile("rewrite.jsonl");
+  const rewrite = checkpointOf("rewrite.jsonl");
+  const rewriteBytes = fs.readFileSync(rewriteFile);
+  rewriteBytes[0] = 0x5b;
+  fs.writeFileSync(rewriteFile, rewriteBytes);
+  assert.equal(
+    ctx.reader.verifyCheckpoint(permit, "project/rewrite.jsonl", rewrite).reason,
+    "REGION_CHANGED",
+  );
+
+  const truncateFile = makeFile("truncate.jsonl");
+  const truncate = checkpointOf("truncate.jsonl");
+  fs.truncateSync(truncateFile, 5);
+  assert.equal(
+    ctx.reader.verifyCheckpoint(permit, "project/truncate.jsonl", truncate).reason,
+    "REGION_CHANGED",
+  );
+
+  const replaceFile = makeFile("replace.jsonl");
+  const replace = checkpointOf("replace.jsonl");
+  const replacement = path.join(project, "replacement.tmp");
+  fs.copyFileSync(replaceFile, replacement);
+  fs.renameSync(replacement, replaceFile);
+  assert.equal(
+    ctx.reader.verifyCheckpoint(permit, "project/replace.jsonl", replace).reason,
+    "FILE_REPLACED",
+  );
+
+  const missingFile = makeFile("missing.jsonl");
+  const missing = checkpointOf("missing.jsonl");
+  fs.rmSync(missingFile);
+  throwsCode("FILE_NOT_FOUND", () =>
+    ctx.reader.verifyCheckpoint(permit, "project/missing.jsonl", missing),
+  );
+
+  assert.equal(
+    ctx.reader.verifyCheckpoint(permit, "project/prepend.jsonl", plain).reason,
+    "CHECKPOINT_MISMATCH",
+  );
+  assert.equal(
+    ctx.reader.verifyCheckpoint(permit, "project/plain.jsonl", {
+      ...plain,
+      byteLength: 512 * 1024 + 1,
+    }).reason,
+    "CHECKPOINT_INVALID",
+  );
+
+  ctx.permissions.setEnabled(false);
+  throwsCode("ANALYSIS_DISABLED", () =>
+    ctx.reader.verifyCheckpoint(permit, "project/plain.jsonl", plain),
+  );
+  assert.equal(fs.existsSync(plainFile), true);
+});

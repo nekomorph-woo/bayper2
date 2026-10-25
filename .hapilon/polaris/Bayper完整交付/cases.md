@@ -108,3 +108,5 @@ POL-MEMUI-001～006当前模块PASS：Codex独立真实Electron/SQLite/受控HTT
 POL-BUDGET-006～008收尾存储故障/精确恢复/事务回滚契约与Oracle见s06a-review.md末节；Codex独立预算8/8通过（s04c-codex-budget-r3.log同批还含6项来源回归）。仅已失败token可恢复，内存记录提交后清除。来源006未通过，不将本次预算结果冒充来源分析全部完成。
 
 POL-CONNECTOR-001～007：Contract见s05a-connector-ledger-plan.md及s05a-review.md补充，Codex独立7/7通过（s05a-codex-r2.log）。当前只接受SQLite事实账本；真实Herdr插件/订阅身份/重连适配与可见气泡仍未覆盖，不能把本地fixture序列当Herdr事件字段。
+
+S04c受托接受：POL-ANALYSIS-001～011、POL-SOURCE-013由tests/acceptance/source-analysis.spec.cjs与session-sources.spec.cjs执行，契约见s04c-analysis-plan.md、s04c-provenance-plan.md、s04c-review.md。与权限/预算共同独立32/32，evidence/s04c-codex-index-final.log。PASS仅限真实临时文件/SQLite/本机HTTP模型fixture服务链，正式GUI/自动调度/真实提炼语义仍NOT_COVERED。
