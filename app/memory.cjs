@@ -287,7 +287,9 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     });
     const sourceHash = sourceIdHash(sourceId);
 
-    return store.transaction(() => {
+    /* 窄事务兼容入口：聊天服务需要在同一 SQLite 事务内原子提交记忆、助手消息和请求状态。
+       传入 inTransaction 时不再自行 BEGIN；调用方必须已开启事务并负责提交/回滚。 */
+    const applyBatch = () => {
       if (store.hasSourceControl(characterId, sourceHash)) {
         return { applied: false, reason: "blocked_source", facts: [] };
       }
@@ -304,7 +306,8 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       const contextVersion =
         created > 0 ? store.bumpContextVersion(characterId, appliedAt) : null;
       return { applied: true, reason: null, facts: results, contextVersion };
-    });
+    };
+    return input.inTransaction === true ? applyBatch() : store.transaction(applyBatch);
   }
 
   function listMemories(characterIdInput, options = {}) {

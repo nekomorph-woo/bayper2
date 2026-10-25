@@ -4,6 +4,8 @@ const { DatabaseSync } = require("node:sqlite");
 const fs = require("node:fs");
 const path = require("node:path");
 const { createCompanionStore } = require("./companion-store.cjs");
+const { createMemoryService } = require("./memory.cjs");
+const { createChatService } = require("./chat.cjs");
 
 const DB_FILE_NAME = "bayper.sqlite3";
 
@@ -43,15 +45,32 @@ const SCHEMA = `
 
 const INITIAL_STATS = Object.freeze({ intimacy: 10, energy: 100, mood: 0 });
 
-function createStore(dataDir) {
+function createStore(dataDir, options = {}) {
   fs.mkdirSync(dataDir, { recursive: true });
   const dbPath = path.join(dataDir, DB_FILE_NAME);
   const db = new DatabaseSync(dbPath);
   db.exec("PRAGMA foreign_keys = ON");
   db.exec(SCHEMA);
+  const clock = typeof options.now === "function" ? options.now : () => Date.now();
+  const now = () => {
+    const value = clock();
+    return value instanceof Date ? value.getTime() : value;
+  };
 
   // S02a 迁移与陪伴方法共用这一条连接，关闭仍由 store 统一负责。
   const companion = createCompanionStore(db);
+  // S03 记忆与聊天共用同一连接；不另建生产数据库。
+  const memory = createMemoryService({ db, now });
+  const chat = createChatService({
+    db,
+    memory,
+    now,
+    characters: options.characters,
+    getCredentials: options.chat?.getCredentials,
+    fetchImpl: options.chat?.fetchImpl,
+    timeoutMs: options.chat?.timeoutMs,
+    recoverInterrupted: options.chat?.recoverInterrupted,
+  });
 
   const statements = {
     getModel: db.prepare(
@@ -172,6 +191,8 @@ function createStore(dataDir) {
   return {
     dbPath,
     ...companion,
+    memory,
+    chat,
     getModelConfig,
     saveModelConfig,
     getRelationship,

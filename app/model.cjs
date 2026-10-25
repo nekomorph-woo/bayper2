@@ -5,6 +5,9 @@ const { AppError } = require("./errors.cjs");
 const REQUEST_TIMEOUT_MS = 8000;
 const DEEPSEEK_REQUEST_TIMEOUT_MS = 30000;
 const CHECK_MAX_TOKENS = 64;
+const CHAT_MAX_TOKENS = 512;
+const CHAT_TEMPERATURE = 0.7;
+const MAX_CHAT_MESSAGES = 40;
 const MAX_MODEL_NAME_LENGTH = 120;
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const DEEPSEEK_HOSTS = new Set(["api.deepseek.com"]);
@@ -152,9 +155,131 @@ async function checkModelConnection({ baseUrl, modelName, apiKey }, fetchImpl = 
   }
 }
 
+function buildChatRequest({ baseUrl, modelName, messages, maxTokens, temperature }) {
+  const body = {
+    model: modelName,
+    messages,
+    max_tokens: maxTokens ?? CHAT_MAX_TOKENS,
+    temperature: temperature ?? CHAT_TEMPERATURE,
+    stream: false,
+  };
+  if (isOfficialDeepSeekHost(baseUrl)) {
+    body.thinking = { type: "disabled" };
+  }
+  return body;
+}
+
+function validateChatMessages(messages) {
+  if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_CHAT_MESSAGES) {
+    throw new AppError("INVALID_INPUT", "聊天消息数量无效。");
+  }
+  for (const message of messages) {
+    if (
+      !message ||
+      !["system", "user", "assistant"].includes(message.role) ||
+      typeof message.content !== "string" ||
+      message.content.trim() === ""
+    ) {
+      throw new AppError("INVALID_INPUT", "聊天消息结构无效。");
+    }
+  }
+  return messages.map((message) => ({
+    role: message.role,
+    content: message.content.trim(),
+  }));
+}
+
+/* 聊天补全只发一次请求，不自动重试；调用方负责在发布前重新核验上下文版本。 */
+async function requestChatCompletion(
+  { baseUrl, modelName, apiKey, messages, maxTokens, temperature, timeoutMs, signal },
+  fetchImpl = fetch,
+) {
+  const safeBaseUrl = parseBaseUrl(baseUrl);
+  const safeModelName = parseModelName(modelName);
+  const key = typeof apiKey === "string" ? apiKey.trim() : "";
+  if (!key) {
+    throw new AppError("MISSING_KEY", "缺少 API Key。");
+  }
+  const safeMessages = validateChatMessages(messages);
+  const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : timeoutFor(safeBaseUrl);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  let onAbort = null;
+  if (signal) {
+    onAbort = () => controller.abort();
+    if (signal.aborted) {
+      controller.abort();
+    } else {
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+  }
+
+  try {
+    const response = await fetchImpl(buildEndpoint(safeBaseUrl), {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify(
+        buildChatRequest({
+          baseUrl: safeBaseUrl,
+          modelName: safeModelName,
+          messages: safeMessages,
+          maxTokens,
+          temperature,
+        }),
+      ),
+      redirect: "manual",
+      signal: controller.signal,
+    });
+
+    if (response.status >= 300 && response.status < 400) {
+      throw new AppError("REDIRECT_BLOCKED", "模型服务返回了重定向，请求已停止。");
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new AppError("AUTH_FAILED", "服务拒绝了 API Key，请检查后重试。");
+    }
+    if (!response.ok) {
+      throw new AppError("SERVER_ERROR", `模型服务返回错误（HTTP ${response.status}）。`);
+    }
+
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      throw new AppError("INVALID_RESPONSE", "服务没有返回有效的助手文本。");
+    }
+    const message = data?.choices?.[0]?.message;
+    if (
+      message?.role !== "assistant" ||
+      typeof message.content !== "string" ||
+      !message.content.trim()
+    ) {
+      throw new AppError("INVALID_RESPONSE", "服务没有返回有效的助手文本。");
+    }
+    return { content: message.content.trim() };
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+    if (error?.name === "AbortError") {
+      throw new AppError("TIMEOUT", "模型请求超时。");
+    }
+    throw new AppError("NETWORK_ERROR", "无法连接模型服务。");
+  } finally {
+    clearTimeout(timer);
+    if (signal && onAbort) {
+      signal.removeEventListener("abort", onAbort);
+    }
+  }
+}
+
 module.exports = {
   CHECK_MESSAGE,
   CHECK_MAX_TOKENS,
+  CHAT_MAX_TOKENS,
+  CHAT_TEMPERATURE,
   REQUEST_TIMEOUT_MS,
   DEEPSEEK_REQUEST_TIMEOUT_MS,
   validateModelInput,
@@ -164,5 +289,7 @@ module.exports = {
   isOfficialDeepSeekHost,
   timeoutFor,
   buildCheckRequest,
+  buildChatRequest,
   checkModelConnection,
+  requestChatCompletion,
 };
