@@ -1,0 +1,17 @@
+# Bayper S05c 身份验证 fixture（非正式插件）。
+# 仅由 tools/herdr-identity/probe.cjs 在隔离 XDG 中 link；startup/action 只追加
+# 白名单观测记录后退出，不启动 daemon、不读终端内容、不改变系统偏好。
+id = "bayper.identity.probe"
+name = "Bayper Identity Probe"
+version = "0.1.0"
+min_herdr_version = "0.9.5"
+platforms = ["macos"]
+
+[[startup]]
+command = ["node", "record.cjs", "startup"]
+
+[[actions]]
+id = "capture"
+title = "Capture identity context"
+contexts = ["workspace"]
+command = ["node", "record.cjs", "action"]
