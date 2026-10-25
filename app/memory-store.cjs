@@ -180,6 +180,14 @@ function createMemoryStore(db) {
       ORDER BY e.importance DESC, e.updated_at DESC, e.id ASC
       LIMIT ?
     `),
+    listActiveEntriesPage: db.prepare(`
+      SELECT e.*, ${DERIVED_FIELDS}
+      FROM memory_entries e
+      WHERE e.character_id = ?
+        AND (e.expires_at IS NULL OR e.expires_at > ?)
+      ORDER BY e.importance DESC, e.updated_at DESC, e.id ASC
+      LIMIT ? OFFSET ?
+    `),
     listEntriesFirst: db.prepare(`
       SELECT e.*, ${DERIVED_FIELDS}
       FROM memory_entries e
@@ -351,6 +359,12 @@ function createMemoryStore(db) {
     return statements.listActiveEntries.all(characterId, nowMs, limit).map(mapEntry);
   }
 
+  function listActiveEntriesPage(characterId, nowMs, limit, offset) {
+    return statements.listActiveEntriesPage
+      .all(characterId, nowMs, limit, offset)
+      .map(mapEntry);
+  }
+
   /* 按稳定游标分页读取全部条目；limit 是有界批大小，不是总量上限。 */
   function listEntriesPage(after, limit) {
     const rows = after
@@ -444,6 +458,7 @@ function createMemoryStore(db) {
     getEntryByFact,
     listEntriesByFact,
     listActiveEntries,
+    listActiveEntriesPage,
     listEntriesPage,
     isDerivedEntry,
     search,

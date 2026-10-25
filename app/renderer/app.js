@@ -2,6 +2,7 @@
    不访问文件、数据库或网络，也不使用 localStorage。 */
 const api = window.bayper;
 const chatApi = window.bayperChat;
+const memoryApi = window.bayperMemory;
 const byId = (id) => document.getElementById(id);
 
 const state = {
@@ -48,12 +49,33 @@ async function callChatApi(method, ...args) {
   }
 }
 
+async function callMemoryApi(method, ...args) {
+  try {
+    return await memoryApi[method](...args);
+  } catch {
+    return { ok: false, error: { code: "IPC_ERROR", message: "记忆通信失败，请重试。" } };
+  }
+}
+
 const chatPanel = window.createChatPanel({
   api: chatApi,
   callApi: callChatApi,
   showAlert,
   getSnapshot: () => state.snapshot,
 });
+
+const memoryPanel = window.createMemoryPanel({
+  callApi: callMemoryApi,
+  showAlert,
+  getSnapshot: () => state.snapshot,
+});
+
+if (memoryApi && typeof memoryApi.onMemoryChanged === "function") {
+  memoryApi.onMemoryChanged((payload) => {
+    memoryPanel.handleMemoryChanged(payload);
+    chatPanel.handleMemoryChanged(payload);
+  });
+}
 
 /* ---------- 模型配置 ---------- */
 

@@ -31,6 +31,7 @@
           </button>
         </div>
 
+        <p id="chat-history-origin" class="chat-history-origin" role="status" aria-live="polite" hidden></p>
         <p id="chat-memory-status" class="chat-memory-status" role="status" aria-live="polite" hidden></p>
         <div id="chat-history" class="chat-history" role="log" aria-live="polite"></div>
         <p id="chat-empty" class="chat-empty" hidden>还没有对话。说第一句话吧。</p>
@@ -68,6 +69,9 @@
       mode: "closed",
       conversations: [],
       closing: false,
+      displaySeq: 0,
+      displayCutoffSeq: 0,
+      lastMessageSeq: 0,
       trigger: null,
     };
 
@@ -119,6 +123,32 @@
       status.textContent = `已保存${count}条记忆`;
     }
 
+    function showHistoryNote(text) {
+      const note = byId("chat-history-origin");
+      note.textContent = text;
+      note.hidden = false;
+    }
+
+    function hideHistoryNote() {
+      const note = byId("chat-history-origin");
+      if (note) {
+        note.hidden = true;
+        note.textContent = "";
+      }
+    }
+
+    /* 记忆变更后收起当前旧显示，但保留历史选择能力；必须重新选一次才算显式重看。 */
+    function prepareHistoryReView() {
+      const select = byId("chat-history-select");
+      if (select.options[0]?.value !== "") {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "选择一条历史重新查看（原文）";
+        select.prepend(option);
+      }
+      select.value = "";
+    }
+
     function showChatError(error) {
       showAlert(byId("chat-error"), error ?? null);
       if (error) {
@@ -148,7 +178,8 @@
       byId("chat-continue").disabled = closing;
       byId("chat-history-bar").hidden =
         mode !== "readonly" || chat.conversations.length === 0;
-      byId("chat-empty").hidden = mode === "readonly" || hasMessages;
+      byId("chat-empty").hidden =
+        mode === "readonly" || hasMessages || chat.displayCutoffSeq > 0;
     }
 
     function renderHeader() {
@@ -180,6 +211,19 @@
       select.disabled = chat.closing || chat.mode === "loading";
     }
 
+    function maxMessageSeq(messages) {
+      return messages.reduce(
+        (max, message) => (Number.isFinite(message.seq) ? Math.max(max, message.seq) : max),
+        0,
+      );
+    }
+
+    function visibleMessages(messages) {
+      return chat.displayCutoffSeq > 0
+        ? messages.filter((message) => (message.seq ?? 0) > chat.displayCutoffSeq)
+        : messages;
+    }
+
     function renderMessages(messages) {
       const history = byId("chat-history");
       history.replaceChildren(
@@ -195,7 +239,8 @@
           return bubble;
         }),
       );
-      byId("chat-empty").hidden = messages.length > 0 || chat.mode === "readonly";
+      byId("chat-empty").hidden =
+        messages.length > 0 || chat.mode === "readonly" || chat.displayCutoffSeq > 0;
       history.scrollTop = history.scrollHeight;
     }
 
@@ -214,8 +259,9 @@
     }
 
     async function loadArchivedConversation(conversationId, token) {
+      const displaySeq = chat.displaySeq;
       const result = await callApi("getChatConversation", chat.characterId, conversationId);
-      if (!viewGate.current(token) || chat.closing) {
+      if (!viewGate.current(token) || chat.closing || displaySeq !== chat.displaySeq) {
         return;
       }
       if (!result.ok) {
@@ -226,7 +272,10 @@
       chat.requestId = null;
       chat.mode = "readonly";
       setMemoryStatus(0);
+      chat.lastMessageSeq = maxMessageSeq(result.messages);
+      chat.displayCutoffSeq = 0;
       byId("chat-history-select").value = conversationId;
+      showHistoryNote("历史原文 · 仅作记录，不代表当前有效记忆。");
       renderMessages(result.messages);
       setStatus("");
       renderHeader();
@@ -254,6 +303,7 @@
         }
       }
       const token = viewGate.beginOpen();
+      const displaySeq = chat.displaySeq;
       chat.open = true;
       chat.characterId = characterId;
       chat.displayName = character?.displayName ?? characterId;
@@ -261,7 +311,10 @@
       chat.requestId = null;
       chat.mode = "loading";
       chat.conversations = [];
+      chat.displayCutoffSeq = 0;
+      chat.lastMessageSeq = 0;
       setMemoryStatus(0);
+      hideHistoryNote();
       byId("chat-panel").hidden = false;
       byId("chat-history").replaceChildren();
       byId("chat-input").value = "";
@@ -290,12 +343,45 @@
       chat.displayName = result.displayName || chat.displayName;
       chat.conversations = Array.isArray(result.history) ? result.history : [];
       renderHeader();
+      if (displaySeq !== chat.displaySeq) {
+        chat.mode = chat.conversations.length > 0 ? "readonly" : "open";
+        if (chat.mode === "readonly") {
+          renderHistoryOptions(chat.conversations);
+          prepareHistoryReView();
+          showHistoryNote("记忆已更新，当前旧对话显示已收起；请选择一条历史重新查看原文。");
+        } else {
+          renderMessages([]);
+          setSubtitle(`新对话 · ${chat.displayName}`);
+          showHistoryNote("记忆已更新，旧对话显示已收起。");
+        }
+        byId("chat-history").replaceChildren();
+        byId("chat-empty").hidden = true;
+        renderHeader();
+        if (chat.mode === "open") {
+          setSubtitle(`新对话 · ${chat.displayName}`);
+        }
+        applyMode();
+        return;
+      }
       if (chat.conversations.length > 0) {
         renderHistoryOptions(chat.conversations);
         const latest = chat.conversations[0];
         byId("chat-history-select").value = latest.id;
         await loadArchivedConversation(latest.id, token);
-        if (!viewGate.current(token) || chat.closing || chat.mode !== "readonly") {
+        if (!viewGate.current(token) || chat.closing) {
+          return;
+        }
+        if (displaySeq !== chat.displaySeq) {
+          chat.mode = "readonly";
+          prepareHistoryReView();
+          showHistoryNote("记忆已更新，当前旧对话显示已收起；请选择一条历史重新查看原文。");
+          byId("chat-history").replaceChildren();
+          byId("chat-empty").hidden = true;
+          renderHeader();
+          applyMode();
+          return;
+        }
+        if (chat.mode !== "readonly") {
           return;
         }
         byId("chat-continue").focus();
@@ -321,7 +407,10 @@
       chat.conversationId = null;
       chat.requestId = null;
       chat.conversations = [];
+      chat.displayCutoffSeq = 0;
+      chat.lastMessageSeq = 0;
       setMemoryStatus(0);
+      hideHistoryNote();
       byId("chat-history-select").replaceChildren();
       byId("chat-history").replaceChildren();
       byId("chat-input").value = "";
@@ -338,22 +427,30 @@
         return;
       }
       const conversationId = chat.conversationId;
+      const displaySeq = chat.displaySeq;
       const result = await callApi("getChatConversation", chat.characterId, conversationId);
-      if (!viewGate.current(token) || chat.closing || chat.conversationId !== conversationId) {
+      if (
+        !viewGate.current(token) ||
+        chat.closing ||
+        displaySeq !== chat.displaySeq ||
+        chat.conversationId !== conversationId
+      ) {
         return;
       }
       if (!result.ok) {
         showChatError(result.error);
         return;
       }
-      renderMessages(result.messages);
+      chat.lastMessageSeq = maxMessageSeq(result.messages);
+      renderMessages(visibleMessages(result.messages));
       applyMode();
     }
 
-    async function handleResult(result, token, sentText, requestId) {
+    async function handleResult(result, token, sentText, requestId, displaySeq) {
       if (!viewGate.current(token) || chat.closing) {
         return;
       }
+      const memoryChanged = displaySeq !== chat.displaySeq;
       if (!result) {
         chat.mode = "open";
         chat.requestId = null;
@@ -368,13 +465,25 @@
       if (result.status === "completed") {
         chat.mode = "open";
         chat.requestId = null;
+        if (memoryChanged) {
+          byId("chat-input").value = sentText;
+          setMemoryStatus(0);
+          setStatus("记忆已更新，旧回复没有显示", "error");
+          setSubtitle("旧回复已失效");
+          applyMode();
+          return;
+        }
         byId("chat-input").value = "";
         setStatus("");
         setSubtitle(`对话中 · ${chat.displayName}`);
         setMemoryStatus(result.memoryApplied);
         applyMode();
         await refreshConversation(token);
-        if (!viewGate.current(token) || chat.closing) {
+        if (
+          !viewGate.current(token) ||
+          chat.closing ||
+          displaySeq !== chat.displaySeq
+        ) {
           return;
         }
         byId("chat-input").focus();
@@ -388,7 +497,9 @@
         setStatus("发送失败，输入已保留", "error");
         setSubtitle("发送失败 · 可显式重试");
         applyMode();
-        await refreshConversation(token);
+        if (!memoryChanged) {
+          await refreshConversation(token);
+        }
         return;
       }
       if (result.status === "cancelled" || result.status === "stale") {
@@ -404,7 +515,9 @@
           setSubtitle("旧回复已失效");
         }
         applyMode();
-        await refreshConversation(token);
+        if (!memoryChanged) {
+          await refreshConversation(token);
+        }
         return;
       }
       chat.mode = "open";
@@ -425,6 +538,7 @@
       }
       const requestId = newRequestId();
       const token = viewGate.snapshot();
+      const displaySeq = chat.displaySeq;
       chat.mode = "waiting";
       chat.requestId = requestId;
       showChatError(null);
@@ -448,7 +562,7 @@
         applyMode();
         return;
       }
-      await handleResult(result.result, token, text, requestId);
+      await handleResult(result.result, token, text, requestId, displaySeq);
     }
 
     async function retryMessage() {
@@ -458,6 +572,7 @@
       const requestId = chat.requestId;
       const text = byId("chat-input").value;
       const token = viewGate.snapshot();
+      const displaySeq = chat.displaySeq;
       chat.mode = "waiting";
       showChatError(null);
       setMemoryStatus(0);
@@ -479,7 +594,7 @@
         applyMode();
         return;
       }
-      await handleResult(result.result, token, text, requestId);
+      await handleResult(result.result, token, text, requestId, displaySeq);
     }
 
     async function cancelMessage() {
@@ -504,6 +619,7 @@
 
     function resetState() {
       viewGate.reset();
+      chat.displaySeq += 1;
       chat.open = false;
       chat.characterId = null;
       chat.displayName = null;
@@ -512,6 +628,8 @@
       chat.mode = "closed";
       chat.conversations = [];
       chat.closing = false;
+      chat.displayCutoffSeq = 0;
+      chat.lastMessageSeq = 0;
       chat.trigger = null;
       const panel = byId("chat-panel");
       if (!panel) {
@@ -519,6 +637,7 @@
       }
       panel.hidden = true;
       setMemoryStatus(0);
+      hideHistoryNote();
       byId("chat-history").replaceChildren();
       byId("chat-history-select").replaceChildren();
       byId("chat-input").value = "";
@@ -641,6 +760,28 @@
       return openChatFor(characterId, trigger, options);
     }
 
+    /* 记忆只清理当前受影响的屏上旧显示；数据库原文与未发送草稿都不动。 */
+    function handleMemoryChanged(payload) {
+      const affected = payload?.affectedCharacters;
+      if (!chat.open || !Array.isArray(affected) || !affected.includes(chat.characterId)) {
+        return;
+      }
+      chat.displaySeq += 1;
+      chat.displayCutoffSeq = Math.max(chat.displayCutoffSeq, chat.lastMessageSeq);
+      setMemoryStatus(0);
+      byId("chat-history").replaceChildren();
+      byId("chat-empty").hidden = true;
+      if (chat.mode === "readonly" && chat.conversations.length > 0) {
+        prepareHistoryReView();
+        showHistoryNote("记忆已更新，当前旧对话显示已收起；历史原文仍保留，重新选择时会标明原文。");
+      } else {
+        showHistoryNote("记忆已更新，当前旧对话显示已收起；历史原文仍保留。");
+      }
+      if (chat.mode === "waiting") {
+        setStatus("记忆已更新，等待的回复会按新理解核验", "error");
+      }
+    }
+
     function bindPanelEvents() {
       byId("chat-close").addEventListener("click", () => closePanel());
       byId("chat-continue").addEventListener("click", continueChat);
@@ -651,9 +792,10 @@
         }
       });
       byId("chat-history-select").addEventListener("change", () => {
-        if (chat.mode === "readonly" && !chat.closing) {
+        const conversationId = byId("chat-history-select").value;
+        if (conversationId && chat.mode === "readonly" && !chat.closing) {
           const token = viewGate.beginHistory();
-          loadArchivedConversation(byId("chat-history-select").value, token);
+          loadArchivedConversation(conversationId, token);
         }
       });
       byId("chat-form").addEventListener("submit", (event) => {
@@ -694,7 +836,7 @@
       api.onChatClosed(() => handleExternalClosed());
     }
 
-    return { renderLaunch, openFor };
+    return { renderLaunch, openFor, handleMemoryChanged };
   }
 
   window.createChatPanel = createChatPanel;

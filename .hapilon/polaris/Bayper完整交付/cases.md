@@ -102,3 +102,5 @@ POL-BUDGET-001～004正式Contract见[s06a-budget-plan.md](s06a-budget-plan.md)�
 POL-BUDGET-001～005：Codex独立automatic-budget.spec.cjs 5/5通过；005补充Contract与覆盖矩阵见s06a-review.md，证据evidence/s06a-codex-first.log。003真正in_flight重启分支尚需补测，当前不标完整预算契约PASS；真实调度/HTTP集成未覆盖。
 
 预算r2补测真正未finish的in_flight重启，Codex独立5/5通过，POL-BUDGET-003模块分支补齐；当前001～005模块契约PASS，详见s06a-review.md与s06a-codex-r2.log。
+
+POL-MEMUI-001～006当前模块PASS：Codex独立真实Electron/SQLite/受控HTTP验收6/6，相关聊天UI10/10、聊天及记忆服务32/32通过。005/006完整Contract补入s03c-memory-ui-plan.md；矩阵、失败→修复及边界见s03c-review.md。当前用户可按角色分页查看并本地纠正/删除，旧显示与在途隔离；自然语言定位、主动共享和全页native未覆盖。

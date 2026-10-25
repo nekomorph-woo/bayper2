@@ -11,6 +11,7 @@ const {
   powerMonitor,
 } = require("electron");
 const { AppError, toPublicError } = require("./errors.cjs");
+const { MemoryError } = require("./memory.cjs");
 const { createStore } = require("./store.cjs");
 const { createOnboardingService, readStoredModelCredentials } = require("./onboarding.cjs");
 const { createCompanionshipService } = require("./companionship.cjs");
@@ -210,6 +211,14 @@ function failureResult(error) {
   return { ok: false, error: toPublicError(error) };
 }
 
+/* 记忆服务使用自己的稳定错误码；只在具名 IPC 边界公开 code 与中文 message。 */
+function memoryFailureResult(error) {
+  if (error instanceof MemoryError) {
+    return { ok: false, error: { code: error.code, message: error.message } };
+  }
+  return failureResult(error);
+}
+
 function readDesktopPosition() {
   const raw = store?.getAppState("desktop_position");
   if (!raw) {
@@ -297,6 +306,32 @@ function snapshotForRenderer() {
       reasons: systemLifecycle?.reasons() ?? [],
     },
   };
+}
+
+/* 管理界面只需展示正文、类别和来源语义；factKey、来源哈希与检索分数不越过 IPC。 */
+function memoryEntryForRenderer(entry) {
+  return {
+    id: entry.id,
+    version: entry.version,
+    body: entry.body,
+    kind: entry.kind,
+    trust: entry.trust,
+    originCharacterId: entry.originCharacterId,
+    derived: entry.derived,
+  };
+}
+
+function notifyMemoryChanged(affectedCharacters) {
+  if (
+    !Array.isArray(affectedCharacters) ||
+    affectedCharacters.length === 0 ||
+    !mainWindow ||
+    mainWindow.isDestroyed() ||
+    mainWindow.webContents.isDestroyed()
+  ) {
+    return;
+  }
+  mainWindow.webContents.send("bayper:memory-changed", { affectedCharacters });
 }
 
 function createTray() {
@@ -768,6 +803,56 @@ function registerIpcHandlers() {
       return { ok: true, ...result, snapshot: snapshotForRenderer() };
     } catch (error) {
       return failureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:memory:list", (event, payload) => {
+    try {
+      assertTrustedSender(event);
+      const page = store.memory.listMemoriesPage(payload?.characterId, {
+        page: payload?.page,
+      });
+      return {
+        ok: true,
+        page: page.page,
+        pageSize: page.pageSize,
+        hasMore: page.hasMore,
+        entries: page.entries.map(memoryEntryForRenderer),
+      };
+    } catch (error) {
+      return memoryFailureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:memory:correct", (event, payload) => {
+    try {
+      assertTrustedSender(event);
+      const result = store.memory.correct({
+        characterId: payload?.characterId,
+        entryId: payload?.entryId,
+        expectedVersion: payload?.expectedVersion,
+        body: payload?.body,
+      });
+      notifyMemoryChanged(result.affectedCharacters);
+      return { ok: true, ...result };
+    } catch (error) {
+      return memoryFailureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:memory:forget", (event, payload) => {
+    try {
+      assertTrustedSender(event);
+      const result = store.memory.forget({
+        characterId: payload?.characterId,
+        entryId: payload?.entryId,
+        expectedVersion: payload?.expectedVersion,
+        scope: payload?.scope,
+      });
+      notifyMemoryChanged(result.affectedCharacters);
+      return { ok: true, ...result };
+    } catch (error) {
+      return memoryFailureResult(error);
     }
   });
 

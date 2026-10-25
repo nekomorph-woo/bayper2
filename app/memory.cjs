@@ -24,6 +24,7 @@ const LIMITS = Object.freeze({
   shareEntries: 20,
   extractionFacts: 20,
   list: 200,
+  memoryPage: 30,
   contextEntries: 500,
   contextMaxChars: 600,
   contextCore: 5,
@@ -152,6 +153,35 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       throw new MemoryError("INVALID_INPUT", "来源版本必须是正整数。");
     }
     return value;
+  }
+
+  function expectedVersionOf(value) {
+    if (!Number.isSafeInteger(value) || value < 1) {
+      throw new MemoryError("INVALID_INPUT", "记忆版本无效。");
+    }
+    return value;
+  }
+
+  /* 管理端用稳定条目 ID 定位本次选中项；旧服务调用仍可直接传 factKey。
+     版本核验放在事务内，避免列表与提交之间被新理解覆盖。 */
+  function factForSelectedChange(input, characterId) {
+    if (input.entryId === undefined) {
+      return { factKey: cleanText(input.factKey, "事实键", LIMITS.factKey), entryId: null };
+    }
+    const entryId = cleanText(input.entryId, "记忆ID", 200);
+    const selected = store.getEntryById(entryId);
+    if (!selected || selected.characterId !== characterId) {
+      throw new MemoryError("ENTRY_NOT_FOUND", "这条记忆不存在，请重新查看。");
+    }
+    if (input.expectedVersion !== undefined) {
+      const expectedVersion = expectedVersionOf(input.expectedVersion);
+      if (selected.version !== expectedVersion) {
+        throw new MemoryError("MEMORY_CHANGED", "记忆已更新，请重新查看。");
+      }
+    } else {
+      throw new MemoryError("INVALID_INPUT", "记忆版本不能为空。");
+    }
+    return { factKey: selected.factKey, entryId };
   }
 
   function limitOf(value, fallback, max) {
@@ -317,6 +347,30 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     return store.listActiveEntries(characterId, nowMs, limit);
   }
 
+  /* 管理界面使用有界页大小；稳定性由 SQL 的 importance/updated_at/id 排序保证。
+     pageSize + 1 只用于判断 hasMore，不改变现有 listMemories 的 200 条兼容行为。 */
+  function listMemoriesPage(characterIdInput, options = {}) {
+    const characterId = characterIdOf(characterIdInput);
+    const nowMs = resolveNow(options.nowMs);
+    const page = options.page ?? 0;
+    if (!Number.isSafeInteger(page) || page < 0) {
+      throw new MemoryError("INVALID_INPUT", "页码必须是非负整数。");
+    }
+    const pageSize = LIMITS.memoryPage;
+    const rows = store.listActiveEntriesPage(
+      characterId,
+      nowMs,
+      pageSize + 1,
+      page * pageSize,
+    );
+    return {
+      entries: rows.slice(0, pageSize),
+      page,
+      pageSize,
+      hasMore: rows.length > pageSize,
+    };
+  }
+
   function indexTokenSet(body) {
     const tokens = tokenizeForIndex(body);
     return new Set(`${tokens.segmentTokens} ${tokens.charTokens}`.split(/\s+/).filter(Boolean));
@@ -430,7 +484,6 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
      的原始与派生持有者，不给未知角色新增。派生身份用于来源可追溯，不限制管理。 */
   function correct(input = {}) {
     const characterId = characterIdOf(input.characterId);
-    const factKey = cleanText(input.factKey, "事实键", LIMITS.factKey);
     const body = bodyOf(input.body);
     const nowMs = resolveNow(input.nowMs);
     const trustProvided = input.trust !== undefined;
@@ -443,6 +496,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     const sourceVersion = input.sourceVersion === undefined ? null : sourceVersionOf(input.sourceVersion);
 
     return store.transaction(() => {
+      const { factKey } = factForSelectedChange(input, characterId);
       const held = store.getEntryByFact(characterId, factKey);
       if (!held) {
         throw new MemoryError("FACT_NOT_HELD", "当前角色没有该事实，不能发起纠正。");
@@ -512,15 +566,15 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
      控制表只保存事实键摘要与来源引用哈希，不保存被删正文。 */
   function forget(input = {}) {
     const characterId = characterIdOf(input.characterId);
-    const factKey = cleanText(input.factKey, "事实键", LIMITS.factKey);
     const nowMs = resolveNow(input.nowMs);
     const scope = input.scope ?? "all";
     if (scope !== "all" && scope !== "self") {
       throw new MemoryError("INVALID_INPUT", "删除范围无效。");
     }
-    const hash = factKeyHash(factKey);
 
     return store.transaction(() => {
+      const { factKey } = factForSelectedChange(input, characterId);
+      const hash = factKeyHash(factKey);
       const held = store.getEntryByFact(characterId, factKey);
       if (!held) {
         throw new MemoryError("FACT_NOT_HELD", "当前角色没有该事实，不能执行删除。");
@@ -719,6 +773,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     remember,
     applyExtractionBatch,
     listMemories,
+    listMemoriesPage,
     searchMemories,
     correct,
     forget,
