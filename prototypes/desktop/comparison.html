@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>小窝首页 · 两套方向对比 — Bayper</title>
+    <link rel="stylesheet" href="assets/css/comparison.css" />
+  </head>
+  <body>
+    <div class="cmp">
+      <header class="cmp__head" data-od-id="cmp-head">
+        <div>
+          <p class="kicker">BAYPER · 小窝首页 · 首轮方向</p>
+          <h1>两套首页方向</h1>
+          <p class="lede">
+            同一份角色与名单数据、同一套核心动作。A 用空间和角色说话，B 用时间和文字说话；骨架不同，不是换配色。
+          </p>
+        </div>
+        <div class="cmp__actions">
+          <button class="btn btn--solid" type="button" data-toggle-full aria-pressed="false" data-od-id="toggle-full">
+            并排看全尺寸
+          </button>
+          <a class="btn" href="home-a.html" target="_blank" rel="noopener" data-od-id="open-a">打开 A</a>
+          <a class="btn" href="home-b.html" target="_blank" rel="noopener" data-od-id="open-b">打开 B</a>
+        </div>
+      </header>
+
+      <p class="note">
+        下面的预览按 1200×800 真实渲染后等比缩小，只用来比较版式关系；文字、间距与交互请点开全尺寸查看。
+      </p>
+
+      <section class="cmp__grid" data-od-id="cmp-grid">
+        <article class="card" data-od-id="cmp-a">
+          <header class="card__head">
+            <p class="card__index">A</p>
+            <div>
+              <h2>午后的小窝</h2>
+              <p class="card__summary">暖象牙纸面，角色几乎占满主区。近况和一个动作贴在她右侧，名单与见闻落在底部。</p>
+            </div>
+          </header>
+
+          <p class="frame__scale">实时渲染 1200×800 · 缩放 <b>—</b></p>
+          <div class="frame">
+            <iframe src="home-a.html" title="A · 午后的小窝，1200×800 实时预览" width="1200" height="800"></iframe>
+          </div>
+
+          <dl class="card__facts">
+            <div>
+              <dt>骨架</dt>
+              <dd>轻量左栏 · 角色居中偏左 · 底部名单与见闻</dd>
+            </div>
+            <div>
+              <dt>字体</dt>
+              <dd>宋体标题，正文用系统中文字体</dd>
+            </div>
+            <div>
+              <dt>强调</dt>
+              <dd>深鼠尾草绿，只用在主按钮和固定位标记</dd>
+            </div>
+          </dl>
+
+          <p class="card__foot">
+            <a class="link" href="home-a.html" target="_blank" rel="noopener">打开全尺寸 1200×800</a>
+            <span>状态参数：?panel=chat / ?panel=profile</span>
+          </p>
+        </article>
+
+        <article class="card" data-od-id="cmp-b">
+          <header class="card__head">
+            <p class="card__index">B</p>
+            <div>
+              <h2>相处手记</h2>
+              <p class="card__summary">近白纸面与顶部导航。肖像是贴上去的小相片，下面是按时间排的短笺，右侧是轻量索引。</p>
+            </div>
+          </header>
+
+          <p class="frame__scale">实时渲染 1200×800 · 缩放 <b>—</b></p>
+          <div class="frame">
+            <iframe src="home-b.html" title="B · 相处手记，1200×800 实时预览" width="1200" height="800"></iframe>
+          </div>
+
+          <dl class="card__facts">
+            <div>
+              <dt>骨架</dt>
+              <dd>顶部导航 · 肖像贴片 · 时间序手记 · 右侧索引</dd>
+            </div>
+            <div>
+              <dt>字体</dt>
+              <dd>宋体手记，正文用系统中文字体</dd>
+            </div>
+            <div>
+              <dt>强调</dt>
+              <dd>墨紫为主，酒红只用于日期和手记边线</dd>
+            </div>
+          </dl>
+
+          <p class="card__foot">
+            <a class="link" href="home-b.html" target="_blank" rel="noopener">打开全尺寸 1200×800</a>
+            <span>状态参数：?panel=chat / ?panel=profile</span>
+          </p>
+        </article>
+      </section>
+
+      <section class="full" id="full" hidden aria-label="两套首页并排全尺寸">
+        <div class="full__head">
+          <h2>并排全尺寸</h2>
+          <p>两个窗口都按 1200×800 原尺寸渲染，容器可横向滚动。</p>
+        </div>
+        <div class="full__rail">
+          <div class="full__item">
+            <p>A · 午后的小窝</p>
+            <iframe data-src="home-a.html" title="A · 午后的小窝 全尺寸"></iframe>
+          </div>
+          <div class="full__item">
+            <p>B · 相处手记</p>
+            <iframe data-src="home-b.html" title="B · 相处手记 全尺寸"></iframe>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="assets/js/comparison.js"></script>
+  </body>
+</html>

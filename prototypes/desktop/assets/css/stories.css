@@ -1,0 +1,154 @@
+/* 故事：列表与阅读两种状态。
+   阅读页借用首轮 B 的手记语感（少量衬线、留白），应用外壳仍是 A。 */
+
+.storylist {
+  max-width: 720px;
+}
+
+.storyrow {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 20px;
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+}
+
+.storyrow:first-child {
+  border-top: 0;
+  padding-top: 4px;
+}
+
+.storyrow__date {
+  padding-top: 2px;
+  font-size: 12.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.storyrow__title {
+  display: inline-block;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.storyrow__title:hover {
+  color: var(--accent);
+}
+
+.storyrow__who {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.storyrow__excerpt {
+  margin-top: 3px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.storyrow__flag {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--warn);
+}
+
+/* ---------- 阅读 ---------- */
+
+.reader {
+  max-width: 680px;
+}
+
+.backlink {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 34px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.backlink:hover {
+  color: var(--fg);
+}
+
+.reader__meta {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+
+.reader h1 {
+  margin-top: 6px;
+  font-family: var(--font-quote);
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.reader__body {
+  margin-top: 18px;
+  max-width: 33em;
+}
+
+.reader__body p {
+  margin-bottom: 14px;
+  font-family: var(--font-quote);
+  font-size: 16.5px;
+  line-height: 1.95;
+  color: var(--fg);
+}
+
+.invite {
+  margin-top: 22px;
+  max-width: 33em;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.invite__title {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.invite__text {
+  margin-top: 4px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.invite__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.invite__state {
+  margin-top: 4px;
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+.invite__state a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 1080px) {
+  .storyrow {
+    grid-template-columns: 78px minmax(0, 1fr);
+    gap: 14px;
+  }
+}

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>小窝 · 相处手记 — Bayper</title>
+    <link rel="stylesheet" href="assets/css/window.css" />
+    <link rel="stylesheet" href="assets/css/home-b.css" />
+  </head>
+  <body class="dir-b">
+    <div class="window" data-od-id="window-b">
+      <header class="topbar" data-od-id="topbar-b">
+        <div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div>
+        <p class="brand">Bayper</p>
+
+        <nav class="topnav" aria-label="主导航">
+          <a href="#" aria-current="page" data-od-id="nav-home">小窝</a>
+          <a href="#bayper" data-nav-hint="Bayper 角色页" data-od-id="nav-bayper">Bayper</a>
+          <a href="#story" data-nav-hint="故事页" data-od-id="nav-story">故事</a>
+          <a href="#link" data-nav-hint="连接页" data-od-id="nav-connect">连接</a>
+        </nav>
+
+        <div class="topbar__end">
+          <a class="icon-btn" href="#settings" data-nav-hint="设置" aria-label="设置" data-od-id="nav-settings">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+              <path d="M3.2 6.4h13.6M3.2 13.6h13.6" />
+              <circle cx="8" cy="6.4" r="2.1" />
+              <circle cx="12.6" cy="13.6" r="2.1" />
+            </svg>
+          </a>
+        </div>
+      </header>
+
+      <div class="paper">
+        <main class="journal reveal" data-od-id="home-b-main">
+          <p class="dateline">10月25日 · 周六 · 手记</p>
+
+          <div class="entryhead">
+            <figure class="print">
+              <div
+                class="portrait"
+                data-od-id="portrait-rin"
+                role="img"
+                aria-label="凛：黑发、猫耳，穿深色女仆装与白围裙的像素风角色"
+              ></div>
+              <figcaption>凛 · 今天在场</figcaption>
+            </figure>
+
+            <div class="entryhead__text">
+              <h1>凛的一天</h1>
+              <p>黑猫耳的住客。今天全天在场，窗边的位置收拾好了，毛线就摆在手边。</p>
+              <div class="entryhead__actions">
+                <button class="btn btn--primary" type="button" data-open-chat data-od-id="cta-chat">
+                  和凛聊一会儿
+                </button>
+                <button class="btn btn--text" type="button" data-open-profile data-od-id="cta-profile">
+                  查看凛
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <ol class="timeline" data-od-id="today-notes">
+            <li>
+              <time datetime="08:40">08:40</time>
+              <p>凛把你落在窗台的袖扣摆正了，说这样看起来像在等人。</p>
+            </li>
+            <li>
+              <time datetime="13:20">13:20</time>
+              <p>她把毛线团拆开又绕回去，最后绕出一小段彩虹。</p>
+            </li>
+            <li>
+              <time datetime="16:05">16:05</time>
+              <p>窗外的光移到桌角，凛挪了挪椅子，正好坐在光里。</p>
+            </li>
+            <li>
+              <time datetime="19:40">19:40</time>
+              <p>她把织了一半的围巾搭在椅背上，说明天再接着织。</p>
+            </li>
+          </ol>
+
+          <p class="signoff">手记先到这里。凛还在窗边。</p>
+        </main>
+
+        <aside class="index" data-od-id="today-roster" aria-label="今日名单">
+          <h2>今天会来的人</h2>
+          <ul>
+            <li>
+              <span class="dot" aria-hidden="true"></span>
+              <span class="who">凛</span>
+              <span class="state">全天</span>
+            </li>
+            <li>
+              <span class="dot" aria-hidden="true"></span>
+              <span class="who">阿澈</span>
+              <span class="state">14:00 后</span>
+            </li>
+            <li>
+              <span class="dot" aria-hidden="true"></span>
+              <span class="who">小满</span>
+              <span class="state">18:30 后</span>
+            </li>
+          </ul>
+          <p class="index__foot">名单每天重新排。凛是固定位，阿澈和小满随机过来。</p>
+        </aside>
+      </div>
+
+      <aside class="sheet" id="sheet" data-open="false" data-view="chat" aria-hidden="true" aria-label="与角色相处的侧面板">
+        <header class="sheet__head">
+          <div>
+            <p class="sheet__kicker" id="sheetKicker">与凛</p>
+            <h2 class="sheet__title" id="sheetTitle">聊一会儿</h2>
+          </div>
+          <button class="icon-btn" type="button" data-close aria-label="关闭面板">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+              <path d="m5.5 5.5 9 9M14.5 5.5l-9 9" />
+            </svg>
+          </button>
+        </header>
+
+        <div class="sheet__body" data-view-body="chat">
+          <ol class="chat" id="chatLog" aria-live="polite"></ol>
+          <p class="chat__status" id="chatStatus" hidden>凛正在回…</p>
+          <p class="sheet__note">原型演示：回应由本地预置文本生成，不会发出任何请求。</p>
+        </div>
+
+        <div class="sheet__body" data-view-body="profile" hidden>
+          <div
+            class="profile__portrait portrait"
+            role="img"
+            aria-label="凛：黑发、猫耳，穿深色女仆装与白围裙的像素风角色"
+          ></div>
+          <p class="profile__name">凛<span class="profile__tag">猫耳女仆</span></p>
+          <p class="profile__quote">黑猫耳的住客。喜欢窗边的光、没织完的毛线，还有把话说完之前的那些停顿。</p>
+          <dl class="profile__facts">
+            <div>
+              <dt>今天</dt>
+              <dd>全天在场</dd>
+            </div>
+            <div>
+              <dt>在做什么</dt>
+              <dd>窗边织毛线</dd>
+            </div>
+            <div>
+              <dt>在哪儿</dt>
+              <dd>小窝的固定位</dd>
+            </div>
+          </dl>
+          <button class="btn btn--text" type="button" data-open-chat>和凛聊一会儿</button>
+        </div>
+
+        <form class="composer" id="composer" data-view-body="chat">
+          <textarea id="chatInput" rows="1" placeholder="和凛说点什么…" aria-label="输入消息"></textarea>
+          <button class="send" type="submit" aria-label="发送">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 10h11M11.4 6.2 15.2 10l-3.8 3.8" />
+            </svg>
+          </button>
+        </form>
+      </aside>
+
+      <p class="toast" id="toast" role="status" aria-live="polite"></p>
+    </div>
+
+    <script src="assets/js/legacy-app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,250 @@
+/* 连接：两个 Herdr 来源、各自独立的 Agent 状态、可过滤可展开的通知记录。 */
+
+.sources {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.source {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.source[data-online="false"] {
+  background: var(--bg);
+}
+
+.source__head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.source__name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.source__session {
+  margin-top: 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.source__status {
+  flex: none;
+  padding-top: 2px;
+}
+
+.agents {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.agent {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.agent__name {
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.agent__note {
+  margin-top: 1px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.state-chip {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  flex: none;
+  padding-top: 1px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.state-chip::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.state-chip[data-state="working"] {
+  color: var(--accent);
+}
+
+.state-chip[data-state="waiting"] {
+  color: oklch(0.48 0.1 70);
+}
+
+.state-chip[data-state="unknown"]::before {
+  background: transparent;
+  border: 1px solid currentColor;
+}
+
+.source__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 12px;
+}
+
+.source__hint {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ---------- 通知 ---------- */
+
+.notif-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24px;
+  margin-bottom: 8px;
+}
+
+.notif-head h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.filters {
+  display: flex;
+  gap: 6px;
+}
+
+.filter {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease),
+    border-color var(--dur-press) var(--ease), color var(--dur-press) var(--ease);
+}
+
+.filter:hover {
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+
+.filter[aria-pressed="true"] {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+
+.notifs {
+  border-top: 1px solid var(--border);
+}
+
+.notif {
+  border-bottom: 1px solid var(--border);
+}
+
+.notif__button {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  gap: 14px;
+  width: 100%;
+  padding: 11px 2px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notif__button:hover .notif__title {
+  color: var(--accent);
+}
+
+.notif__time {
+  padding-top: 1px;
+  font-size: 12.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.notif__title {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.55;
+  transition: color var(--dur-switch) var(--ease);
+}
+
+.notif__from {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.notif__kind {
+  padding-top: 1px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.notif__kind[data-kind="attention"] {
+  color: oklch(0.48 0.1 70);
+}
+
+.notif__kind[data-kind="alert"] {
+  color: var(--danger);
+}
+
+.notif__detail {
+  padding: 0 2px 13px 60px;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--muted);
+}
+
+.notif__detail p + p {
+  margin-top: 6px;
+}
+
+@media (max-width: 1080px) {
+  .notif__button {
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+
+  .notif__detail {
+    padding-left: 54px;
+  }
+}
+
+@media (max-width: 900px) {
+  .sources {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

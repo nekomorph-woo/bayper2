@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>小窝 — Bayper</title>
+    <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="assets/css/base.css" />
+    <link rel="stylesheet" href="assets/css/home.css" />
+  </head>
+  <body data-page="home">
+    <div class="app">
+      <aside class="sidebar" aria-label="应用导航"></aside>
+
+      <main class="main">
+        <div class="page reveal">
+          <header class="page-head" data-od-id="home-head">
+            <div>
+              <p class="eyebrow">10月25日 · 周日 · 下午</p>
+              <h1 class="is-lg">下午好，小舟</h1>
+              <p class="sub" id="homeSub"></p>
+            </div>
+          </header>
+
+          <section class="hero" id="hero" aria-label="现在的陪伴"></section>
+
+          <section class="section" aria-labelledby="rosterTitle" data-od-id="today-roster">
+            <div class="section__head">
+              <h2 id="rosterTitle">今日陪伴</h2>
+              <p class="hint">1 个固定位 · 最多 4 位随机陪伴</p>
+            </div>
+            <div class="roster" id="roster"></div>
+          </section>
+
+          <section class="section" aria-labelledby="newsTitle" data-od-id="recent-stories">
+            <div class="section__head">
+              <h2 id="newsTitle">最近见闻</h2>
+              <a class="btn btn--quiet btn--sm" href="stories.html" data-od-id="to-stories">去故事</a>
+            </div>
+            <div class="news" id="news"></div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <script src="assets/js/data.js"></script>
+    <script src="assets/js/app.js"></script>
+    <script src="assets/js/home.js"></script>
+  </body>
+</html>

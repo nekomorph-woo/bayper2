@@ -1,0 +1,308 @@
+/* B · 相处手记
+   近白纸面、墨紫与少量酒红、顶部导航。角色肖像像一张贴上去的小相片，
+   下面是按时间排的日常短笺，右侧是轻量的人物索引。 */
+
+.dir-b {
+  --bg: oklch(0.984 0.004 85);
+  --surface: oklch(0.996 0.002 85);
+  --surface-2: oklch(0.952 0.007 300);
+  --fg: oklch(0.245 0.04 300);
+  --muted: oklch(0.468 0.03 300);
+  --border: oklch(0.9 0.008 300);
+  --border-strong: oklch(0.82 0.012 300);
+  --accent: oklch(0.4 0.09 302);
+  --accent-hover: oklch(0.33 0.09 302);
+  --accent-fg: oklch(0.985 0.004 85);
+  --wine: oklch(0.46 0.13 22);
+  --print-border: oklch(0.865 0.012 300);
+  --focus: oklch(0.4 0.09 302);
+  --radius-btn: 6px;
+  --sheet-bg: oklch(0.992 0.003 85);
+}
+
+.window {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+/* ---------- 顶栏 ---------- */
+
+.topbar {
+  display: flex;
+  gap: 22px;
+  align-items: center;
+  height: 62px;
+  padding: 0 18px 0 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  font-family: var(--font-serif);
+  font-size: 19px;
+  line-height: 1;
+  letter-spacing: 0.05em;
+}
+
+.topnav {
+  display: flex;
+  gap: 2px;
+  margin-left: 10px;
+}
+
+.topnav a {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 62px;
+  padding: 0 15px;
+  font-size: 14px;
+  color: var(--muted);
+  transition: color var(--dur-switch) var(--ease);
+}
+
+.topnav a:hover {
+  color: var(--fg);
+}
+
+.topnav a[aria-current="page"] {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.topnav a[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  right: 15px;
+  bottom: 12px;
+  left: 15px;
+  height: 2px;
+  background: var(--fg);
+}
+
+.topbar__end {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-left: auto;
+}
+
+/* ---------- 纸面 ---------- */
+
+.paper {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 248px;
+  min-height: 0;
+}
+
+.journal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 690px;
+  margin-inline: auto;
+  padding: 26px 36px 24px 44px;
+}
+
+.dateline {
+  font-size: 12.5px;
+  letter-spacing: 0.08em;
+  color: var(--wine);
+}
+
+.journal h1 {
+  margin-top: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(26px, 2.7vw, 32px);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.entryhead {
+  display: grid;
+  grid-template-columns: clamp(180px, 18vw, 216px) minmax(0, 1fr);
+  gap: 26px;
+  align-items: start;
+  margin-top: 16px;
+}
+
+.print {
+  padding: 9px 9px 0;
+  background: var(--figure-paper);
+  border: 1px solid var(--print-border);
+}
+
+.print figcaption {
+  padding: 8px 2px 9px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: oklch(0.43 0.03 70);
+}
+
+.print .portrait {
+  width: 100%;
+  border: 1px solid oklch(0.9 0.014 80);
+}
+
+.entryhead__text {
+  padding-top: 2px;
+}
+
+.entryhead__text p {
+  margin-top: 10px;
+  font-size: 14.5px;
+  line-height: 1.75;
+  color: var(--muted);
+}
+
+.entryhead__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  align-items: center;
+  margin-top: 18px;
+}
+
+/* ---------- 手记时间线 ---------- */
+
+.timeline {
+  position: relative;
+  margin-top: 24px;
+}
+
+.timeline::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 10px;
+  left: 57px;
+  border-left: 1px solid oklch(0.46 0.13 22 / 0.32);
+}
+
+.timeline li {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 28px;
+  padding: 13px 0;
+  border-top: 1px solid var(--border);
+}
+
+.timeline li:first-child {
+  border-top: 0;
+}
+
+.timeline time {
+  padding-top: 3px;
+  font-size: 12.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline p {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.8;
+  color: var(--fg);
+}
+
+.signoff {
+  margin-top: auto;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---------- 右侧人物索引 ---------- */
+
+.index {
+  display: flex;
+  flex-direction: column;
+  padding: 30px 26px 24px 24px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+}
+
+.index h2 {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.index ul {
+  margin-top: 12px;
+}
+
+.index li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.index .dot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--muted);
+}
+
+.index li:first-child .dot {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.index .who {
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.index .state {
+  margin-left: auto;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.index__foot {
+  margin-top: 16px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+/* ---------- 窄窗适配 ---------- */
+
+@media (max-width: 1080px) {
+  .paper {
+    grid-template-columns: minmax(0, 1fr) 214px;
+  }
+
+  .journal {
+    padding: 22px 26px 20px 30px;
+  }
+
+  .topnav a {
+    padding: 0 11px;
+  }
+
+  .topnav a[aria-current="page"]::after {
+    right: 11px;
+    left: 11px;
+  }
+
+  .entryhead {
+    gap: 20px;
+  }
+
+  .timeline li {
+    gap: 24px;
+  }
+
+  .timeline::before {
+    left: 53px;
+  }
+}

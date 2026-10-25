@@ -1,6 +1,6 @@
 # Bayper
 
-项目已完成本地 Git 初始化、协作流程验证和多项基础技术预研，当前进入 PRD 讨论。产品范围与正式工程细节尚未冻结，桌面技术栈已确定为Electron，研究探针与正式实现分开管理。
+项目已完成本地 Git 初始化、协作流程验证和多项基础技术预研，当前处于 PRD 与高保真原型设计阶段。产品范围与正式工程细节尚未冻结，桌面技术栈已确定为Electron，研究探针与正式实现分开管理。
 
 ## 协作入口
 
@@ -20,3 +20,5 @@ polaris 已从原 hapilon skill 目录完整复制到本仓库，保留 `.agents
 ## 当前工作
 
 正在讨论可独立运行的 Bayper 桌面陪伴：角色在小窝与陪伴位置间活动，同屏最多1位；当日名单最多1固定位＋4随机位，共用自动API活动预算。角色身份与独属记忆长期连续，主题组织服装和故事，连接器提供Herdr工作通知。当前草案见 [Bayper PRD](.hapilon/polaris/Bayper桌面陪伴/prd.md)，尚未进入正式开发。前期资料见 [静态调研](.hapilon/polaris/Bayper前期调研/research.md) 和 [Herdr 运行时实测](.hapilon/polaris/Bayper前期调研/runtime-research.md)，研究脚本与复现说明位于 [research/herdr](research/herdr/README.md)。
+
+桌面程序窗口的可交互原型见 [原型使用说明](prototypes/desktop/README.md)，包含小窝、角色、故事、连接、设置及本地模拟交互。OpenDesign通过MCP调度，Claude Code实现原型代码；真实模型、Herdr和系统控制尚未接入。

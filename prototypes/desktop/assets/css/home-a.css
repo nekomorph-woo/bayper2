@@ -1,0 +1,293 @@
+/* A · 午后的小窝
+   暖象牙纸面、深鼠尾草绿、轻量左栏。角色是空间里的主角，
+   近况与一个动作在右侧，底部一条今日名单加一则见闻。 */
+
+.dir-a {
+  --bg: var(--figure-paper);
+  --surface: oklch(0.986 0.008 92);
+  --surface-2: oklch(0.937 0.016 92);
+  --surface-3: oklch(0.915 0.018 92);
+  --fg: oklch(0.27 0.018 85);
+  --muted: oklch(0.455 0.018 85);
+  --border: oklch(0.885 0.018 92);
+  --border-strong: oklch(0.8 0.02 92);
+  --accent: oklch(0.43 0.052 156);
+  --accent-hover: oklch(0.365 0.052 156);
+  --accent-fg: oklch(0.985 0.008 92);
+  --focus: oklch(0.43 0.052 156);
+  --radius-btn: 999px;
+  --sheet-bg: oklch(0.988 0.008 92);
+  --rail: 208px;
+  --aside: clamp(272px, 27vw, 328px);
+}
+
+.window {
+  grid-template-columns: var(--rail) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* ---------- 左栏 ---------- */
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 14px 16px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.rail .traffic {
+  padding: 2px 8px 0;
+}
+
+.wordmark {
+  margin: 26px 10px 28px;
+  font-family: var(--font-serif);
+  font-size: 19px;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  color: var(--fg);
+}
+
+.rail__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.navitem {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 14.5px;
+  color: var(--fg);
+  transition: background-color var(--dur-switch) var(--ease);
+}
+
+.navitem svg {
+  flex: none;
+  width: 19px;
+  height: 19px;
+  color: var(--muted);
+}
+
+.navitem:hover {
+  background: var(--surface-2);
+}
+
+.navitem.is-current {
+  background: var(--surface-3);
+  font-weight: 600;
+}
+
+.navitem.is-current svg {
+  color: var(--fg);
+}
+
+.rail__foot {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- 主区 ---------- */
+
+.stage {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding: 28px 40px 22px 46px;
+  min-width: 0;
+}
+
+.eyebrow {
+  font-size: 12.5px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.intro h1 {
+  margin-top: 8px;
+  font-family: var(--font-serif);
+  font-size: clamp(30px, 3.3vw, 40px);
+  font-weight: 600;
+  line-height: 1.22;
+  letter-spacing: 0.01em;
+}
+
+.intro .sub {
+  max-width: 36em;
+  margin-top: 10px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--aside);
+  gap: 30px;
+  align-items: end;
+  min-height: 0;
+  padding: 16px 0 10px;
+}
+
+.figure {
+  justify-self: center;
+  align-self: end;
+  width: clamp(268px, 36vw, 430px);
+}
+
+.aside {
+  align-self: center;
+  padding-bottom: 8px;
+}
+
+.aside h2 {
+  margin-top: 6px;
+  font-family: var(--font-serif);
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.aside h2 span {
+  margin-left: 8px;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.quote {
+  margin-top: 12px;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.8;
+  color: var(--fg);
+  text-wrap: pretty;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.facts {
+  margin-top: 26px;
+  border-top: 1px solid var(--border);
+}
+
+.facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  color: var(--fg);
+}
+
+/* ---------- 底部：今日名单 + 一则见闻 ---------- */
+
+.foot {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 34px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.roster ul {
+  display: flex;
+  gap: 38px;
+  margin-top: 12px;
+}
+
+.roster li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.who {
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.flag {
+  padding: 1px 6px;
+  border: 1px solid oklch(0.43 0.052 156 / 0.35);
+  border-radius: 4px;
+  font-size: 12px;
+  font-style: normal;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+
+.state {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.news {
+  padding-left: 30px;
+  border-left: 1px solid var(--border);
+}
+
+.news p {
+  margin-top: 12px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--fg);
+}
+
+.news time {
+  margin-right: 8px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 窄窗适配 ---------- */
+
+@media (max-width: 1080px) {
+  .dir-a {
+    --rail: 184px;
+    --aside: 272px;
+  }
+
+  .stage {
+    padding: 24px 28px 18px 32px;
+  }
+
+  .body {
+    gap: 22px;
+  }
+
+  .roster ul {
+    gap: 26px;
+  }
+
+  .foot {
+    gap: 24px;
+  }
+
+  .news {
+    padding-left: 22px;
+  }
+}

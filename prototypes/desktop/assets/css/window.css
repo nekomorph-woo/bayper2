@@ -1,0 +1,523 @@
+/* Bayper 桌面原型 · 共用外壳
+   这里只放两版小窝首页都会用到的东西：窗口容器、系统字体、按钮、
+   侧面板骨架与动效时长。方向色板和版式分别写在 home-a.css / home-b.css。 */
+
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-serif: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", STSong, serif;
+
+  /* 10 号参考图的底色。角色图用 CSS 裁切，裁切框与原底同色才不会露出方块边。 */
+  --figure-paper: #f6f2e5;
+
+  --ease: cubic-bezier(0.22, 0.68, 0.28, 1);
+  --dur-fade: 220ms;
+  --dur-switch: 180ms;
+  --dur-press: 120ms;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--fg);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+p,
+ul,
+ol,
+dl,
+dd,
+figure {
+  margin: 0;
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus, var(--accent));
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ---------- 窗口 ---------- */
+
+.window {
+  position: relative;
+  display: grid;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.traffic {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.traffic i {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: oklch(0.85 0.012 85);
+}
+
+.traffic i:nth-child(1) {
+  background: oklch(0.69 0.16 31);
+}
+
+.traffic i:nth-child(2) {
+  background: oklch(0.81 0.13 85);
+}
+
+.traffic i:nth-child(3) {
+  background: oklch(0.74 0.15 145);
+}
+
+/* ---------- 文字与按钮 ---------- */
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.serif {
+  font-family: var(--font-serif);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-btn, 10px);
+  background: transparent;
+  font-size: 14.5px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease),
+    border-color var(--dur-press) var(--ease), color var(--dur-press) var(--ease),
+    transform var(--dur-press) var(--ease);
+}
+
+.btn svg {
+  width: 17px;
+  height: 17px;
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.btn--primary:hover {
+  background: var(--accent-hover);
+}
+
+.btn--primary:active {
+  transform: translateY(1px);
+}
+
+.btn--ghost {
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+
+.btn--ghost:hover {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+.btn--text {
+  min-height: 44px;
+  padding: 0 4px;
+  color: var(--accent);
+}
+
+.btn--text:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease);
+}
+
+.icon-btn:hover {
+  background: var(--surface-2);
+}
+
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ---------- 侧面板：聊天与角色资料共用同一个容器 ---------- */
+
+.sheet {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: min(376px, 100%);
+  height: 100%;
+  background: var(--sheet-bg);
+  border-left: 1px solid var(--border);
+  box-shadow: -28px 0 64px oklch(0.3 0.03 80 / 0.12);
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform var(--dur-fade) var(--ease), visibility 0s linear var(--dur-fade);
+}
+
+.sheet[data-open="true"] {
+  transform: none;
+  visibility: visible;
+  transition: transform var(--dur-fade) var(--ease), visibility 0s;
+}
+
+.sheet__head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 18px 16px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sheet__kicker {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.sheet__title {
+  font-family: var(--font-serif);
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.sheet__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px;
+  overscroll-behavior: contain;
+}
+
+.sheet__body[hidden] {
+  display: none;
+}
+
+.sheet__note {
+  margin-top: 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+/* 聊天 */
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bubble {
+  max-width: 82%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+
+.bubble--rin {
+  align-self: flex-start;
+  background: var(--surface-2);
+  color: var(--fg);
+  border-bottom-left-radius: 4px;
+}
+
+.bubble--me {
+  align-self: flex-end;
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-bottom-right-radius: 4px;
+}
+
+.chat__status {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.composer {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  padding: 14px 18px 18px;
+  border-top: 1px solid var(--border);
+}
+
+.composer[hidden] {
+  display: none;
+}
+
+.composer textarea {
+  flex: 1;
+  min-height: 44px;
+  max-height: 108px;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-size: 14.5px;
+  line-height: 1.5;
+  resize: none;
+}
+
+.composer textarea::placeholder {
+  color: var(--muted);
+}
+
+.composer textarea:focus-visible {
+  outline: 2px solid var(--focus, var(--accent));
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+.composer .send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border: 0;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease),
+    transform var(--dur-press) var(--ease);
+}
+
+.composer .send:hover {
+  background: var(--accent-hover);
+}
+
+.composer .send:active {
+  transform: translateY(1px);
+}
+
+.composer .send:disabled {
+  background: var(--border-strong);
+  color: var(--surface);
+  cursor: default;
+}
+
+/* 角色资料 */
+
+.profile__portrait {
+  position: relative;
+  width: 168px;
+  aspect-ratio: 1;
+  margin-bottom: 18px;
+  border: 1px solid var(--border);
+  background-color: var(--figure-paper);
+}
+
+.profile__name {
+  font-family: var(--font-serif);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.profile__tag {
+  margin-left: 6px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.profile__quote {
+  margin-top: 12px;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--fg);
+}
+
+.profile__facts {
+  margin-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.profile__facts div {
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+}
+
+.profile__facts dt {
+  color: var(--muted);
+}
+
+.profile__facts dd {
+  text-align: right;
+}
+
+/* ---------- 角色图：从 4×4 参考图中 CSS 裁切第 3 行第 2 列 ---------- */
+
+.portrait {
+  position: relative;
+  aspect-ratio: 1;
+  background-image: url("../img/style-board-02-maid.png");
+  background-repeat: no-repeat;
+  /* 参考图每格 313.5px，边界有格线。裁切内缩 2px，取 310px 见方的区域，
+     避免把格线带进画面。 */
+  background-size: 404.516% 404.516%;
+  background-position: 33.369% 66.631%;
+}
+
+/* 参考图左上角印着素材编号。用与原底同色的小块盖住，
+   避免把素材编号当成界面内容显示。 */
+.portrait::after {
+  content: "";
+  position: absolute;
+  top: 1.8%;
+  left: 2%;
+  width: 11.2%;
+  height: 7.2%;
+  background: var(--figure-paper);
+}
+
+/* ---------- 导航占位提示 ---------- */
+
+.toast {
+  position: absolute;
+  bottom: 26px;
+  left: 50%;
+  z-index: 40;
+  padding: 9px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 10px 30px oklch(0.3 0.02 80 / 0.14);
+  font-size: 13px;
+  color: var(--fg);
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  transition: opacity var(--dur-switch) var(--ease), transform var(--dur-switch) var(--ease);
+  pointer-events: none;
+}
+
+.toast[data-show="true"] {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ---------- 首屏淡入 ---------- */
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.reveal {
+  animation: enter var(--dur-fade) var(--ease) both;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>连接 — Bayper</title>
+    <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="assets/css/base.css" />
+    <link rel="stylesheet" href="assets/css/connections.css" />
+  </head>
+  <body data-page="connections">
+    <div class="app">
+      <aside class="sidebar" aria-label="应用导航"></aside>
+
+      <main class="main">
+        <div class="page reveal">
+          <header class="page-head">
+            <div>
+              <p class="eyebrow">Herdr</p>
+              <h1>连接</h1>
+              <p class="sub">查看各来源的 Agent 状态与待处理通知。</p>
+            </div>
+          </header>
+
+          <section class="sources" id="sources" aria-label="Herdr 来源"></section>
+
+          <div class="notif-head">
+            <h2>通知记录</h2>
+            <div class="filters" id="filters" aria-label="筛选通知"></div>
+          </div>
+
+          <div class="notifs" id="notifs" aria-live="polite"></div>
+        </div>
+      </main>
+    </div>
+
+    <script src="assets/js/data.js"></script>
+    <script src="assets/js/app.js"></script>
+    <script src="assets/js/connections.js"></script>
+  </body>
+</html>
