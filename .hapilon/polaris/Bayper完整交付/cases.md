@@ -110,3 +110,5 @@ POL-BUDGET-006～008收尾存储故障/精确恢复/事务回滚契约与Oracle�
 POL-CONNECTOR-001～007：Contract见s05a-connector-ledger-plan.md及s05a-review.md补充，Codex独立7/7通过（s05a-codex-r2.log）。当前只接受SQLite事实账本；真实Herdr插件/订阅身份/重连适配与可见气泡仍未覆盖，不能把本地fixture序列当Herdr事件字段。
 
 S04c受托接受：POL-ANALYSIS-001～011、POL-SOURCE-013由tests/acceptance/source-analysis.spec.cjs与session-sources.spec.cjs执行，契约见s04c-analysis-plan.md、s04c-provenance-plan.md、s04c-review.md。与权限/预算共同独立32/32，evidence/s04c-codex-index-final.log。PASS仅限真实临时文件/SQLite/本机HTTP模型fixture服务链，正式GUI/自动调度/真实提炼语义仍NOT_COVERED。
+
+S05b传输模块：POL-TRANSPORT-001～004由tests/acceptance/herdr-transport.spec.cjs执行，契约见s05b-transport-plan.md与s05b-review.md。r2 Codex独立4/4，evidence/s05b-codex-r2.log；真实临时Unix socket，Herdr响应为schema核对fixture，真实Herdr与正式插件/通知仍NOT_COVERED。
