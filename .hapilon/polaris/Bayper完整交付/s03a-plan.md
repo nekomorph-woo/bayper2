@@ -18,3 +18,7 @@ Codex受托批准2026-10-25。实现前阅读AGENTS/CLAUDE、s03-design.md、mem
 `tests/acceptance/memory.spec.cjs`以真实DB和业务入口执行正式Case；Source输入与时间是受控边界，不Mock核心。断言正文清除、索引、未知角色无记录、重复来源/共享幂等、回滚后无半更新、关闭重开。提炼模型/聊天窗口/真实在途取消不在本批。
 
 预期生产500～800行、测试350～500行、工具100～180行；超出说明职责后拆切片，不压行。禁止改PRD/AGENTS/版本/Git/资产/其他工具。结果由Codex审查和独立运行，Claude自述不当验收。
+
+## 并行实施文件归属
+
+S02b已开始修改主进程/陪伴/存储接入。S03a第一轮可并行制作新增记忆模块、专属测试和tools/memory-tuning；不得改app/store.cjs/main.cjs/companionship.cjs/companion-store.cjs、renderer或package文件。记忆存储工厂显式接收SQLite连接；测试用真实基础schema和真实连接，集成到应用store由后续独立步骤完成。第一轮不宣称应用窗口已能使用记忆，最终S03a接受前补实际createStore接入。不要为了并行建立第二套生产数据库或全局schema版本冲突。
