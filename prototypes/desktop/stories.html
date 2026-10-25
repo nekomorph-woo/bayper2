@@ -13,16 +13,16 @@
       <aside class="sidebar" aria-label="应用导航"></aside>
 
       <main class="main">
-        <div class="page reveal" id="pageScroll">
-          <header class="page-head" id="pageHead">
-            <div>
-              <p class="eyebrow">已经发生的事</p>
-              <h1>故事</h1>
-              <p class="sub">读过的故事会一直留在这里，不会有进度条。</p>
-            </div>
-          </header>
+        <header class="toolbar">
+          <div class="toolbar__id">
+            <h1 class="toolbar__title">故事</h1>
+            <p class="toolbar__sub" id="storySub"></p>
+          </div>
+        </header>
 
-          <div id="storyView"></div>
+        <div class="workspace story-grid reveal">
+          <nav class="storynav" id="storyList" aria-label="故事列表"></nav>
+          <article class="reader" id="storyView" aria-live="polite"></article>
         </div>
       </main>
     </div>

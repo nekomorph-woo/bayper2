@@ -1,260 +1,269 @@
-/* 小窝：紧凑页头 → 角色与近况 → 今日陪伴 → 最近见闻。
-   1200×800 首屏不滚动；960×680 时整页滚动，侧栏固定。 */
+/* 小窝：左侧角色画布占满高度，右侧是紧凑名单与见闻。
+   窗口内不滚动；名单超过可见高度时只在名单区内部滚动。 */
 
-.hero {
-  display: grid;
-  grid-template-columns: 380px minmax(0, 1fr);
-  gap: 32px;
-  height: 356px;
+.home-grid {
+  grid-template-columns: minmax(0, 1fr) 300px;
 }
 
-/* 只有一块低对比地面，不给人像加卡片边框；全身完整，脚落在带子里 */
-.hero__stage {
-  position: relative;
+/* ---------- 角色区 ---------- */
+
+.stage {
   display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  height: 100%;
-  padding-bottom: 16px;
+  flex-direction: column;
+  min-height: 0;
+  padding: 14px 22px 16px;
 }
 
-.hero__stage::before {
-  content: "";
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 72px;
-  border-radius: 12px;
-  background: var(--stage);
-}
-
-/* 用固定上限而不是百分比高度：百分比在网格项里不解析时，图会按原比例撑破区块 */
-.hero__stage img {
+.stage__canvas {
   position: relative;
-  z-index: 1;
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  place-items: end center;
+}
+
+/* 用视口高度算上限，窗口变矮时角色跟着收，不会被裁到 */
+.stage__canvas img {
   display: block;
   width: auto;
   height: auto;
   max-width: 100%;
-  max-height: 340px;
+  max-height: calc(100vh - 232px);
   object-fit: contain;
   object-position: bottom center;
 }
 
-/* 半身像没有脚，底部硬切要正好落在色块边缘，不能悬在中间 */
-.hero__stage[data-shape="bust"] {
-  padding-bottom: 0;
+.stage__canvas::after {
+  content: "";
+  position: absolute;
+  bottom: -3px;
+  left: 50%;
+  width: min(64%, 300px);
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, oklch(0.86 0.018 150 / 0.5), transparent);
+  transform: translateX(-50%);
 }
 
-.hero__stage[data-shape="bust"]::before {
-  height: 100%;
-  border-radius: 14px;
+.stage__info {
+  flex: none;
+  max-width: 560px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
 }
 
-.hero__stage[data-shape="bust"] img {
-  max-height: 356px;
-}
-
-.hero__aside {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  max-width: 400px;
-}
-
-.hero__label {
-  font-size: 12.5px;
-  color: var(--muted);
+.stage__label {
+  font-size: 12px;
   letter-spacing: 0.04em;
+  color: var(--muted);
 }
 
-.hero__name {
-  margin-top: 5px;
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 1.3;
-}
-
-.hero__line {
-  margin-top: 9px;
-  max-width: 30em;
-  font-size: 14.5px;
-  line-height: 1.7;
-}
-
-.hero__actions {
+.stage__name-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 20px;
+  gap: 6px 12px;
+  align-items: center;
+  margin-top: 2px;
 }
 
-.hero__meta {
+.stage__name {
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+/* 聊天与详情属于当前角色，跟名字排在一起，不放在工具栏 */
+.stage__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.stage__line {
+  margin-top: 3px;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.stage__meta {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 10px;
   align-items: center;
-  margin-top: 20px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-  font-size: 12.5px;
+  margin-top: 5px;
+  font-size: 12px;
   color: var(--muted);
 }
 
-.hero__back {
-  min-height: 30px;
+.stage__back {
   padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
 }
 
-.section {
-  margin-top: 20px;
+.stage__back:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-.section__head {
-  display: flex;
-  gap: 12px;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 10px;
+/* ---------- 右侧检查器 ---------- */
+
+.inspector {
+  display: grid;
+  grid-template-rows: auto auto;
+  align-content: start;
+  min-height: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  overscroll-behavior: contain;
 }
 
-.section__head h2 {
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.5;
+.pane--news {
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
 }
 
-.section__head .hint {
-  font-size: 12.5px;
+.pane__hint {
+  font-size: 12px;
   color: var(--muted);
 }
 
-/* ---------- 今日陪伴 ---------- */
-
-.roster {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
-  gap: 12px;
+.pane__more {
+  font-size: 12px;
+  color: var(--accent);
 }
 
-.person {
-  padding: 12px 14px 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  transition: border-color var(--dur-switch) var(--ease),
-    background-color var(--dur-switch) var(--ease);
+.pane__more:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-.person:hover {
-  border-color: var(--border-strong);
+.pane:first-child .pane__body {
+  max-height: 300px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-.person__top {
+.pane--news .pane__body {
+  flex: none;
+  padding-bottom: 10px;
+}
+
+/* ---------- 名单行 ---------- */
+
+.member {
   display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.member:hover {
+  background: var(--surface-2);
+}
+
+.member__id {
+  display: flex;
+  flex: 1;
   gap: 10px;
   align-items: center;
   min-width: 0;
 }
 
-.person__who {
+.member .avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.member__text {
   min-width: 0;
 }
 
-.person__name {
+.member__name {
   display: block;
-  font-size: 14.5px;
+  font-size: 13.5px;
   font-weight: 600;
   line-height: 1.35;
 }
 
-.person__name:hover {
-  color: var(--accent);
-}
-
-.person__actions {
+.member__state {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 6px;
-  align-items: center;
-  margin-top: 8px;
-}
-
-.person__mark {
-  display: inline-flex;
   gap: 5px;
   align-items: center;
-  min-height: 32px;
   font-size: 12px;
+  line-height: 1.4;
   color: var(--muted);
-}
-
-.person__mark::before {
-  content: "";
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--border-strong);
-}
-
-/* ---------- 最近见闻 ---------- */
-
-.news {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 32px;
-}
-
-.news__item {
-  display: block;
-  padding: 11px 0 12px;
-  border-top: 1px solid var(--border);
-}
-
-.news__item:hover .news__title {
-  color: var(--accent);
-}
-
-.news__meta {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.news__title {
-  margin-top: 3px;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.45;
-  transition: color var(--dur-switch) var(--ease);
-}
-
-.news__excerpt {
-  margin-top: 3px;
-  overflow: hidden;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--muted);
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.member__act {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  align-items: center;
+}
+
+.member__act button {
+  min-height: 24px;
+  padding: 2px 5px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease);
+}
+
+.member__act button:hover {
+  background: var(--accent-soft);
+}
+
+/* ---------- 见闻行 ---------- */
+
+.news-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.news-row:hover {
+  background: var(--surface-2);
+}
+
+.news-row__title {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.news-row__meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 @media (max-width: 1080px) {
-  .hero {
-    grid-template-columns: 320px minmax(0, 1fr);
-    gap: 24px;
-    height: 316px;
+  .home-grid {
+    grid-template-columns: minmax(0, 1fr) 272px;
   }
 
-  .hero__stage img {
-    max-height: 300px;
+  .stage {
+    padding: 12px 16px 14px;
   }
 
-  .hero__stage[data-shape="bust"] img {
-    max-height: 316px;
+  .stage__canvas img {
+    max-height: calc(100vh - 216px);
   }
 
-  .roster {
-    gap: 10px;
+  .stage__info {
+    max-width: none;
   }
 }

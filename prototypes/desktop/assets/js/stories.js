@@ -1,16 +1,16 @@
-/* 故事：列表与阅读。相遇邀请的接纳只写入角色册和小窝，不改变当前陪伴。 */
+/* 故事：左侧篇目、右侧正文。接纳与婉拒只写入角色册，不改变当前陪伴。 */
 
 (function () {
   const A = window.App;
   const DATA = A.data;
   const state = A.state;
 
-  const viewEl = document.getElementById("storyView");
-  const headEl = document.getElementById("pageHead");
-  const pageScroll = document.getElementById("pageScroll");
+  const listEl = document.getElementById("storyList");
+  const readerEl = document.getElementById("storyView");
+  const subEl = document.getElementById("storySub");
 
   let current = A.params.get("story");
-  if (current && !DATA.stories.some((s) => s.id === current)) current = null;
+  if (!DATA.stories.some((s) => s.id === current)) current = DATA.stories[0].id;
 
   function whoName(id) {
     return A.whoName(id);
@@ -25,7 +25,7 @@
       : `桌面上是${desk}，固定位是${fixed}；接纳新角色两边都不会变。`;
   }
 
-  function storyStatus(story) {
+  function inviteStatus(story) {
     if (!story.invite) return false;
     if (state.acceptedIds.includes("aya")) return "accepted";
     if (state.declined.includes("aya")) return "declined";
@@ -35,77 +35,59 @@
   /* ---------- 列表 ---------- */
 
   function renderList() {
-    headEl.innerHTML = `
-      <div>
-        <p class="eyebrow">已经发生的事</p>
-        <h1>故事</h1>
-        <p class="sub">凛、琥珀和澄最近发生的事，还有一封从河对岸寄来的信。</p>
-      </div>`;
-
-    viewEl.innerHTML = `<div class="storylist">${DATA.stories
+    listEl.innerHTML = DATA.stories
       .map((story) => {
-        const status = storyStatus(story);
         const flag =
-          status === "pending"
-            ? `<p class="storyrow__flag">有一封邀请等你决定</p>`
-            : status === "accepted"
-            ? `<p class="storyrow__flag" style="color:var(--accent)">绫已经在小窝</p>`
+          inviteStatus(story) === "pending"
+            ? `<span class="story-row__flag">有一封邀请</span>`
+            : inviteStatus(story) === "accepted"
+            ? `<span class="story-row__flag">绫已经在小窝</span>`
             : "";
-        return `<article class="storyrow">
-            <p class="storyrow__date">${story.date}</p>
-            <div>
-              <a class="storyrow__title" href="stories.html?story=${story.id}" data-open="${story.id}">
-                ${A.escapeHtml(story.title)}
-                <span class="storyrow__who">${A.escapeHtml(whoName(story.who))}</span>
-              </a>
-              <p class="storyrow__excerpt">${A.escapeHtml(story.excerpt)}</p>
-              ${flag}
-            </div>
-          </article>`;
+        return `<button class="story-row" type="button" data-story="${story.id}"
+            aria-current="${story.id === current}">
+            <span class="story-row__title">${A.escapeHtml(story.title)}</span>
+            <span class="story-row__meta">${story.date} · ${A.escapeHtml(
+          whoName(story.who)
+        )}</span>
+            ${flag}
+          </button>`;
       })
-      .join("")}</div>`;
+      .join("");
 
-    viewEl.querySelectorAll("[data-open]").forEach((link) => {
-      link.addEventListener("click", (event) => {
-        event.preventDefault();
-        current = link.dataset.open;
+    listEl.querySelectorAll("[data-story]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (btn.dataset.story === current) return;
+        current = btn.dataset.story;
         history.replaceState(null, "", `stories.html?story=${current}`);
         render();
-        pageScroll.scrollTop = 0;
+        readerEl.scrollTop = 0;
+        readerEl.focus();
       });
     });
   }
 
-  /* ---------- 阅读 ---------- */
+  /* ---------- 正文 ---------- */
 
-  function renderReader(story) {
-    const status = storyStatus(story);
-
-    headEl.innerHTML = `
-      <div>
-        <a class="backlink" href="stories.html" data-back>
-          <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor"
-            stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M15 10H4M8.5 6.2 4.5 10l4 3.8"/></svg>
-          全部故事
-        </a>
-      </div>`;
-
+  function renderReader() {
+    const story = DATA.stories.find((s) => s.id === current);
+    const status = inviteStatus(story);
     let invite = "";
+
     if (story.invite) {
       if (status === "pending") {
         invite = `<div class="invite" data-od-id="invite-aya">
             <p class="invite__title">绫想过来坐一个下午</p>
             <p class="invite__text">接纳只会把她加进角色册和小窝，不会换掉现在的固定位，也不会改变桌面上的角色。</p>
             <div class="invite__actions">
-              <button class="btn btn--primary" type="button" data-accept>接纳她</button>
-              <button class="btn btn--ghost" type="button" data-later>稍后再说</button>
-              <button class="btn btn--quiet" type="button" data-decline>不接纳</button>
+              <button class="btn btn--primary btn--sm" type="button" data-accept>接纳她</button>
+              <button class="btn btn--ghost btn--sm" type="button" data-later>稍后再说</button>
+              <button class="btn btn--quiet btn--sm" type="button" data-decline>不接纳</button>
             </div>
           </div>`;
       } else if (status === "accepted") {
         invite = `<div class="invite" data-od-id="invite-aya">
-            <p class="invite__state">绫已经在小窝了。她还没有画面，先在名单里待着，<a href="characters.html?id=aya">去角色册看看</a>。</p>
+            <p class="invite__state">绫已经在小窝了。她还没有画像，先在角色册里待着，
+              <a href="characters.html?id=aya">去角色册看看</a>。</p>
             <p class="invite__text">${A.escapeHtml(arrangementText())}</p>
           </div>`;
       } else {
@@ -118,39 +100,25 @@
       }
     }
 
-    viewEl.innerHTML = `
-      <article class="reader">
-        <p class="reader__meta">${story.date} · ${A.escapeHtml(whoName(story.who))} · ${A.escapeHtml(
+    readerEl.innerHTML = `
+      <p class="reader__meta">${story.date} · ${A.escapeHtml(whoName(story.who))} · ${A.escapeHtml(
       story.place
     )}</p>
-        <h1>${A.escapeHtml(story.title)}</h1>
-        <div class="reader__body">
-          ${story.body.map((p) => `<p>${A.escapeHtml(p)}</p>`).join("")}
-        </div>
-        ${invite}
-      </article>`;
+      <h1 class="reader__title">${A.escapeHtml(story.title)}</h1>
+      <div class="reader__body">
+        ${story.body.map((p) => `<p>${A.escapeHtml(p)}</p>`).join("")}
+      </div>
+      ${invite}`;
 
-    headEl.querySelector("[data-back]").addEventListener("click", (event) => {
-      event.preventDefault();
-      current = null;
-      history.replaceState(null, "", "stories.html");
-      render();
-      pageScroll.scrollTop = 0;
-    });
+    readerEl.setAttribute("tabindex", "-1");
 
-    const accept = viewEl.querySelector("[data-accept]");
-    if (accept) {
-      accept.addEventListener("click", () => acceptAya(accept));
-    }
-    const later = viewEl.querySelector("[data-later]");
-    if (later) {
-      later.addEventListener("click", () => A.toast("先放着，什么时候回来读都行。"));
-    }
-    const decline = viewEl.querySelector("[data-decline]");
-    if (decline) {
-      decline.addEventListener("click", () => declineAya(decline));
-    }
-    const reconsider = viewEl.querySelector("[data-reconsider]");
+    const accept = readerEl.querySelector("[data-accept]");
+    if (accept) accept.addEventListener("click", () => acceptAya(accept));
+    const later = readerEl.querySelector("[data-later]");
+    if (later) later.addEventListener("click", () => A.toast("先放着，什么时候回来读都行。"));
+    const decline = readerEl.querySelector("[data-decline]");
+    if (decline) decline.addEventListener("click", () => declineAya(decline));
+    const reconsider = readerEl.querySelector("[data-reconsider]");
     if (reconsider) {
       reconsider.addEventListener("click", () => {
         state.declined = state.declined.filter((id) => id !== "aya");
@@ -200,9 +168,10 @@
   }
 
   function render() {
-    const story = current ? DATA.stories.find((s) => s.id === current) : null;
-    if (story) renderReader(story);
-    else renderList();
+    renderList();
+    renderReader();
+    const pending = DATA.stories.filter((s) => inviteStatus(s) === "pending").length;
+    subEl.textContent = `${DATA.stories.length} 篇${pending ? " · 有一封邀请等你决定" : ""}`;
   }
 
   render();

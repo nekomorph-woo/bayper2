@@ -163,7 +163,6 @@
       </nav>
       <div class="sidebar__foot">
         <nav class="nav" aria-label="设置">${navLink("settings", "设置")}</nav>
-        <p class="sidebar__me">原型演示 · 只读模拟数据</p>
       </div>`;
   }
 
@@ -311,7 +310,7 @@
     log.scrollTop = log.scrollHeight;
 
     chatNode.querySelector(".chat__name").textContent = displayName(chatId);
-    chatNode.querySelector(".chat__meta").textContent = `${statusLabel(chatId)} · 本地预置对话`;
+    chatNode.querySelector(".chat__meta").textContent = statusLabel(chatId);
     chatNode.querySelector(".chat__avatar").innerHTML = avatar(chatId, true);
   }
 
@@ -335,7 +334,6 @@
         </button>
       </header>
       <div class="chat__log" role="log" aria-live="polite"></div>
-      <p class="chat__note">原型演示：回应由本地预置文本生成，不连接任何服务。</p>
       <form class="chat__form">
         <textarea rows="1" aria-label="输入消息" placeholder="说点什么…"></textarea>
         <button class="chat__send" type="submit" aria-label="发送">

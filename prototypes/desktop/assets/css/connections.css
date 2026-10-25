@@ -1,22 +1,39 @@
-/* 连接：两个 Herdr 来源、各自独立的 Agent 状态、可过滤可展开的通知记录。 */
+/* 连接：左侧来源与 Agent，右侧通知记录。两栏各自滚动，窗口不滚。 */
 
-.sources {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+.conn-grid {
+  grid-template-columns: minmax(340px, 400px) minmax(0, 1fr);
 }
+
+.conn-sources {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.conn-sources .pane__body {
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.conn-notif .pane__body {
+  padding: 0 14px 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.conn-notif .pane__head {
+  padding: 10px 14px 6px;
+}
+
+/* ---------- 来源 ---------- */
 
 .source {
-  display: flex;
-  flex-direction: column;
-  padding: 14px 16px 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  padding: 10px 14px 12px;
+  border-bottom: 1px solid var(--border);
 }
 
-.source[data-online="false"] {
-  background: var(--bg);
+.source:last-child {
+  border-bottom: 0;
 }
 
 .source__head {
@@ -27,14 +44,13 @@
 }
 
 .source__name {
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 600;
   line-height: 1.4;
 }
 
-.source__session {
-  margin-top: 2px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+.source__place {
+  margin-top: 1px;
   font-size: 12px;
   color: var(--muted);
 }
@@ -45,8 +61,7 @@
 }
 
 .agents {
-  margin-top: 12px;
-  border-top: 1px solid var(--border);
+  margin-top: 8px;
 }
 
 .agent {
@@ -54,12 +69,12 @@
   gap: 12px;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--border);
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
 }
 
 .agent__name {
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -73,8 +88,8 @@
 .state-chip {
   display: inline-flex;
   gap: 5px;
-  align-items: center;
   flex: none;
+  align-items: center;
   padding-top: 1px;
   font-size: 12px;
   color: var(--muted);
@@ -105,9 +120,9 @@
 .source__foot {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   align-items: flex-start;
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .source__hint {
@@ -118,34 +133,20 @@
 
 /* ---------- 通知 ---------- */
 
-.notif-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 24px;
-  margin-bottom: 8px;
-}
-
-.notif-head h2 {
-  font-size: 15px;
-  font-weight: 600;
-}
-
 .filters {
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .filter {
-  min-height: 30px;
-  padding: 0 11px;
+  min-height: 26px;
+  padding: 0 9px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 7px;
   background: transparent;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 12px;
   cursor: pointer;
   transition: background-color var(--dur-press) var(--ease),
     border-color var(--dur-press) var(--ease), color var(--dur-press) var(--ease);
@@ -173,9 +174,9 @@
 .notif__button {
   display: grid;
   grid-template-columns: 46px minmax(0, 1fr) auto;
-  gap: 14px;
+  gap: 12px;
   width: 100%;
-  padding: 11px 2px;
+  padding: 9px 2px;
   border: 0;
   background: transparent;
   text-align: left;
@@ -188,15 +189,15 @@
 
 .notif__time {
   padding-top: 1px;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 
 .notif__title {
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
-  line-height: 1.55;
+  line-height: 1.5;
   transition: color var(--dur-switch) var(--ease);
 }
 
@@ -222,9 +223,9 @@
 }
 
 .notif__detail {
-  padding: 0 2px 13px 60px;
+  padding: 0 2px 11px 58px;
   font-size: 13px;
-  line-height: 1.75;
+  line-height: 1.7;
   color: var(--muted);
 }
 
@@ -233,18 +234,16 @@
 }
 
 @media (max-width: 1080px) {
+  .conn-grid {
+    grid-template-columns: 320px minmax(0, 1fr);
+  }
+
   .notif__button {
     grid-template-columns: 42px minmax(0, 1fr) auto;
     gap: 10px;
   }
 
   .notif__detail {
-    padding-left: 54px;
-  }
-}
-
-@media (max-width: 900px) {
-  .sources {
-    grid-template-columns: minmax(0, 1fr);
+    padding-left: 52px;
   }
 }

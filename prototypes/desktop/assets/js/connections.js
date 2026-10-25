@@ -31,6 +31,7 @@
 
   const sourcesEl = document.getElementById("sources");
   const notifsEl = document.getElementById("notifs");
+  const connSub = document.getElementById("connSub");
   const filtersEl = document.getElementById("filters");
 
   function isOnline(source) {
@@ -80,7 +81,7 @@
             <div class="source__head">
               <div>
                 <p class="source__name">${A.escapeHtml(source.name)}</p>
-                <p class="source__session">${A.escapeHtml(source.place)}</p>
+                <p class="source__place">${A.escapeHtml(source.place)}</p>
               </div>
               <span class="source__status">${status}</span>
             </div>
@@ -174,6 +175,7 @@
     renderSources();
     renderFilters();
     renderNotifs();
+    connSub.textContent = `${DATA.sources.length} 个来源 · ${DATA.notifications.length} 条通知`;
   }
 
   render();

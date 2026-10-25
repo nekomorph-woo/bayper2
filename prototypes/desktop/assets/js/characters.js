@@ -48,6 +48,7 @@
 
   const charlistEl = document.getElementById("charlist");
   const detailEl = document.getElementById("detail");
+  const charSub = document.getElementById("charSub");
 
   /* ---------- 数据 ---------- */
 
@@ -133,13 +134,14 @@
            <button class="btn btn--primary btn--sm" type="submit">保存</button>
            <button class="btn btn--ghost btn--sm" type="button" data-nick-cancel>取消</button>
          </form>
-         <p class="field__hint">留空就恢复原名。称呼只保存在这台设备的原型数据里。</p>`
+         <p class="field__hint">留空就恢复原名。称呼只保存在这台设备上。</p>`
       : `<div class="nick">
            <span class="nick__value">${A.escapeHtml(name)}</span>
            <button class="btn btn--quiet btn--sm" type="button" data-nick-edit>改称呼</button>
          </div>`;
 
     return `
+      <div class="panel-scroll">
       <div class="overview">
         ${stage}
         <div>
@@ -188,18 +190,12 @@
           </div>
 
           ${
-            base.img && id !== state.desktopId
-              ? `<div class="detail__actions">
-                   <button class="btn btn--ghost" type="button" data-come>请她陪我</button>
-                 </div>`
-              : ""
-          }
-          ${
             base.img
               ? ""
               : `<p class="overview__note">原型暂未提供角色图，她暂时到不了桌面。</p>`
           }
         </div>
+      </div>
       </div>`;
   }
 
@@ -251,10 +247,12 @@
       })
       .join("");
 
-    return `<div class="wardrobe">${cards}</div>
-      <p class="memories__hint" style="margin-top:14px">
-        预览只是看一眼，不会换下她现在穿的衣服。
-      </p>`;
+    return `<div class="panel-scroll">
+        <div class="wardrobe">${cards}</div>
+        <p class="memories__hint" style="margin-top:12px">
+          预览只是看一眼，不会换下她现在穿的衣服。
+        </p>
+      </div>`;
   }
 
   function renderMemories(id) {
@@ -312,19 +310,24 @@
          </div>`;
 
     return `
-      <div class="memories__bar">
-        <input class="input" type="search" id="memorySearch" value="${A.escapeHtml(
-          memoryQuery
-        )}" placeholder="搜索${A.escapeHtml(A.displayName(id))}的记忆" aria-label="搜索记忆">
-        <p class="memories__hint">${all.length} 条 · 来自她的讲述、共同经历和别人的转述</p>
-      </div>
-      ${memoryMsg ? `<p class="memory__msg">${A.escapeHtml(memoryMsg)}</p>` : ""}
-      ${body}`;
+      <div class="memories-wrap">
+        <div class="memories__bar">
+          <input class="input" type="search" id="memorySearch" value="${A.escapeHtml(
+            memoryQuery
+          )}" placeholder="搜索${A.escapeHtml(A.displayName(id))}的记忆" aria-label="搜索记忆">
+          <p class="memories__hint">${all.length} 条 · 来自她的讲述、共同经历和别人的转述</p>
+        </div>
+        ${memoryMsg ? `<p class="memory__msg">${A.escapeHtml(memoryMsg)}</p>` : ""}
+        <div class="memories__list">${body}</div>
+      </div>`;
   }
 
   function render() {
     const base = A.character(currentId);
     renderList();
+    charSub.textContent = `${A.acceptedIds().length} 位已结识${
+      state.acceptedIds.includes("aya") ? "" : " · 还有一封邀请"
+    }`;
 
     detailEl.innerHTML = `
       <div class="detail__head">
@@ -338,10 +341,15 @@
           <span class="status" data-kind="${A.statusOf(currentId)}">
             <i class="status__dot"></i>${A.statusLabel(currentId)}
           </span>
+          ${
+            base.img && currentId !== state.desktopId
+              ? `<button class="btn btn--ghost btn--sm" type="button" data-come>请她陪我</button>`
+              : ""
+          }
           <button class="btn btn--primary btn--sm" type="button" data-chat>聊一会儿</button>
         </div>
       </div>
-      <div class="tabs" role="tablist" aria-label="角色信息">
+      <div class="segmented" role="tablist" aria-label="角色信息">
         ${TABS.map(
           (t) =>
             `<button type="button" role="tab" data-tab="${t.id}"

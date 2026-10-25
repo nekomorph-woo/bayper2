@@ -1,26 +1,28 @@
-/* 设置：左侧分区，右侧内容。表单错误内联显示，失败不丢输入。 */
+/* 设置：左侧分区列表 + 右侧紧凑表单，只有表单区内部滚动。 */
 
-.settings {
-  display: grid;
-  grid-template-columns: 172px minmax(0, 1fr);
-  gap: 30px;
-  align-items: start;
+.settings-grid {
+  grid-template-columns: 168px minmax(0, 1fr);
 }
 
 .snav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+  min-height: 0;
+  padding: 10px 8px;
+  overflow-y: auto;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
 }
 
 .snav button {
-  height: 38px;
-  padding: 0 10px;
+  height: 28px;
+  padding: 0 8px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
   color: var(--muted);
-  font-size: 13.5px;
+  font-size: 13px;
   text-align: left;
   cursor: pointer;
   transition: background-color var(--dur-switch) var(--ease), color var(--dur-switch) var(--ease);
@@ -32,67 +34,102 @@
 }
 
 .snav button[aria-current="true"] {
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--border);
+  background: var(--surface-3);
   color: var(--fg);
   font-weight: 600;
 }
 
 .panel {
-  max-width: 640px;
+  min-height: 0;
+  padding: 14px 24px 22px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   animation: swap 180ms var(--ease) both;
 }
 
+/* 所有分区共用一条内容宽度，分隔线自然跟表单同宽 */
+.panel > * {
+  max-width: 560px;
+}
+
 .panel h2 {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.4;
 }
 
 .panel__desc {
-  margin-top: 4px;
-  font-size: 13px;
-  line-height: 1.7;
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.6;
   color: var(--muted);
 }
 
 .group {
-  margin-top: 20px;
-  padding-top: 18px;
+  margin-top: 16px;
+  padding-top: 12px;
   border-top: 1px solid var(--border);
 }
 
 .group:first-of-type {
-  margin-top: 18px;
+  margin-top: 14px;
 }
 
 .group__title {
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--muted);
 }
 
-.formgrid {
-  display: grid;
-  gap: 14px;
-  max-width: 460px;
-  margin-top: 14px;
+/* ---------- 紧凑表单 ---------- */
+
+.form-rows {
+  margin-top: 10px;
 }
 
+.form-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.form-row > label {
+  padding-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.form-row__control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.form-row__control .input {
+  height: 32px;
+  font-size: 13px;
+}
+
+/* 保存按钮与输入框左缘对齐 */
 .form-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 14px;
+  margin-left: 128px;
 }
 
 .save-note,
 .ok-note {
-  margin-top: 14px;
-  padding: 9px 12px;
+  margin-top: 10px;
+  padding: 8px 10px;
   border-radius: 8px;
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -106,18 +143,20 @@
   color: var(--accent);
 }
 
+/* ---------- 设置行 ---------- */
+
 .row {
   display: flex;
   gap: 20px;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 13px 0;
+  padding: 10px 0;
   border-bottom: 1px solid var(--border);
 }
 
 .row:last-child {
-  border-bottom: 0;
   padding-bottom: 0;
+  border-bottom: 0;
 }
 
 .row__label {
@@ -127,6 +166,7 @@
 
 .row__hint {
   margin-top: 2px;
+  max-width: 42em;
   font-size: 12px;
   line-height: 1.6;
   color: var(--muted);
@@ -136,15 +176,15 @@
 
 .size-row {
   display: flex;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .size-opt {
-  min-height: 36px;
-  padding: 0 15px;
+  min-height: 30px;
+  padding: 0 14px;
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: 7px;
   background: transparent;
   font-size: 13px;
   cursor: pointer;
@@ -164,8 +204,10 @@
 .desk-preview {
   display: grid;
   place-items: end center;
-  height: 156px;
-  margin-top: 12px;
+  width: 100%;
+  max-width: 320px;
+  height: 140px;
+  margin-top: 10px;
   overflow: hidden;
   background: var(--stage);
   border-radius: 10px;
@@ -182,45 +224,37 @@
 
 .budget {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  align-items: baseline;
-  margin-top: 12px;
-  padding: 12px 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 10px;
 }
 
 .budget strong {
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 600;
+  line-height: 1.55;
 }
 
 .budget span {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--muted);
 }
 
 /* Coding Agent 来源 */
 
 .agents {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
 }
 
 .agent-src {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 16px;
+  gap: 8px 16px;
   align-items: center;
   justify-content: space-between;
-  padding: 11px 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .agent-src__name {
@@ -229,7 +263,7 @@
 }
 
 .agent-src__meta {
-  margin-top: 2px;
+  margin-top: 1px;
   font-size: 12px;
   color: var(--muted);
 }
@@ -244,14 +278,14 @@
 /* 额度展开 */
 
 .budget-more {
-  margin-top: 10px;
-  font-size: 12.5px;
+  margin-top: 6px;
+  font-size: 12px;
 }
 
 .budget-more summary {
   display: inline-flex;
   align-items: center;
-  min-height: 32px;
+  min-height: 28px;
   color: var(--accent);
   cursor: pointer;
   list-style: none;
@@ -278,7 +312,7 @@
 }
 
 .budget-more dl {
-  margin-top: 6px;
+  margin-top: 4px;
   border-top: 1px solid var(--border);
 }
 
@@ -286,7 +320,7 @@
   display: flex;
   gap: 18px;
   justify-content: space-between;
-  padding: 8px 0;
+  padding: 7px 0;
   border-bottom: 1px solid var(--border);
 }
 
@@ -299,33 +333,13 @@
   text-align: right;
 }
 
-/* 目录 */
-
-.dirlock {
-  margin-top: 12px;
-  padding: 14px 16px;
-  background: var(--surface);
-  border: 1px dashed var(--border-strong);
-  border-radius: 10px;
-}
-
-.dirlock__title {
-  font-size: 13.5px;
-  font-weight: 600;
-}
-
-.dirlock__text {
-  margin-top: 3px;
-  font-size: 12.5px;
-  line-height: 1.65;
-  color: var(--muted);
-}
+/* 目录与关于 */
 
 .dirlock__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .dirlist {
@@ -336,7 +350,7 @@
 }
 
 .dirlist button {
-  min-height: 38px;
+  min-height: 36px;
   padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -352,9 +366,9 @@
 }
 
 .about {
-  margin-top: 12px;
+  margin-top: 8px;
   font-size: 13px;
-  line-height: 1.8;
+  line-height: 1.75;
   color: var(--muted);
 }
 
@@ -363,8 +377,21 @@
 }
 
 @media (max-width: 1080px) {
-  .settings {
+  .settings-grid {
     grid-template-columns: 148px minmax(0, 1fr);
-    gap: 22px;
+  }
+
+  .panel {
+    padding: 12px 18px 20px;
+  }
+
+  .form-row {
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  /* 标签列变窄后，保存按钮跟着输入框左缘（96 + 12）走 */
+  .form-actions {
+    margin-left: 108px;
   }
 }

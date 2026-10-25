@@ -1,28 +1,33 @@
-/* 角色页：左侧身份索引 + 概览 / 衣橱 / 记忆三个标签。
-   所有内容按所选角色渲染，切换角色不会残留上一位的姓名或头像。 */
+/* 角色：左侧身份列表，右侧固定身份栏 + 分段控件，只有面板内部滚动。 */
 
-.charlayout {
-  display: grid;
-  grid-template-columns: 212px minmax(0, 1fr);
-  gap: 26px;
-  align-items: start;
+.char-grid {
+  grid-template-columns: 208px minmax(0, 1fr);
 }
 
-/* ---------- 身份索引 ---------- */
+/* ---------- 身份列表 ---------- */
 
 .charlist {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  min-height: 0;
+  padding: 10px 8px;
+  overflow-y: auto;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overscroll-behavior: contain;
 }
 
 .charlist__item {
   display: flex;
-  gap: 10px;
+  gap: 9px;
   align-items: center;
-  padding: 8px 10px;
-  border-radius: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
   transition: background-color var(--dur-switch) var(--ease);
+}
+
+.charlist .avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
 }
 
 .charlist__item:hover {
@@ -30,8 +35,7 @@
 }
 
 .charlist__item[aria-current="true"] {
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--border);
+  background: var(--surface-3);
 }
 
 .charlist__who {
@@ -40,7 +44,7 @@
 
 .charlist__name {
   display: block;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
   line-height: 1.4;
 }
@@ -48,23 +52,23 @@
 .charlist__state {
   display: block;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.4;
   color: var(--muted);
 }
 
 .charlist__pending {
-  margin-top: 14px;
-  padding: 10px 12px;
+  margin: 12px 4px 0;
+  padding: 8px 10px;
   border: 1px dashed var(--border-strong);
-  border-radius: 10px;
-  font-size: 12.5px;
+  border-radius: 8px;
+  font-size: 12px;
   line-height: 1.6;
   color: var(--muted);
 }
 
 .charlist__pending a {
   display: inline-block;
-  margin-top: 4px;
+  margin-top: 2px;
   color: var(--accent);
 }
 
@@ -75,9 +79,17 @@
 
 /* ---------- 详情 ---------- */
 
+.detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 12px 22px 0;
+}
+
 .detail__head {
   display: flex;
-  gap: 16px;
+  flex: none;
+  gap: 18px;
   align-items: flex-start;
   justify-content: space-between;
 }
@@ -85,41 +97,179 @@
 .detail__head-actions {
   display: flex;
   flex: none;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
 }
 
 .detail__name {
-  margin-top: 3px;
-  font-size: 23px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 20px;
   font-weight: 600;
   line-height: 1.3;
 }
 
-.detail__tagline {
-  margin-top: 3px;
-  font-size: 13.5px;
-  color: var(--muted);
-}
-
-.detail .tabs {
-  margin-top: 14px;
-}
-
-.detail__panel {
-  padding-top: 18px;
-  animation: swap 180ms var(--ease) both;
-}
-
 .detail__fixed {
-  margin-left: 8px;
-  padding: 0 7px;
+  padding: 1px 6px;
   border: 1px solid oklch(0.43 0.052 156 / 0.32);
   border-radius: 4px;
   font-size: 12px;
   font-weight: 400;
   color: var(--accent);
-  vertical-align: 3px;
+}
+
+.detail__tagline {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.detail .segmented {
+  flex: none;
+  align-self: flex-start;
+  margin-top: 10px;
+}
+
+.detail__panel {
+  flex: 1;
+  min-height: 0;
+  padding-top: 12px;
+  overflow: hidden;
+  animation: swap 180ms var(--ease) both;
+}
+
+.panel-scroll {
+  height: 100%;
+  padding-bottom: 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ---------- 概览 ---------- */
+
+.overview {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.overview__stage {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 344px;
+  padding-bottom: 8px;
+  overflow: hidden;
+  background: var(--stage);
+  border-radius: 12px;
+}
+
+.overview__stage[data-shape="bust"] {
+  padding-bottom: 0;
+}
+
+.overview__stage[data-shape="bust"] img {
+  max-height: 344px;
+}
+
+.overview__stage img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 324px;
+  object-fit: contain;
+  object-position: bottom center;
+}
+
+.overview__stage--none {
+  align-items: center;
+  padding: 20px;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.overview__intro {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.block {
+  margin-top: 18px;
+}
+
+.block__title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.block__body {
+  margin-top: 6px;
+}
+
+.nick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.nick__value {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.nick__form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+
+.nick__form .input {
+  width: 180px;
+  height: 32px;
+}
+
+.nick__msg {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.traits {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.traits li {
+  position: relative;
+  padding-left: 14px;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.traits li::before {
+  content: "";
+  position: absolute;
+  top: 0.68em;
+  left: 1px;
+  width: 5px;
+  height: 1px;
+  background: var(--border-strong);
+}
+
+.habit {
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--muted);
 }
 
 .stats {
@@ -151,160 +301,27 @@
 }
 
 .overview__note {
-  margin-top: 12px;
-  font-size: 12.5px;
+  margin-top: 10px;
+  font-size: 12px;
   color: var(--muted);
-}
-
-/* 概览 */
-
-.overview {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: 28px;
-  align-items: start;
-}
-
-.overview__stage {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  height: 340px;
-  padding-bottom: 10px;
-  overflow: hidden;
-  background: var(--stage);
-  border-radius: 14px;
-}
-
-.overview__stage[data-shape="bust"] {
-  padding-bottom: 0;
-}
-
-.overview__stage[data-shape="bust"] img {
-  max-height: 340px;
-}
-
-.overview__stage img {
-  display: block;
-  width: auto;
-  height: auto;
-  max-width: 100%;
-  max-height: 320px;
-  object-fit: contain;
-  object-position: bottom center;
-}
-
-.overview__stage--none {
-  place-items: center;
-  padding: 20px;
-  font-size: 13px;
-  color: var(--muted);
-  text-align: center;
-}
-
-.overview__intro {
-  font-size: 14.5px;
-  line-height: 1.75;
-}
-
-.block {
-  margin-top: 22px;
-}
-
-.block__title {
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-}
-
-.block__body {
-  margin-top: 8px;
-}
-
-.nick {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.nick__value {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.nick__form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  width: 100%;
-}
-
-.nick__form .input {
-  width: 190px;
-}
-
-.nick__msg {
-  margin-top: 6px;
-  font-size: 12.5px;
-  color: var(--accent);
-}
-
-.traits {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.traits li {
-  position: relative;
-  padding-left: 14px;
-  font-size: 13.5px;
-  line-height: 1.65;
-}
-
-.traits li::before {
-  content: "";
-  position: absolute;
-  top: 0.68em;
-  left: 1px;
-  width: 5px;
-  height: 1px;
-  background: var(--border-strong);
-}
-
-.habit {
-  font-size: 13.5px;
-  line-height: 1.7;
-  color: var(--muted);
-}
-
-.detail__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 22px;
 }
 
 .paused {
-  margin-top: 14px;
-  padding: 10px 12px;
+  margin-top: 12px;
+  padding: 8px 10px;
   border-left: 2px solid var(--warn);
   background: oklch(0.51 0.1 70 / 0.06);
   border-radius: 0 8px 8px 0;
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.6;
-  color: var(--fg);
 }
 
-/* 衣橱 */
+/* ---------- 衣橱 ---------- */
 
 .wardrobe {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
 }
 
 .outfit {
@@ -313,14 +330,14 @@
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 .outfit__art {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 240px;
+  height: 218px;
   overflow: hidden;
   background: var(--surface-2);
 }
@@ -328,9 +345,28 @@
 /* 固定高度而不是百分比：全身图能完整露出躯干和裙摆，半身素材只显示它本来就有的部分 */
 .outfit__art img {
   width: auto;
-  height: 200px;
+  height: 188px;
   max-width: 100%;
   object-fit: contain;
+}
+
+.outfit__art--line {
+  padding: 18px;
+}
+
+/* 线稿保持轻，别当实拍图那样撑满 */
+.outfit__art--line svg {
+  width: 92px;
+  height: 92px;
+  color: var(--border-strong);
+}
+
+.outfit__art--none {
+  padding: 18px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: center;
 }
 
 .preview-figure {
@@ -349,27 +385,8 @@
   object-fit: contain;
 }
 
-/* 未解锁卡保留线稿，高度与其他卡一致，两张卡的标题才对得齐 */
-.outfit__art--line {
-  padding: 18px;
-}
-
-.outfit__art--none {
-  padding: 18px;
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 12.5px;
-  text-align: center;
-}
-
-.outfit__art--line svg {
-  width: 86px;
-  height: 86px;
-  color: var(--border-strong);
-}
-
 .outfit__body {
-  padding: 12px 14px 14px;
+  padding: 10px 12px 12px;
 }
 
 .outfit__row {
@@ -380,7 +397,7 @@
 }
 
 .outfit__name {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -394,27 +411,33 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
-.lock {
-  font-size: 12px;
-  color: var(--muted);
-}
+/* ---------- 记忆 ---------- */
 
-/* 记忆 */
+.memories-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
 
 .memories__bar {
   display: flex;
+  flex: none;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
   justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
 }
 
 .memories__bar .input {
-  width: 240px;
-  height: 36px;
+  width: 220px;
+  height: 30px;
+  font-size: 13px;
 }
 
 .memories__hint {
@@ -422,13 +445,16 @@
   color: var(--muted);
 }
 
-.memories {
-  margin-top: 12px;
+.memories__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .memory {
-  padding: 14px 0;
-  border-top: 1px solid var(--border);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .memory__top {
@@ -445,12 +471,12 @@
 }
 
 .memory__text {
-  font-size: 14px;
-  line-height: 1.65;
+  font-size: 13.5px;
+  line-height: 1.6;
 }
 
 .memory__meta {
-  margin-top: 3px;
+  margin-top: 2px;
   font-size: 12px;
   color: var(--muted);
 }
@@ -458,7 +484,7 @@
 .memory__actions {
   display: flex;
   gap: 4px;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 .memory__edit {
@@ -469,7 +495,7 @@
 }
 
 .memory__edit .input {
-  min-height: 66px;
+  min-height: 60px;
 }
 
 .memory__edit-actions {
@@ -478,8 +504,8 @@
 }
 
 .memory__msg {
-  margin-top: 6px;
-  font-size: 12.5px;
+  margin: 6px 0 8px;
+  font-size: 12px;
   color: var(--accent);
 }
 
@@ -505,14 +531,17 @@
 }
 
 @media (max-width: 1080px) {
-  .charlayout {
+  .char-grid {
     grid-template-columns: 186px minmax(0, 1fr);
-    gap: 20px;
+  }
+
+  .detail {
+    padding: 10px 18px 0;
   }
 
   .overview {
-    grid-template-columns: 220px minmax(0, 1fr);
-    gap: 20px;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: 18px;
   }
 
   .overview__stage {
@@ -520,20 +549,14 @@
   }
 
   .overview__stage img {
-    max-height: 280px;
-  }
-}
-
-@media (max-width: 900px) {
-  .overview {
-    grid-template-columns: minmax(0, 1fr);
+    max-height: 284px;
   }
 
-  .overview__stage {
-    height: 260px;
+  .outfit__art {
+    height: 190px;
   }
 
-  .overview__stage img {
-    max-height: 240px;
+  .outfit__art img {
+    height: 164px;
   }
 }

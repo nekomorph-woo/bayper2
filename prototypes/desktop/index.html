@@ -13,32 +13,33 @@
       <aside class="sidebar" aria-label="应用导航"></aside>
 
       <main class="main">
-        <div class="page reveal">
-          <header class="page-head" data-od-id="home-head">
-            <div>
-              <p class="eyebrow">10月25日 · 周日 · 下午</p>
-              <h1 class="is-lg">下午好，小舟</h1>
-              <p class="sub" id="homeSub"></p>
-            </div>
-          </header>
+        <header class="toolbar">
+          <div class="toolbar__id">
+            <h1 class="toolbar__title">小窝</h1>
+            <p class="toolbar__sub" id="homeSub"></p>
+          </div>
+        </header>
 
-          <section class="hero" id="hero" aria-label="现在的陪伴"></section>
+        <div class="workspace home-grid reveal">
+          <section class="stage" id="stage" aria-label="现在的陪伴"></section>
 
-          <section class="section" aria-labelledby="rosterTitle" data-od-id="today-roster">
-            <div class="section__head">
-              <h2 id="rosterTitle">今日陪伴</h2>
-              <p class="hint">1 个固定位 · 最多 4 位随机陪伴</p>
-            </div>
-            <div class="roster" id="roster"></div>
-          </section>
+          <aside class="inspector" aria-label="今日名单与最近见闻">
+            <section class="pane" aria-labelledby="rosterTitle">
+              <header class="pane__head">
+                <h2 id="rosterTitle">今日名单</h2>
+                <span class="pane__hint" id="rosterHint"></span>
+              </header>
+              <div class="pane__body" id="roster"></div>
+            </section>
 
-          <section class="section" aria-labelledby="newsTitle" data-od-id="recent-stories">
-            <div class="section__head">
-              <h2 id="newsTitle">最近见闻</h2>
-              <a class="btn btn--quiet btn--sm" href="stories.html" data-od-id="to-stories">去故事</a>
-            </div>
-            <div class="news" id="news"></div>
-          </section>
+            <section class="pane pane--news" aria-labelledby="newsTitle">
+              <header class="pane__head">
+                <h2 id="newsTitle">最近见闻</h2>
+                <a class="pane__more" href="stories.html">全部</a>
+              </header>
+              <div class="pane__body" id="news"></div>
+            </section>
+          </aside>
         </div>
       </main>
     </div>

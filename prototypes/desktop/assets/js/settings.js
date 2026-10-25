@@ -15,7 +15,7 @@
   ];
 
   const SIZE_LABEL = { s: "小", m: "中", l: "大" };
-  const SIZE_PX = { s: 96, m: 124, l: 152 };
+  const SIZE_PX = { s: 84, m: 104, l: 128 };
 
   let section = A.params.get("section");
   if (!SECTIONS.some((s) => s.id === section)) section = "model";
@@ -64,27 +64,33 @@
     const model = state.settings.model;
     return `
       <h2>模型服务</h2>
-      <p class="panel__desc">配置保存到本机，不发任何请求。Key 需要填写，但只留在输入框里。</p>
+      <p class="panel__desc">选择角色对话使用的模型服务。</p>
       ${noteSlot()}
-      <form class="formgrid" id="modelForm" novalidate>
-        <div class="field">
+      <form class="form-rows" id="modelForm" novalidate>
+        <div class="form-row">
           <label for="endpoint">Endpoint</label>
-          <input class="input" id="endpoint" type="text" spellcheck="false" autocomplete="off"
-            value="${esc(model.endpoint)}">
-          <p class="field__error" data-error="endpoint" hidden></p>
-          <p class="field__hint">需要完整的 http:// 或 https:// 地址，本机与局域网都可以。</p>
+          <div class="form-row__control">
+            <input class="input" id="endpoint" type="text" spellcheck="false" autocomplete="off"
+              value="${esc(model.endpoint)}">
+            <p class="field__error" data-error="endpoint" hidden></p>
+            <p class="field__hint">正式使用请填 https:// 地址；本机调试可以用 http://127.0.0.1。</p>
+          </div>
         </div>
-        <div class="field">
+        <div class="form-row">
           <label for="model">模型</label>
-          <input class="input" id="model" type="text" spellcheck="false" autocomplete="off"
-            value="${esc(model.model)}">
-          <p class="field__error" data-error="model" hidden></p>
+          <div class="form-row__control">
+            <input class="input" id="model" type="text" spellcheck="false" autocomplete="off"
+              value="${esc(model.model)}">
+            <p class="field__error" data-error="model" hidden></p>
+          </div>
         </div>
-        <div class="field">
+        <div class="form-row">
           <label for="apiKey">API Key</label>
-          <input class="input" id="apiKey" type="password" autocomplete="off" placeholder="填入演示用 Key">
-          <p class="field__error" data-error="apiKey" hidden></p>
-          <p class="field__hint">不会写入存储，刷新后是空的。</p>
+          <div class="form-row__control">
+            <input class="input" id="apiKey" type="password" autocomplete="off" placeholder="填入 API Key">
+            <p class="field__error" data-error="apiKey" hidden></p>
+            <p class="field__hint">仅用于连接你配置的模型服务。</p>
+          </div>
         </div>
         <div class="form-actions">
           <button class="btn btn--primary" type="submit">保存配置</button>
@@ -140,7 +146,7 @@
         firstInvalid = firstInvalid || form.querySelector("#model");
       }
       if (!key) {
-        setError("apiKey", "请填入一个演示用 Key，空着不能保存。");
+        setError("apiKey", "请填入 API Key，空着不能保存。");
         firstInvalid = firstInvalid || form.querySelector("#apiKey");
       }
       if (firstInvalid) {
@@ -151,23 +157,23 @@
       if (forceError) {
         setError("endpoint", "这个地址没有响应。");
         form.querySelector("#endpoint").focus();
-        showNote("连接测试失败：这个地址没有响应。演示环境不会真的发出请求。", false);
+        showNote("无法连接到这个地址，请检查后重试。", false);
         return;
       }
 
       // Key 不读入状态，也不参与保存。
       state.settings.model = { endpoint, model: modelName };
       if (!A.save()) {
-        showNote("没有保存成功，配置只在当前窗口生效。", false);
+        showNote("没有保存成功，请稍后再试。", false);
         return;
       }
-      showNote("已保存到本机。Key 没有写入任何存储。", true);
+      showNote("已保存。", true);
     });
 
     form.querySelector("[data-reset-model]").addEventListener("click", () => {
       state.settings.model = JSON.parse(JSON.stringify(DATA.settings.model));
       if (!A.save()) {
-        showNote("没有保存成功，配置只在当前窗口生效。", false);
+        showNote("没有保存成功，请稍后再试。", false);
         return;
       }
       render();
@@ -176,7 +182,7 @@
 
     if (forceError) {
       form.querySelector("#endpoint").setAttribute("aria-invalid", "true");
-      showNote("上次保存时连接测试失败：这个地址没有响应。演示环境不会真的发出请求。", false);
+      showNote("上次没能连接到这个地址，请检查之后重试。", false);
     }
   }
 
@@ -556,7 +562,7 @@
         section = btn.dataset.section;
         focusAfter = `[data-section="${section}"]`;
         render();
-        document.querySelector(".page").scrollTop = 0;
+        panelEl.scrollTop = 0;
       });
     });
   }

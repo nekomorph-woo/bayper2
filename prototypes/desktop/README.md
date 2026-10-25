@@ -10,7 +10,7 @@ Electron产品方向的高保真可交互原型，供产品与体验讨论；不
 python3 -m http.server 8765 --bind 127.0.0.1 --directory prototypes/desktop
 ```
 
-浏览器打开 http://127.0.0.1:8765/ 。无需安装依赖或构建。推荐1200×800，最小验收尺寸960×680；较矮窗口的内容区可滚动。使用同一地址以保留演示数据，换端口或浏览器会是另一份。
+浏览器打开 http://127.0.0.1:8765/ 。无需安装依赖或构建。推荐1200×800，最小验收尺寸960×680；窗口保持固定导航、工具栏和内容分区；长列表、正文、聊天与设置仅在各自面板滚动。使用同一地址以保留演示数据，换端口或浏览器会是另一份。
 
 | 入口 | 内容 |
 | --- | --- |
@@ -46,3 +46,7 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory prototypes/desktop
 Codex通过OpenDesign MCP调度明确选定的Claude Code执行器生成全部HTML/CSS/JS；Codex负责规格、图像、审查和Git。未使用Computer Use操作OpenDesign。源码从OpenDesign项目 `bayper-desktop-prototype-20261025` 原样导出，未带入运行日志、隐藏版本库或凭据。
 
 [逐轮规格与实测记录](../../.hapilon/polaris/Bayper窗口原型/review.md)记录具体证据与限制。五个主页面已实拍两种尺寸，另有角色子页、设置分区、操作后结果及三组动效证据；通过原型检查不代表正式Electron集成通过。原始证据在本地 `.hapilon/polaris/Bayper窗口原型/evidence/`，由Git忽略；关键交付截图随本目录保留。
+
+## 原生布局返工（2026-10-26）
+
+五个主页面改为单屏工作区：小窝角色与名单分栏、角色列表与详情、故事列表与正文、连接来源与历史、设置分类与紧凑表单。角色操作靠近姓名，聊天输入固定，Escape回到原入口。两尺寸十张实拍无控制台错误、横溢或坏图；动效与实际走查见窗口原型review.md。当前原型插图仍是旧素材；新画风按assets/characters/STYLE.md逐步迁移，不把布局审查当新素材验收。
