@@ -19,4 +19,4 @@ polaris 已从原 hapilon skill 目录完整复制到本仓库，保留 `.agents
 
 ## 当前工作
 
-正在讨论可独立运行、有生命感、可互动的桌宠，通过连接器接入 Herdr 并通知工作状态变化，当前草案见 [Bayper PRD](.hapilon/polaris/Bayper桌面陪伴/prd.md)，尚未进入正式开发。前期资料保留在原研究目录，见 [静态调研](.hapilon/polaris/Bayper前期调研/research.md) 和 [Herdr 运行时实测](.hapilon/polaris/Bayper前期调研/runtime-research.md)；研究脚本与复现说明位于 [research/herdr](research/herdr/README.md)。
+正在讨论可独立运行的 Bayper 桌面陪伴：角色在小窝与陪伴位置间活动，同屏最多1位；当日名单最多1固定位＋4随机位，共用自动API活动预算。角色身份与独属记忆长期连续，主题组织服装和故事，连接器提供Herdr工作通知。当前草案见 [Bayper PRD](.hapilon/polaris/Bayper桌面陪伴/prd.md)，尚未进入正式开发。前期资料见 [静态调研](.hapilon/polaris/Bayper前期调研/research.md) 和 [Herdr 运行时实测](.hapilon/polaris/Bayper前期调研/runtime-research.md)，研究脚本与复现说明位于 [research/herdr](research/herdr/README.md)。

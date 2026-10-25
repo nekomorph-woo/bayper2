@@ -15,10 +15,13 @@ C13,palette.main;palette.secondary;palette.shadow;palette.outline,配色以语�
 C14,shoe.heel_height;pose.toe_angle;render.ground_anchor,鞋底鞋跟和落脚点联动；不能换鞋后整只上下跳动,动作审查,待实际制作验证
 C15,accessory.asymmetry;render.mirror_policy;eye.heterochromia,异色瞳侧饰花纹不能用整帧镜像无条件翻转,方向审查,待实际制作验证
 C16,prop.grip;prop.contact_anchor;pose.hand_rest,手持物需要已制作握姿与触点；未绘制时不得宣称动作可用,动作审查,待实际制作验证
-C17,expression.neutral_mouth;expression.ear_pose;expression.tail_pose,静态造型与临时表情分开；外貌不自动决定性格或压制通知,业务与素材审查,设计规则
+C17,expression.neutral_mouth;expression.ear_pose;expression.tail_pose,角色外观与底色行为共同设计；短期情绪和临时表情在统一设定内变化且不压制通知,业务与素材审查,设计规则
 C18,render.transparent_padding;tail.length;hair.back_length,完整动作和尾发范围纳入留白；不可只按中立立绘裁切,图集审查,待实际制作验证
 C19,limb.left_right_delta;head.face_asymmetry;eye.left_right_delta,左右以角色自身解剖侧为准；画面左右不替代角色侧别,记录审查,设计规则
 C20,render.pixel_grid;render.outline_weight,参数可以有设计连续值；导出必须落在已标定像素网格；不承诺每个小数都产生可见差异,素材制作,待实际制作验证
 C21,animal_ear.kind;headwear.kind;apron.kind,设计先指定少量重点元素；其余维度围绕主题与重点协调而非逐项独立抽样,角色构思,设计规则
 C22,hair.back_shape;palette.secondary;accessory.neck_form,协调元素应记录依据与冲突取舍；只有改变识别特征或违反画风时才重新审查重点,角色构思,设计规则
 C23,render.pixel_grid;render.outline_weight,构思中未强调的维度可自动协调形成；需要量测的正式生产数值与遮挡未知结构仍须标定,制作规格,设计规则
+C24,head.cheek_width;eye.iris_color;animal_ear.kind;body.head_ratio,同一角色不同服装保持核心识别锚点；服装变化范围由角色设定明确而非重新生成另一身份,角色与服装审查,设计规则
+C25,expression.neutral_mouth;motion.signature_gesture;pose.hand_rest,形象行为底色习惯与情绪表现须符合统一角色设定；不能各自独立随机造成失配,角色表达审查,设计规则
+C26,outfit.topology;palette.main;accessory.neck_form,主题组织服装与故事语境；服装归属具体角色且不重置其身份关系和独属记忆,角色与服装审查,设计规则
