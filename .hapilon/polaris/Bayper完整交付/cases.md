@@ -90,3 +90,7 @@ POL-COMPANION-004/006同时验证事务失败不留下精力已改但结算时�
 完整Given/When/Expected/Oracle及真实执行边界见[s04a-plan.md](s04a-plan.md) Acceptance Contract，Codex受托确认。对应REQ-13的候选发现、默认关闭、目录明确授权、撤销后旧许可失效、重启与路径边界。Runner为tests/acceptance/external-sources.spec.cjs，权限基础已独立执行，结果见下文；不是完整会话分析、UI授权或预算验收。
 
 POL-SOURCE-006补充授权许可释放与事务失败保持，完整Contract见s04a-plan.md末段。Codex独立external-sources.spec.cjs共6/6通过（s04a-codex-r2.log），仅模块权限基础PASS；设置页、解析、实际模型在途撤销仍NOT_COVERED。
+
+## 后续契约：记忆管理与会话读取
+
+POL-MEMUI-001～004的完整Contract见[s03c-memory-ui-plan.md](s03c-memory-ui-plan.md)，POL-SOURCE-007～011见[s04b-reader-plan.md](s04b-reader-plan.md)。Codex受托确认；尚未独立执行，均NOT_COVERED。各规格明确真实业务入口、构造数据边界及独立Oracle，不用读取适配器替代完整来源分析。

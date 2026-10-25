@@ -13,6 +13,14 @@ const { createChatViewGate } = require("../../app/renderer/chat-view-gate.js");
 
 const repoRoot = path.resolve(__dirname, "..", "..");
 const DB_FILE = "bayper.sqlite3";
+const HISTORY_EVIDENCE_DIR = path.join(
+  repoRoot,
+  ".hapilon",
+  "polaris",
+  "Bayper完整交付",
+  "evidence",
+  "chat-history-ui",
+);
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -181,6 +189,75 @@ async function setWindowSize(app, width, height) {
   await delay(120);
 }
 
+/* Electron 45 的私有 ipcMain._invokeHandlers 仅用于测试进程内包装真实 handler。
+   若内部结构变化直接失败，不向生产代码加入测试开关，也不替代真实 SQLite 结果。 */
+async function controlHistoryIpc(app, action, conversationId) {
+  return app.evaluate(
+    async ({ ipcMain }, payload) => {
+      const state = (globalThis.__chatHistoryTest ??= { gates: new Map() });
+      const deferred = () => {
+        let resolve;
+        const promise = new Promise((done) => {
+          resolve = done;
+        });
+        return { promise, resolve };
+      };
+      if (payload.action === "install") {
+        const handlers = ipcMain._invokeHandlers;
+        const original = handlers instanceof Map ? handlers.get("bayper:chat:conversation") : null;
+        if (typeof original !== "function") {
+          throw new Error("Electron 内部 IPC handler 入口不可用。");
+        }
+        ipcMain.removeHandler("bayper:chat:conversation");
+        ipcMain.handle("bayper:chat:conversation", async (event, characterId, id) => {
+          const gate = state.gates.get(id);
+          if (gate) {
+            gate.entered.resolve();
+            await gate.release.promise;
+          }
+          try {
+            return original(event, characterId, id);
+          } finally {
+            setImmediate(() => {
+              event.sender
+                .executeJavaScript(`window.__chatHistoryTestLast=${JSON.stringify(id)};`)
+                .catch(() => {});
+            });
+          }
+        });
+        return true;
+      }
+      if (payload.action === "hold") {
+        state.gates.set(payload.conversationId, {
+          release: deferred(),
+          entered: deferred(),
+        });
+        return true;
+      }
+      const gate = state.gates.get(payload.conversationId);
+      if (!gate) throw new Error("没有等待中的历史读取。");
+      if (payload.action === "entered") {
+        await gate.entered.promise;
+        return true;
+      }
+      if (payload.action === "release") {
+        state.gates.delete(payload.conversationId);
+        gate.release.resolve();
+        return true;
+      }
+      throw new Error(`未知的历史 IPC 操作：${payload.action}`);
+    },
+    { action, conversationId },
+  );
+}
+
+async function waitHistoryReply(page, conversationId) {
+  await page.waitForFunction((expected) => window.__chatHistoryTestLast === expected, conversationId);
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+}
+
 function openDb(dataDir, readOnly = false) {
   return new DatabaseSync(path.join(dataDir, DB_FILE), { readOnly });
 }
@@ -339,6 +416,99 @@ test("POL-CHAT-001 UI 聊天归属、历史关闭重开与尺寸", async () => {
     }));
     assert.ok(focused.id === "chat-current" || focused.action === "chat");
   } finally {
+    await closeApp(app);
+    await server.close();
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("POL-CHAT-001 UI 历史读取乱序与继续新聊天代次", async () => {
+  const dataDir = makeDataDir();
+  const server = await startChatServer();
+  let app = null;
+  let xId = null;
+  try {
+    const launched = await launchApp(dataDir);
+    app = launched.app;
+    const page = launched.page;
+    await completeOnboarding(page, server.baseUrl);
+
+    await openCurrentChat(page, "凛");
+    server.enqueue(({ response }) => sendText(response, "甲回复。"));
+    await page.locator("#chat-input").fill("甲历史消息");
+    await page.locator("#chat-send").click();
+    await waitForAssistant(page, "甲回复。");
+    await page.locator("#chat-close").click();
+    await page.locator("#chat-panel").waitFor({ state: "hidden" });
+
+    await openCurrentChat(page, "凛");
+    await page.locator("#chat-history-bar").waitFor({ state: "visible" });
+    await page.locator("#chat-continue").click();
+    server.enqueue(({ response }) => sendText(response, "乙回复。"));
+    await page.locator("#chat-input").fill("乙历史消息");
+    await page.locator("#chat-send").click();
+    await waitForAssistant(page, "乙回复。");
+    await page.locator("#chat-close").click();
+    await page.locator("#chat-panel").waitFor({ state: "hidden" });
+
+    await openCurrentChat(page, "凛");
+    await waitForAssistant(page, "乙回复。");
+    await page.locator("#chat-history-bar").waitFor({ state: "visible" });
+    const state = readChatState(dataDir);
+    xId = state.messages.find((message) => message.content === "甲历史消息")?.conversation_id;
+    const yId = state.messages.find((message) => message.content === "乙历史消息")?.conversation_id;
+    assert.ok(xId && yId && xId !== yId);
+    await page.waitForFunction(
+      (expected) => document.querySelector("#chat-history-select")?.value === expected,
+      yId,
+    );
+
+    fs.mkdirSync(HISTORY_EVIDENCE_DIR, { recursive: true });
+    const shot = (name) => path.join(HISTORY_EVIDENCE_DIR, name);
+    await setWindowSize(app, 1200, 800);
+    await page.screenshot({ path: shot("chat-history-1200x800.png") });
+    await setWindowSize(app, 960, 680);
+    await page.screenshot({ path: shot("chat-history-960x680.png") });
+
+    await controlHistoryIpc(app, "install");
+    await page.evaluate(() => {
+      window.__chatHistoryTestLast = null;
+    });
+    await controlHistoryIpc(app, "hold", xId);
+    await page.locator("#chat-history-select").selectOption(xId);
+    await controlHistoryIpc(app, "entered", xId);
+    await page.locator("#chat-history-select").selectOption(yId);
+    await waitHistoryReply(page, yId);
+    await controlHistoryIpc(app, "release", xId);
+    await waitHistoryReply(page, xId);
+    assert.equal(await page.locator("#chat-history-select").inputValue(), yId);
+    const shownY = await page.locator("#chat-history").textContent();
+    assert.ok(shownY.includes("乙历史消息"));
+    assert.equal(shownY.includes("甲历史消息"), false);
+
+    await page.evaluate(() => {
+      window.__chatHistoryTestLast = null;
+    });
+    await controlHistoryIpc(app, "hold", xId);
+    await page.locator("#chat-history-select").selectOption(xId);
+    await controlHistoryIpc(app, "entered", xId);
+    await page.locator("#chat-continue").click();
+    await page.locator("#chat-form").waitFor({ state: "visible" });
+    await controlHistoryIpc(app, "release", xId);
+    await waitHistoryReply(page, xId);
+    assert.equal(await page.locator("#chat-form").isVisible(), true);
+    assert.equal(await page.locator("#chat-history .chat-bubble").count(), 0);
+    assert.equal(await page.locator("#chat-history-bar").isVisible(), false);
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "chat-input");
+
+    const finalState = readChatState(dataDir);
+    assert.equal(finalState.conversations.length, 2);
+    assert.equal(finalState.messages.length, 4);
+    assert.equal(finalState.requests.every((request) => request.status === "completed"), true);
+  } finally {
+    if (app && xId) {
+      await controlHistoryIpc(app, "release", xId).catch(() => {});
+    }
     await closeApp(app);
     await server.close();
     fs.rmSync(dataDir, { recursive: true, force: true });

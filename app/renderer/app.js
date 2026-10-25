@@ -1,5 +1,5 @@
-/* S02a renderer：界面状态切换、S01 首次相遇与本地陪伴安排。
-   不访问文件、数据库或网络，也不使用 localStorage；聊天与桌面小窗不在本切片。 */
+/* S02a renderer：界面状态切换、首次相遇与本地陪伴安排；聊天面板由独立 chat-panel 模块接入。
+   不访问文件、数据库或网络，也不使用 localStorage。 */
 const api = window.bayper;
 const chatApi = window.bayperChat;
 const byId = (id) => document.getElementById(id);
