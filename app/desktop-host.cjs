@@ -39,7 +39,9 @@ function createDesktopHost({
   let lastPresentation = null;
   let restartTimes = [];
   let readyTimer = null;
+  let readyTimerToken = 0;
   let restartTimer = null;
+  let restartTimerToken = 0;
   let stderrTail = "";
   let rendererAssetError = false;
   let assetErrorMessage = null;
@@ -102,10 +104,11 @@ function createDesktopHost({
   }
 
   function spawnChild() {
-    restartTimer = null;
-    if (child || !desired) {
+    // 恢复等待由 handleExit 的单个 timer 负责；心跳/重复 start 不得抢跑。
+    if (child || !desired || restartTimer || status.state === "failed") {
       return;
     }
+    clearReadyTimer();
     setStatus({ state: "starting", pid: null, ready: false, error: null });
     ready = false;
 
@@ -127,14 +130,17 @@ function createDesktopHost({
     stderrTail = "";
 
     const lines = readline.createInterface({ input: spawned.stdout });
-    lines.on("line", (line) => handleLine(line));
+    lines.on("line", (line) => handleLine(spawned, line));
     spawned.stderr.on("data", (chunk) => {
-      stderrTail = `${stderrTail}${chunk.toString()}`.slice(-800);
+      if (child === spawned) {
+        stderrTail = `${stderrTail}${chunk.toString()}`.slice(-800);
+      }
     });
     spawned.on("error", (error) => {
-      if (child === spawned) {
-        child = null;
+      if (child !== spawned) {
+        return;
       }
+      child = null;
       clearReadyTimer();
       setStatus({
         state: "failed",
@@ -146,15 +152,14 @@ function createDesktopHost({
     });
     spawned.on("exit", (code, signal) => handleExit(spawned, code, signal));
 
-    readyTimer = setTimeout(() => {
-      if (child === spawned && !ready) {
-        setStatus({ state: "failed", error: "角色画布启动超时" });
-        spawned.kill("SIGTERM");
-      }
-    }, READY_TIMEOUT_MS);
+    armReadyTimer(spawned);
   }
 
-  function handleLine(line) {
+  function handleLine(processHandle, line) {
+    // 旧子进程的延迟 ready/display 等消息不能跨代次更新当前状态。
+    if (child !== processHandle || status.state === "failed") {
+      return;
+    }
     let message;
     try {
       message = JSON.parse(line);
@@ -247,6 +252,7 @@ function createDesktopHost({
     child = null;
     ready = false;
     clearReadyTimer();
+    clearRestartTimer();
     resolveBoundaries({ ok: false, reason: "child-exit" });
 
     if (!wasDesired) {
@@ -268,8 +274,9 @@ function createDesktopHost({
         restarts: restartTimes.length,
         error: `${reason}；正在恢复 ${restartTimes.length}/${MAX_RESTARTS}`,
       });
-      restartTimer = setTimeout(spawnChild, 800);
+      scheduleRestart();
     } else {
+      clearRestartTimer();
       setStatus({
         state: "failed",
         ready: false,
@@ -321,6 +328,10 @@ function createDesktopHost({
       assetLabel: rendererAssetError ? "加载失败" : presentation.assetLabel,
       characterId: presentation.character?.id ?? null,
     });
+    if (restartTimer) {
+      // 有界恢复等待期间的重复 start/心跳不得抢跑；由 timer 统一拉起。
+      return;
+    }
     if (!child && status.state === "failed") {
       // 连续失败后等待托盘显式重启，心跳不会绕过有界恢复。
       return;
@@ -381,18 +392,52 @@ function createDesktopHost({
   }
 
   function clearReadyTimer() {
+    readyTimerToken += 1;
     if (readyTimer) {
       clearTimeout(readyTimer);
       readyTimer = null;
     }
   }
 
-  async function stop() {
-    desired = false;
+  function armReadyTimer(spawned) {
+    clearReadyTimer();
+    const token = ++readyTimerToken;
+    readyTimer = setTimeout(() => {
+      if (token !== readyTimerToken) {
+        return;
+      }
+      readyTimer = null;
+      if (child === spawned && !ready) {
+        setStatus({ state: "failed", error: "角色画布启动超时" });
+        spawned.kill("SIGTERM");
+      }
+    }, READY_TIMEOUT_MS);
+  }
+
+  function clearRestartTimer() {
+    restartTimerToken += 1;
     if (restartTimer) {
       clearTimeout(restartTimer);
       restartTimer = null;
     }
+  }
+
+  function scheduleRestart() {
+    clearRestartTimer();
+    const token = ++restartTimerToken;
+    restartTimer = setTimeout(() => {
+      if (token !== restartTimerToken) {
+        return;
+      }
+      restartTimer = null;
+      spawnChild();
+    }, 800);
+  }
+
+  async function stop() {
+    desired = false;
+    clearRestartTimer();
+    clearReadyTimer();
     resolveBoundaries({ ok: false, reason: "stopping" });
     const running = child;
     if (!running) {

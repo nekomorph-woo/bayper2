@@ -334,9 +334,7 @@
         chat.mode = "closed";
         byId("chat-panel").hidden = true;
         setLaunchStatus(result.error.message, "error");
-        if (chat.trigger?.isConnected) {
-          chat.trigger.focus();
-        }
+        focusTrigger(chat.trigger, characterId);
         return;
       }
 
@@ -651,24 +649,44 @@
       applyMode();
     }
 
+    function isVisible(element) {
+      return Boolean(
+        element &&
+          element.isConnected &&
+          !element.closest("[hidden]") &&
+          element.getClientRects().length > 0,
+      );
+    }
+
+    /* 关闭聊天后回到真实发起按钮；发起页已隐藏时落到当前导航入口，不聚焦隐藏元素。 */
     function focusTrigger(trigger, characterId) {
-      if (trigger?.isConnected) {
+      if (isVisible(trigger)) {
         trigger.focus();
         return;
       }
       const match = Array.from(
         document.querySelectorAll('button[data-action="chat"]'),
-      ).find((button) => button.dataset.characterId === characterId);
+      ).find((button) => isVisible(button) && button.dataset.characterId === characterId);
       if (match) {
         match.focus();
         return;
       }
       const current = byId("chat-current");
-      if (!current.disabled) {
+      if (isVisible(current) && !current.disabled) {
         current.focus();
         return;
       }
-      byId("chat-start").focus();
+      const start = byId("chat-start");
+      if (isVisible(start)) {
+        start.focus();
+        return;
+      }
+      const navCurrent = document.querySelector('#primary-nav [aria-current="page"]');
+      if (isVisible(navCurrent)) {
+        navCurrent.focus();
+        return;
+      }
+      document.body.focus();
     }
 
     async function requestMainClose(progressText = "正在关闭…") {
@@ -725,32 +743,38 @@
     function renderLaunch(companion) {
       const characters = companion?.characters ?? [];
       const select = byId("chat-character");
-      const previous = select.value;
-      select.replaceChildren(
-        ...characters.map((character) => {
-          const option = document.createElement("option");
-          option.value = character.characterId;
-          option.textContent = character.displayName;
-          return option;
-        }),
-      );
-      const selectedId =
-        previous ||
-        companion?.current?.characterId ||
-        characters[0]?.characterId ||
-        "";
-      if (characters.some((character) => character.characterId === selectedId)) {
-        select.value = selectedId;
+      if (select) {
+        const previous = select.value;
+        select.replaceChildren(
+          ...characters.map((character) => {
+            const option = document.createElement("option");
+            option.value = character.characterId;
+            option.textContent = character.displayName;
+            return option;
+          }),
+        );
+        const selectedId =
+          previous ||
+          companion?.current?.characterId ||
+          characters[0]?.characterId ||
+          "";
+        if (characters.some((character) => character.characterId === selectedId)) {
+          select.value = selectedId;
+        }
       }
-      byId("chat-start").disabled = characters.length === 0;
+      const start = byId("chat-start");
+      if (start) {
+        start.disabled = characters.length === 0;
+      }
       const current = companion?.current;
       byId("chat-current").disabled = !current;
       byId("chat-current").textContent = current
         ? `和${current.displayName}聊一会儿`
         : "和当前角色聊一会儿";
-      byId("chat-current-label").textContent = current
-        ? `当前：${current.displayName}`
-        : "当前没有同屏角色";
+      const label = byId("chat-current-label");
+      if (label) {
+        label.textContent = current ? `当前：${current.displayName}` : "当前没有同屏角色";
+      }
       if (chat.open) {
         renderTargets();
       }
@@ -823,7 +847,7 @@
         openChatFor(current.characterId, byId("chat-current"));
       }
     });
-    byId("chat-start").addEventListener("click", () => {
+    byId("chat-start")?.addEventListener("click", () => {
       openChatFor(byId("chat-character").value, byId("chat-start"));
     });
     document.addEventListener("keydown", (event) => {

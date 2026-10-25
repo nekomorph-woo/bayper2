@@ -75,6 +75,7 @@ test("POL-ONBOARD-006 真实服务：窗口配置、接纳、重启后解密复�
     secondLogs = second.logs;
     secondLogsClosed = second.logsClosed;
     await waitForStep(second.page, "home", LIVE_TIMEOUT_MS);
+    await openPage(second.page, "settings");
     await second.page.locator("#check-model").click();
     await second.page.waitForFunction(
       () => {
@@ -192,6 +193,11 @@ async function launchApp(dataDir) {
 
 async function waitForStep(page, name, timeout = 20000) {
   await page.locator(`[data-step="${name}"]`).waitFor({ state: "visible", timeout });
+}
+
+async function openPage(page, name) {
+  await page.locator(`[data-nav="${name}"]`).click();
+  await page.locator(`[data-page="${name}"]`).waitFor({ state: "visible", timeout: 10000 });
 }
 
 async function waitForWishOrError(page) {

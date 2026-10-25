@@ -350,7 +350,35 @@
       loadPage(0);
     }
 
-    function open(trigger) {
+    function isVisible(element) {
+      return Boolean(
+        element &&
+          element.isConnected &&
+          !element.closest("[hidden]") &&
+          element.getClientRects().length > 0,
+      );
+    }
+
+    /* 关闭后回到真实发起按钮；发起页若已隐藏，落到当前导航入口。 */
+    function focusTrigger(trigger) {
+      if (isVisible(trigger)) {
+        trigger.focus();
+        return;
+      }
+      const fallback = byId("memory-open");
+      if (isVisible(fallback)) {
+        fallback.focus();
+        return;
+      }
+      const navCurrent = document.querySelector('#primary-nav [aria-current="page"]');
+      if (isVisible(navCurrent)) {
+        navCurrent.focus();
+        return;
+      }
+      document.body.focus();
+    }
+
+    function open(trigger, characterId = null) {
       ensurePanel();
       if (state.open) {
         return;
@@ -358,6 +386,12 @@
       state.open = true;
       state.openEpoch += 1;
       state.trigger = trigger || document.activeElement;
+      if (
+        characterId &&
+        characters().some((character) => character.characterId === characterId)
+      ) {
+        state.characterId = characterId;
+      }
       state.page = 0;
       state.hasMore = false;
       state.entries = [];
@@ -390,11 +424,7 @@
       byId("memory-body").value = "";
       const trigger = state.trigger;
       state.trigger = null;
-      if (trigger?.isConnected) {
-        trigger.focus();
-      } else {
-        byId("memory-open")?.focus();
-      }
+      focusTrigger(trigger);
     }
 
     function bindPanelEvents() {
@@ -422,21 +452,60 @@
       panelBound = true;
     }
 
-    byId("memory-open")?.addEventListener("click", () => open(byId("memory-open")));
+    byId("memory-open")?.addEventListener("click", () => {
+      const currentId = getSnapshot()?.companionship?.current?.characterId ?? null;
+      open(byId("memory-open"), currentId);
+    });
     document.addEventListener(
       "keydown",
       (event) => {
-        if (event.key !== "Escape" || !state.open) {
+        if (!state.open) {
           return;
         }
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        close();
+        if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          close();
+          return;
+        }
+        if (event.key === "Tab") {
+          // 模态记忆面板覆盖整个窗口；Tab 不落到背景导航或角色列表。
+          const dialog = document.querySelector(".memory-dialog");
+          const focusable = dialog
+            ? Array.from(
+                dialog.querySelectorAll(
+                  'button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
+                ),
+              ).filter(
+                (element) =>
+                  !element.disabled &&
+                  !element.closest("[hidden]") &&
+                  element.getClientRects().length > 0,
+              )
+            : [];
+          if (focusable.length === 0) {
+            return;
+          }
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          const active = document.activeElement;
+          if (event.shiftKey && (active === first || !dialog.contains(active))) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+            event.preventDefault();
+            first.focus();
+          }
+        }
       },
       true,
     );
 
-    return { open, close, handleMemoryChanged };
+    function openFor(characterId, trigger) {
+      open(trigger, characterId);
+    }
+
+    return { open, openFor, close, handleMemoryChanged };
   }
 
   window.createMemoryPanel = createMemoryPanel;

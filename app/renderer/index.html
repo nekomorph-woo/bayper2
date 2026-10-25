@@ -7,257 +7,347 @@
       content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' file: data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Bayper · 首次相遇</title>
+    <title>Bayper</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header class="topbar">
-      <div class="brand">Bayper<span class="brand-sub">首次相遇</span></div>
-      <span class="dev-flag">S01 · 开发中</span>
-    </header>
-
-    <main class="shell">
-      <!-- 第一步：模型配置 -->
-      <section class="step" data-step="config" hidden>
-        <div class="intro">
-          <p class="eyebrow">第一步 / 三步</p>
-          <h1>先用你的模型，把话接上。</h1>
-          <p class="lede">
-            Bayper 使用 OpenAI 兼容的模型服务。配置只会保存在这台电脑上，Key
-            交给系统安全存储，不写进普通数据库。
-          </p>
+    <div class="app-shell">
+      <aside id="primary-nav" class="primary-nav" aria-label="主导航" hidden>
+        <p class="rail-brand">Bayper</p>
+        <nav class="rail-nav" aria-label="页面">
+          <button type="button" class="rail-item" data-nav="home" aria-current="page">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3.5 9.5 10 3.8l6.5 5.7v6a1 1 0 0 1-1 1h-3.7v-4.7H8.2v4.7H4.5a1 1 0 0 1-1-1z" />
+            </svg>
+            小窝
+          </button>
+          <button type="button" class="rail-item" data-nav="characters">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4.6 8.4 5.4 4.2l3.4 1.9" />
+              <path d="M15.4 8.4 14.6 4.2l-3.4 1.9" />
+              <path d="M4.4 9.6a5.6 5.6 0 0 1 11.2 0v1.7a5.6 5.6 0 0 1-11.2 0z" />
+              <path d="M8.4 11.2h.01M11.6 11.2h.01" stroke-width="1.9" />
+            </svg>
+            角色
+          </button>
+        </nav>
+        <div class="rail-foot">
+          <nav class="rail-nav" aria-label="设置">
+            <button type="button" class="rail-item" data-nav="settings">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
+                stroke-linecap="round" aria-hidden="true">
+                <path d="M3.2 6.4h13.6M3.2 13.6h13.6" />
+                <circle cx="8" cy="6.4" r="2.1" />
+                <circle cx="12.6" cy="13.6" r="2.1" />
+              </svg>
+              设置
+            </button>
+          </nav>
         </div>
+      </aside>
 
-        <form id="config-form" class="card" novalidate>
-          <label class="field">
-            <span class="field-label">Base URL</span>
-            <input
-              id="base-url"
-              name="baseUrl"
-              type="url"
-              inputmode="url"
-              autocomplete="off"
-              spellcheck="false"
-              placeholder="https://api.example.com/v1"
-              required
-            />
-            <span class="field-hint">必须使用 HTTPS；仅本机 loopback 服务可使用 HTTP。</span>
-          </label>
-
-          <div class="field-row">
-            <label class="field">
-              <span class="field-label">模型名</span>
-              <input
-                id="model-name"
-                name="modelName"
-                type="text"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="model-name"
-                maxlength="120"
-                required
-              />
-            </label>
-            <label class="field">
-              <span class="field-label">API Key</span>
-              <input
-                id="api-key"
-                name="apiKey"
-                type="password"
-                autocomplete="new-password"
-                spellcheck="false"
-                required
-              />
-            </label>
+      <div class="app-main">
+        <header id="page-toolbar" class="page-toolbar" hidden>
+          <div class="page-heading">
+            <h1 id="page-title">小窝</h1>
+            <p id="page-subtitle" class="page-subtitle"></p>
           </div>
+        </header>
 
-          <p class="note">
-            保存前会向该地址发送一次连通检查，内容是固定的一句短请求，不包含你的个人信息或本机资料。
-          </p>
+        <div id="home-alert" class="alert global-alert" role="alert" hidden></div>
 
-          <div id="config-alert" class="alert" role="alert" hidden></div>
+        <div class="page-host">
+          <!-- 首次配置：真实模型检查与安全存储，不新增第二条保存路径。 -->
+          <section class="onboarding-page" data-step="config" hidden>
+            <div class="onboarding-panel">
+              <header class="onboarding-head">
+                <h2>先用你的模型，把话接上。</h2>
+                <p>配置只保存在这台电脑上；Key 交给系统安全存储，不写进普通数据库。</p>
+              </header>
 
-          <div class="actions">
-            <button id="config-submit" class="btn btn-primary" type="submit">检查并保存</button>
-            <span id="config-status" class="status-text" aria-live="polite"></span>
-          </div>
-        </form>
-      </section>
-
-      <!-- 第二步：愿望与候选 -->
-      <section class="step" data-step="wish" hidden>
-        <div class="intro">
-          <p class="eyebrow">第二步 / 三步</p>
-          <h1>想找怎样的陪伴？</h1>
-          <p class="lede">
-            用一句话说说就好，也可以留空。推荐只依据当前版本角色的既有特征，不会现场改写角色，也不会把愿望记成长期偏好。
-          </p>
-        </div>
-
-        <form id="wish-form" class="wish-form" novalidate>
-          <label class="field wish-field">
-            <span class="field-label">你的愿望</span>
-            <textarea
-              id="wish-input"
-              name="wish"
-              rows="2"
-              maxlength="200"
-              placeholder="例如：想找一个安静陪着我、不太抢话的伙伴。"
-            ></textarea>
-          </label>
-          <button id="wish-submit" class="btn btn-primary" type="submit">看看推荐</button>
-        </form>
-
-        <div id="wish-alert" class="alert" role="alert" hidden></div>
-
-        <article id="candidate-card" class="card candidate" aria-live="polite" hidden>
-          <div class="candidate-figure">
-            <img id="candidate-image" src="" alt="" />
-            <span class="dev-flag dev-flag-small">开发候选素材</span>
-          </div>
-          <div class="candidate-body">
-            <div class="candidate-head">
-              <h2 id="candidate-name"></h2>
-              <span id="candidate-tagline" class="candidate-tagline"></span>
-            </div>
-            <p id="candidate-intro" class="candidate-intro"></p>
-            <ul id="candidate-traits" class="trait-list"></ul>
-            <p id="candidate-reason" class="reason"></p>
-            <div class="candidate-actions">
-              <button id="next-candidate" class="btn btn-ghost" type="button">看看其他候选</button>
-              <span id="candidate-position" class="status-text"></span>
-              <button id="accept-button" class="btn btn-primary" type="button">确认接纳</button>
-            </div>
-          </div>
-        </article>
-      </section>
-
-      <!-- 第三步：小窝 -->
-      <section class="step" data-step="home" hidden>
-        <div class="intro">
-          <p class="eyebrow">第三步 / 三步</p>
-          <h1>今天，先这样待在一起。</h1>
-          <p class="lede">
-            关系已经保存在这台电脑上。下次打开会直接回到小窝，不需要重新许愿或接纳。
-          </p>
-        </div>
-
-        <div class="home-grid">
-          <article class="card home-character">
-            <div class="home-figure">
-              <img id="home-image" src="" alt="" />
-              <span class="dev-flag dev-flag-small">开发候选素材</span>
-            </div>
-            <div class="home-character-body">
-              <h2 id="home-name"></h2>
-              <p id="home-tagline" class="candidate-tagline"></p>
-              <p id="home-intro" class="candidate-intro"></p>
-              <ul id="home-traits" class="trait-list"></ul>
-            </div>
-          </article>
-
-          <aside class="card home-side">
-            <h2 class="side-title">今天的安排</h2>
-            <p id="home-current" class="side-current"></p>
-            <p id="home-fixed" class="side-line"></p>
-            <p id="home-roster" class="side-line"></p>
-
-            <dl class="stats">
-              <div><dt>亲密度</dt><dd id="stat-intimacy"></dd></div>
-              <div><dt>精力</dt><dd id="stat-energy"></dd></div>
-              <div><dt>心情</dt><dd id="stat-mood"></dd></div>
-            </dl>
-
-            <p id="home-model" class="side-meta"></p>
-            <p id="desktop-status" class="side-meta"></p>
-            <div class="model-check">
-              <button id="check-model" class="btn btn-ghost btn-small" type="button">
-                检查模型连接
-              </button>
-              <span id="check-model-status" class="status-text" role="status" aria-live="polite"></span>
-            </div>
-            <div class="chat-launch">
-              <h3 class="arrange-title">聊一会儿</h3>
-              <p id="chat-current-label" class="side-line"></p>
-              <button id="chat-current" class="btn btn-ghost btn-small" type="button">
-                和当前角色聊一会儿
-              </button>
-              <div class="chat-launch-row">
-                <select id="chat-character" aria-label="选择已结识角色"></select>
-                <button id="chat-start" class="btn btn-ghost btn-small" type="button">
-                  聊一会儿
-                </button>
-              </div>
-              <p id="chat-launch-status" class="status-text" role="status" aria-live="polite"></p>
-            </div>
-            <div class="memory-launch">
-              <h3 class="arrange-title">本地记忆</h3>
-              <p class="side-line">按角色查看、纠正或删除这台电脑上保存的有效记忆。</p>
-              <button id="memory-open" class="btn btn-ghost btn-small" type="button">
-                查看本地记忆
-              </button>
-            </div>
-            <p class="note">
-              聊天历史按角色保存；打开聊天会进入一段临时互动，关闭后回到原陪伴安排。
-            </p>
-          </aside>
-
-          <section class="card home-arrange" aria-labelledby="arrange-title">
-            <div class="arrange-head">
-              <h2 id="arrange-title" class="side-title">陪伴安排</h2>
-              <span id="presence-status" class="status-text" role="status" aria-live="polite"></span>
-            </div>
-
-            <div class="arrange-grid">
-              <div>
-                <h3 class="arrange-title">今日名单</h3>
-                <ul id="roster-list" class="roster-list" aria-label="今日陪伴名单"></ul>
-                <div class="presence-actions">
-                  <button id="rest-companion" class="btn btn-ghost btn-small" type="button">
-                    安静休息
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <h3 class="arrange-title">调整安排</h3>
-                <div class="arrange-row">
-                  <label class="arrange-label" for="fixed-select">固定陪伴</label>
-                  <select id="fixed-select"></select>
-                  <button id="fixed-save" class="btn btn-ghost btn-small" type="button">应用</button>
-                </div>
-                <div class="arrange-row">
-                  <label class="arrange-label" for="nickname-character">角色</label>
-                  <select id="nickname-character"></select>
-                </div>
-                <div class="arrange-row">
-                  <label class="arrange-label" for="nickname-input">昵称</label>
+              <form id="config-form" class="config-form" novalidate>
+                <label class="field">
+                  <span class="field-label">Base URL</span>
                   <input
-                    id="nickname-input"
-                    type="text"
-                    maxlength="20"
+                    id="base-url"
+                    name="baseUrl"
+                    type="url"
+                    inputmode="url"
                     autocomplete="off"
-                    placeholder="留空恢复本名"
+                    spellcheck="false"
+                    placeholder="https://api.example.com/v1"
+                    required
                   />
-                  <button id="nickname-save" class="btn btn-ghost btn-small" type="button">
-                    保存昵称
+                  <span class="field-hint">必须使用 HTTPS；仅本机 loopback 服务可使用 HTTP。</span>
+                </label>
+
+                <div class="field-row">
+                  <label class="field">
+                    <span class="field-label">模型名</span>
+                    <input
+                      id="model-name"
+                      name="modelName"
+                      type="text"
+                      autocomplete="off"
+                      spellcheck="false"
+                      placeholder="model-name"
+                      maxlength="120"
+                      required
+                    />
+                  </label>
+                  <label class="field">
+                    <span class="field-label">API Key</span>
+                    <input
+                      id="api-key"
+                      name="apiKey"
+                      type="password"
+                      autocomplete="new-password"
+                      spellcheck="false"
+                      required
+                    />
+                  </label>
+                </div>
+
+                <p class="note">保存前会发送一次固定短请求做连通检查，不包含个人信息或本机资料。</p>
+                <div id="config-alert" class="alert" role="alert" hidden></div>
+                <div class="actions">
+                  <button id="config-submit" class="btn btn-primary" type="submit">检查并保存</button>
+                  <span id="config-status" class="status-text" aria-live="polite"></span>
+                </div>
+              </form>
+            </div>
+          </section>
+
+          <!-- 愿望与候选：保留真实推荐与接纳流程，压缩说明文字。 -->
+          <section class="onboarding-page" data-step="wish" hidden>
+            <div class="onboarding-panel">
+              <header class="onboarding-head">
+                <h2>想找怎样的陪伴？</h2>
+                <p>一句话就好，也可以留空。推荐只依据当前版本角色的既有特征，不会改写角色。</p>
+              </header>
+
+              <form id="wish-form" class="wish-form" novalidate>
+                <label class="field wish-field">
+                  <span class="field-label">你的愿望</span>
+                  <textarea
+                    id="wish-input"
+                    name="wish"
+                    rows="2"
+                    maxlength="200"
+                    placeholder="例如：想找一个安静陪着我、不太抢话的伙伴。"
+                  ></textarea>
+                </label>
+                <button id="wish-submit" class="btn btn-primary" type="submit">看看推荐</button>
+              </form>
+
+              <div id="wish-alert" class="alert" role="alert" hidden></div>
+
+              <article id="candidate-card" class="candidate" aria-live="polite" hidden>
+                <div class="candidate-figure">
+                  <img id="candidate-image" src="" alt="" />
+                  <span class="dev-flag dev-flag-small">开发候选素材</span>
+                </div>
+                <div class="candidate-body">
+                  <div class="candidate-head">
+                    <h3 id="candidate-name"></h3>
+                    <span id="candidate-tagline" class="tagline"></span>
+                  </div>
+                  <p id="candidate-intro" class="candidate-intro"></p>
+                  <ul id="candidate-traits" class="trait-list"></ul>
+                  <p id="candidate-reason" class="reason"></p>
+                  <div class="candidate-actions">
+                    <button id="next-candidate" class="btn btn-ghost btn-small" type="button">
+                      看看其他候选
+                    </button>
+                    <span id="candidate-position" class="status-text"></span>
+                    <button id="accept-button" class="btn btn-primary" type="button">确认接纳</button>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <!-- 小窝：当前角色、真实状态与今日名单。长介绍留在角色页。 -->
+          <section class="page home-page" data-step="home" data-page="home" hidden>
+            <div class="home-layout">
+              <section class="home-stage" aria-label="当前角色">
+                <div class="home-figure">
+                  <img id="home-image" src="" alt="" />
+                  <span class="dev-flag dev-flag-small">开发候选素材</span>
+                </div>
+                <div class="home-stage-copy">
+                  <h2 id="home-name"></h2>
+                  <p id="home-tagline" class="tagline"></p>
+                  <p id="home-current" class="presence-line"></p>
+                  <div class="home-stage-actions">
+                    <button id="memory-open" class="btn btn-ghost btn-small" type="button">
+                      本地记忆
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <aside class="home-panel">
+                <div class="home-meta">
+                  <p id="home-fixed" class="side-line"></p>
+                  <dl class="stats">
+                    <div><dt>亲密度</dt><dd id="stat-intimacy"></dd></div>
+                    <div><dt>精力</dt><dd id="stat-energy"></dd></div>
+                    <div><dt>心情</dt><dd id="stat-mood"></dd></div>
+                  </dl>
+                </div>
+
+                <div class="home-actions">
+                  <p id="chat-current-label" class="side-line"></p>
+                  <button id="chat-current" class="btn btn-primary" type="button" data-page-entry>
+                    和当前角色聊一会儿
+                  </button>
+                  <div class="home-action-row">
+                    <button id="rest-companion" class="btn btn-ghost btn-small" type="button">
+                      安静休息
+                    </button>
+                  </div>
+                  <p id="chat-launch-status" class="status-text" role="status" aria-live="polite"></p>
+                  <p id="presence-status" class="status-text" role="status" aria-live="polite"></p>
+                </div>
+
+                <section class="roster-block" aria-labelledby="roster-title">
+                  <div class="section-head">
+                    <h2 id="roster-title">今日名单</h2>
+                    <span class="section-hint">最多 5 位</span>
+                  </div>
+                  <ul id="roster-list" class="roster-list" aria-label="今日陪伴名单"></ul>
+                </section>
+              </aside>
+            </div>
+          </section>
+
+          <!-- 角色：已结识列表与选中详情；浏览只改变本地选中，不切换在场角色。 -->
+          <section class="page characters-page" data-page="characters" hidden>
+            <div class="characters-layout">
+              <nav class="character-list-pane" aria-label="已结识角色">
+                <p class="pane-label">已结识</p>
+                <ul id="character-list" class="character-list"></ul>
+              </nav>
+
+              <article class="character-detail">
+                <header class="detail-head">
+                  <div class="detail-title">
+                    <h2 id="character-name"></h2>
+                    <p id="character-tagline" class="tagline"></p>
+                  </div>
+                  <div class="detail-actions">
+                    <button id="character-chat" class="btn btn-primary btn-small" type="button" data-page-entry>
+                      聊一会儿
+                    </button>
+                    <button id="character-memory" class="btn btn-ghost btn-small" type="button">
+                      本地记忆
+                    </button>
+                  </div>
+                </header>
+
+                <div class="segmented" role="tablist" aria-label="角色信息">
+                  <button type="button" role="tab" data-character-tab="overview" aria-selected="true">
+                    概览
+                  </button>
+                  <button type="button" role="tab" data-character-tab="arrange" aria-selected="false">
+                    相处设置
                   </button>
                 </div>
-                <p id="arrange-status" class="status-text" role="status" aria-live="polite"></p>
-              </div>
-            </div>
 
-            <div id="home-alert" class="alert" role="alert" hidden></div>
+                <div class="detail-panels">
+                  <section id="character-overview" class="detail-panel" data-character-panel="overview">
+                    <div class="overview-layout">
+                      <div class="detail-figure">
+                        <img id="character-image" src="" alt="" />
+                        <span class="dev-flag dev-flag-small">开发候选素材</span>
+                      </div>
+                      <div class="detail-copy">
+                        <p id="character-intro" class="detail-intro"></p>
+                        <ul id="character-traits" class="trait-list"></ul>
+                        <dl class="stats character-stats">
+                          <div><dt>亲密度</dt><dd id="character-stat-intimacy"></dd></div>
+                          <div><dt>精力</dt><dd id="character-stat-energy"></dd></div>
+                          <div><dt>心情</dt><dd id="character-stat-mood"></dd></div>
+                        </dl>
+                        <p id="character-roster-state" class="side-meta"></p>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section id="character-arrange" class="detail-panel" data-character-panel="arrange" hidden>
+                    <div class="arrange-form">
+                      <div class="arrange-row">
+                        <label for="fixed-select">固定陪伴</label>
+                        <select id="fixed-select"></select>
+                        <button id="fixed-save" class="btn btn-ghost btn-small" type="button">应用</button>
+                      </div>
+                      <div class="arrange-row">
+                        <label for="nickname-character">角色</label>
+                        <select id="nickname-character"></select>
+                      </div>
+                      <div class="arrange-row">
+                        <label for="nickname-input">昵称</label>
+                        <input
+                          id="nickname-input"
+                          type="text"
+                          maxlength="20"
+                          autocomplete="off"
+                          placeholder="留空恢复本名"
+                        />
+                        <button id="nickname-save" class="btn btn-ghost btn-small" type="button">
+                          保存昵称
+                        </button>
+                      </div>
+                      <p class="note">
+                        固定陪伴会更新今日名单，但不会切换当前在场角色；昵称只保存在这台电脑上。
+                      </p>
+                      <p id="arrange-status" class="status-text" role="status" aria-live="polite"></p>
+                    </div>
+                  </section>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <!-- 设置：只呈现已有模型状态与真实连接检查，不新增保存或来源授权服务。 -->
+          <section class="page settings-page" data-page="settings" hidden>
+            <div class="settings-layout">
+              <section class="settings-block">
+                <div class="section-head">
+                  <h2>模型服务</h2>
+                  <span id="settings-model-state" class="status-text"></span>
+                </div>
+                <dl class="settings-rows">
+                  <div><dt>模型</dt><dd id="settings-model-name"></dd></div>
+                  <div><dt>服务地址</dt><dd id="settings-base-url"></dd></div>
+                  <div><dt>API Key</dt><dd class="muted">仅保存在系统安全存储，不在此显示</dd></div>
+                </dl>
+                <div class="model-check">
+                  <button id="check-model" class="btn btn-ghost btn-small" type="button" data-page-entry>
+                    检查连接
+                  </button>
+                  <span id="check-model-status" class="status-text" role="status" aria-live="polite"></span>
+                </div>
+              </section>
+
+              <section class="settings-block">
+                <div class="section-head"><h2>桌面角色</h2></div>
+                <p id="desktop-status" class="side-line"></p>
+                <p class="note">桌宠独立显示，管理窗导航不会启动、停止或改变角色动画。</p>
+              </section>
+            </div>
           </section>
         </div>
-      </section>
-    </main>
-
-    <footer class="foot">角色与图片是开发候选，不是正式发布资源。</footer>
+      </div>
+    </div>
 
     <script src="memory-panel.js"></script>
     <script src="chat-view-gate.js"></script>
     <script src="chat-panel.js"></script>
+    <script src="window-navigation.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

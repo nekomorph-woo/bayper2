@@ -96,6 +96,11 @@ async function waitForStep(page, name, timeout = 20000) {
   await page.locator(`[data-step="${name}"]`).waitFor({ state: "visible", timeout });
 }
 
+async function openPage(page, name) {
+  await page.locator(`[data-nav="${name}"]`).click();
+  await page.locator(`[data-page="${name}"]`).waitFor({ state: "visible", timeout: 10000 });
+}
+
 async function completeOnboarding(page, baseUrl) {
   await waitForStep(page, "config");
   await page.locator("#base-url").fill(baseUrl);
@@ -148,6 +153,19 @@ async function waitForSnapshotStatus(predicate, timeout = 8000) {
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   assert.fail("等待画布状态超时");
+}
+
+async function waitForHostStatus(host, predicate, timeout = 12000) {
+  const started = Date.now();
+  let status = null;
+  while (Date.now() - started < timeout) {
+    status = host.getStatus();
+    if (predicate(status)) {
+      return status;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.fail(`等待宿主状态超时：${JSON.stringify(status)}`);
 }
 
 async function capture(page, name) {
@@ -325,9 +343,13 @@ test("POL-DESKTOP-001/004 真实画布、管理窗口输入、关闭隐藏与退
       ].join("\n"),
     );
 
+    await openPage(page, "characters");
+    await page.locator('[data-character-tab="arrange"]').click();
+    await page.locator("#nickname-input").waitFor({ state: "visible", timeout: 10000 });
     await page.locator("#nickname-input").fill("可输入");
     assert.equal(await page.locator("#nickname-input").inputValue(), "可输入");
     await page.locator("#nickname-input").fill("");
+    await openPage(page, "home");
     await capture(page, "desktop-home");
 
     await app.evaluate(({ powerMonitor }) => {
@@ -452,10 +474,24 @@ test("POL-DESKTOP-004 重复启动不重复画布，画布崩溃有界重启", a
       8000,
     );
     assert.match(failed.desktop.error, /已停止自动恢复/);
+    assert.equal(failed.desktop.pid, null, "达到上限后不得保留画布 pid");
+    assert.equal(failed.desktop.restarts, 3, "最多两次自动恢复，第三次退出进入 failed");
     assert.equal(
       desktopProcesses().some((item) => item.pid === thirdPid),
       false,
       "超过有界重启后不得继续产生画布",
+    );
+
+    // 越过旧 800ms 回调可能触发的时段，并覆盖多次 400ms 心跳 start；不得偷偷复活。
+    await page.waitForTimeout(1600);
+    const afterFailed = await getSnapshot(page);
+    assert.equal(afterFailed.desktop.state, "failed");
+    assert.equal(afterFailed.desktop.pid, null);
+    assert.equal(afterFailed.desktop.restarts, 3);
+    assert.equal(
+      desktopProcesses().length,
+      0,
+      "failed 后重复 start/心跳不得拉起新画布",
     );
   } finally {
     await closeApp(app);
@@ -463,6 +499,97 @@ test("POL-DESKTOP-004 重复启动不重复画布，画布崩溃有界重启", a
       await ctx.server.close();
     }
     fs.rmSync(ctx.dataDir, { recursive: true, force: true });
+  }
+});
+
+test("POL-DESKTOP-004 宿主快速崩溃上限、失败后心跳与显式重启", { timeout: 30000 }, async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bayper-desktop-host-"));
+  const presentation = buildDesktopPresentation("rin", "凛");
+  assert.equal(presentation.assetState, "ready");
+  const host = createDesktopHost({ dataDir, electronPath });
+  const seenPids = new Set();
+  try {
+    host.start(presentation);
+    const first = await waitForHostStatus(host, (value) => value.state === "running" && value.pid);
+    seenPids.add(first.pid);
+    process.kill(first.pid, "SIGKILL");
+
+    const firstWait = await waitForHostStatus(
+      host,
+      (value) => value.state === "restarting" && value.restarts === 1,
+    );
+    assert.equal(firstWait.pid, null);
+    // 恢复等待期间的重复 start（心跳等价）不得抢跑，也不得再排第二个 timer。
+    host.start(presentation);
+    host.start(presentation);
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    const held = host.getStatus();
+    assert.equal(held.state, "restarting", "重复 start 不得跨过恢复等待");
+    assert.equal(held.pid, null);
+
+    const second = await waitForHostStatus(
+      host,
+      (value) => value.state === "running" && value.pid && value.pid !== first.pid,
+    );
+    assert.equal(second.restarts, 1);
+    seenPids.add(second.pid);
+    process.kill(second.pid, "SIGKILL");
+
+    const secondWait = await waitForHostStatus(
+      host,
+      (value) => value.state === "restarting" && value.restarts === 2,
+    );
+    assert.equal(secondWait.pid, null);
+    host.start(presentation);
+    const third = await waitForHostStatus(
+      host,
+      (value) => value.state === "running" && value.pid && value.pid !== second.pid,
+    );
+    assert.equal(third.restarts, 2);
+    seenPids.add(third.pid);
+    process.kill(third.pid, "SIGKILL");
+
+    const failed = await waitForHostStatus(host, (value) => value.state === "failed");
+    assert.equal(failed.restarts, 3);
+    assert.equal(failed.pid, null);
+    assert.match(failed.error, /已停止自动恢复/);
+    // 越过旧 800ms 回调可能触发的时段：不得出现第四个自动恢复。
+    await new Promise((resolve) => setTimeout(resolve, 1600));
+    const steady = host.getStatus();
+    assert.equal(steady.state, "failed");
+    assert.equal(steady.pid, null);
+    assert.equal(steady.restarts, 3);
+    assert.equal(desktopProcesses().some((item) => seenPids.has(item.pid)), false);
+
+    // failed 后重复 start 不能绕过显式重启边界。
+    host.start(presentation);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    assert.equal(host.getStatus().state, "failed");
+    assert.equal(host.getStatus().pid, null);
+
+    // 用户显式 restart 重置上限并恢复；旧 timer 不得再拉起额外进程。
+    await host.restart(presentation);
+    const recovered = await waitForHostStatus(
+      host,
+      (value) => value.state === "running" && value.pid,
+    );
+    assert.equal(recovered.restarts, 0);
+    assert.equal(seenPids.has(recovered.pid), false);
+    seenPids.add(recovered.pid);
+    await new Promise((resolve) => setTimeout(resolve, 1600));
+    const stable = host.getStatus();
+    assert.equal(stable.state, "running");
+    assert.equal(stable.pid, recovered.pid);
+    assert.equal(stable.restarts, 0);
+    assert.equal(desktopProcesses().filter((item) => seenPids.has(item.pid)).length, 1);
+  } finally {
+    await host.stop().catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const remaining = desktopProcesses().filter((item) => seenPids.has(item.pid));
+    for (const item of remaining) {
+      process.kill(item.pid, "SIGKILL");
+    }
+    fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
 

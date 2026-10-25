@@ -1,5 +1,5 @@
-/* S02a renderer：界面状态切换、首次相遇与本地陪伴安排；聊天面板由独立 chat-panel 模块接入。
-   不访问文件、数据库或网络，也不使用 localStorage。 */
+/* 管理窗渲染：首次相遇、小窝、角色与设置。全部数据来自 preload 快照；
+   不访问文件、数据库或网络，也不使用 localStorage。聊天与记忆面板由独立模块接入。 */
 const api = window.bayper;
 const chatApi = window.bayperChat;
 const memoryApi = window.bayperMemory;
@@ -10,16 +10,13 @@ const state = {
   candidates: [],
   candidateIndex: 0,
   fixedSelection: null,
+  selectedCharacterId: null,
+  characterTab: "overview",
 };
 
-const sections = Array.from(document.querySelectorAll("[data-step]"));
-
-function showStep(name) {
-  for (const section of sections) {
-    section.hidden = section.dataset.step !== name;
-  }
-  window.scrollTo(0, 0);
-}
+const navigation = window.createWindowNavigation({
+  onNavigate: (page) => renderPage(page),
+});
 
 function showAlert(element, error) {
   if (!error) {
@@ -77,7 +74,11 @@ if (memoryApi && typeof memoryApi.onMemoryChanged === "function") {
   });
 }
 
-/* ---------- 模型配置 ---------- */
+/* ---------- 模型配置与首次相遇 ---------- */
+
+function showOnboarding(step) {
+  navigation.showOnboarding(step, step === "wish" ? "选择陪伴" : "连接模型");
+}
 
 async function submitConfig(event) {
   event.preventDefault();
@@ -105,10 +106,9 @@ async function submitConfig(event) {
   byId("api-key").value = "";
   state.snapshot = result.snapshot;
   status.textContent = "";
-  showStep("wish");
+  showOnboarding("wish");
+  byId("wish-input").focus();
 }
-
-/* ---------- 愿望与候选 ---------- */
 
 async function submitWish(event) {
   event.preventDefault();
@@ -206,8 +206,9 @@ async function acceptCandidate() {
   }
 
   state.snapshot = result.snapshot;
-  renderHome();
-  showStep("home");
+  state.selectedCharacterId = result.snapshot?.companionship?.current?.characterId ?? null;
+  renderAll();
+  navigation.showPage("home", { focus: true });
 }
 
 /* ---------- 小窝 ---------- */
@@ -237,6 +238,19 @@ function presenceText(companion) {
   return `${current.displayName} · 安静陪伴`;
 }
 
+function characterStateText(character) {
+  if (character.isCurrent && character.isFixed) {
+    return "在场 · 固定位";
+  }
+  if (character.isCurrent) {
+    return "在场";
+  }
+  if (character.isFixed) {
+    return "固定位";
+  }
+  return character.inRoster ? "今日名单" : "名单外";
+}
+
 function renderRoster(companion) {
   const list = byId("roster-list");
   const roster = companion?.roster ?? [];
@@ -262,7 +276,6 @@ function renderRoster(companion) {
       name.className = "roster-name";
       name.textContent = entry.displayName;
 
-      row.append(slot, name);
       const actions = document.createElement("span");
       actions.className = "roster-actions";
       const chatButton = document.createElement("button");
@@ -286,13 +299,16 @@ function renderRoster(companion) {
         button.textContent = "请她陪我";
         actions.append(button);
       }
-      row.append(actions);
+      row.append(slot, name, actions);
       return row;
     }),
   );
 }
 
 function replaceOptions(select, characters, selectedId) {
+  if (!select) {
+    return;
+  }
   select.replaceChildren(
     ...characters.map((character) => {
       const option = document.createElement("option");
@@ -313,7 +329,7 @@ function renderCompanionControls(companion) {
   const nicknameInput = byId("nickname-input");
 
   const previousNicknameId =
-    nicknameSelect.value || companion?.current?.characterId || characters[0]?.characterId || "";
+    nicknameSelect?.value || companion?.current?.characterId || characters[0]?.characterId || "";
   const fixedSelection =
     state.fixedSelection && characters.some((character) => character.characterId === state.fixedSelection)
       ? state.fixedSelection
@@ -321,10 +337,11 @@ function renderCompanionControls(companion) {
   replaceOptions(fixedSelect, characters, fixedSelection);
   replaceOptions(nicknameSelect, characters, previousNicknameId);
 
-  const selected = characters.find((character) => character.characterId === nicknameSelect.value);
-  if (document.activeElement !== nicknameInput) {
+  const selected = characters.find((character) => character.characterId === nicknameSelect?.value);
+  if (nicknameInput && document.activeElement !== nicknameInput) {
     nicknameInput.value = selected?.nickname ?? "";
   }
+
   const restButton = byId("rest-companion");
   if (companion?.current?.mode === "resting") {
     restButton.textContent = "继续陪伴";
@@ -366,52 +383,239 @@ function renderHome() {
   const current = companion?.current ?? null;
   const character = current ?? snapshot?.currentCharacter;
   if (!relationship || !character) {
-    showAlert(byId("config-alert"), {
+    showAlert(byId("home-alert"), {
       code: "CONTENT_MISSING",
       message: "已保存的关系找不到对应角色资料，请重启应用后重试。",
     });
-    showStep("config");
+    showOnboarding("config");
     return;
   }
 
   const displayName = current?.displayName ?? character.name;
   byId("home-name").textContent = displayName;
   byId("home-tagline").textContent = character.tagline;
-  byId("home-intro").textContent = character.intro;
   byId("home-image").src = character.image;
   byId("home-image").alt = `${displayName}（开发候选角色图）`;
 
-  const traits = byId("home-traits");
+  const characters = companion?.characters ?? [];
+  const fixed = characters.find((item) => item.characterId === companion?.fixedCharacterId);
+  byId("home-current").textContent = presenceText(companion);
+  byId("home-fixed").textContent = `固定陪伴：${fixed?.displayName ?? "未设置"}`;
+
+  const stats = current?.stats ?? relationship.stats;
+  byId("stat-intimacy").textContent = String(Math.round(stats.intimacy));
+  byId("stat-energy").textContent = String(Math.round(stats.energy));
+  byId("stat-mood").textContent = String(Math.round(stats.mood));
+
+  renderRoster(companion);
+  renderCompanionControls(companion);
+  chatPanel.renderLaunch(companion);
+}
+
+/* ---------- 角色 ---------- */
+
+function characters() {
+  return state.snapshot?.companionship?.characters ?? [];
+}
+
+function ensureSelectedCharacter() {
+  const list = characters();
+  if (!list.some((character) => character.characterId === state.selectedCharacterId)) {
+    state.selectedCharacterId =
+      state.snapshot?.companionship?.current?.characterId ?? list[0]?.characterId ?? null;
+  }
+  return list.find((character) => character.characterId === state.selectedCharacterId) ?? null;
+}
+
+function renderCharacterList() {
+  const listEl = byId("character-list");
+  const list = characters();
+  if (list.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "status-text";
+    empty.textContent = "还没有已结识的角色。";
+    listEl.replaceChildren(empty);
+    return;
+  }
+
+  listEl.replaceChildren(
+    ...list.map((character) => {
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "character-item";
+      button.dataset.characterId = character.characterId;
+      if (character.characterId === state.selectedCharacterId) {
+        button.setAttribute("aria-current", "true");
+      }
+
+      const image = document.createElement("img");
+      image.src = character.image ?? "";
+      image.alt = "";
+      const who = document.createElement("span");
+      who.className = "character-item-who";
+      const name = document.createElement("span");
+      name.className = "character-item-name";
+      name.textContent = character.displayName;
+      const status = document.createElement("span");
+      status.className = "character-item-state";
+      status.textContent = characterStateText(character);
+      who.append(name, status);
+      button.append(image, who);
+      button.addEventListener("click", () => selectCharacter(character.characterId));
+      item.append(button);
+      return item;
+    }),
+  );
+}
+
+function renderCharacterTabs() {
+  for (const button of document.querySelectorAll("[data-character-tab]")) {
+    button.setAttribute(
+      "aria-selected",
+      button.dataset.characterTab === state.characterTab ? "true" : "false",
+    );
+  }
+  for (const panel of document.querySelectorAll("[data-character-panel]")) {
+    panel.hidden = panel.dataset.characterPanel !== state.characterTab;
+  }
+}
+
+function renderCharacterDetail(character) {
+  const hasCharacter = Boolean(character);
+  byId("character-name").textContent = hasCharacter ? character.displayName : "还没有可查看的角色";
+  byId("character-tagline").textContent = character?.tagline ?? "";
+  byId("character-chat").disabled = !hasCharacter;
+  byId("character-memory").disabled = !hasCharacter;
+
+  const image = byId("character-image");
+  image.src = character?.image ?? "";
+  image.alt = character ? `${character.displayName}（开发候选角色图）` : "";
+  byId("character-intro").textContent =
+    character?.intro || "完成首次接纳后，这里会显示角色介绍。";
+
+  const traits = byId("character-traits");
   traits.replaceChildren(
-    ...character.traits.map((trait) => {
+    ...(character?.traits ?? []).map((trait) => {
       const item = document.createElement("li");
       item.textContent = trait;
       return item;
     }),
   );
 
-  const characters = companion?.characters ?? [];
-  const fixed = characters.find((item) => item.characterId === companion?.fixedCharacterId);
-  byId("home-current").textContent = presenceText(companion);
-  byId("home-fixed").textContent = `固定陪伴：${fixed?.displayName ?? "未设置"}`;
-  const roster = companion?.roster ?? [];
-  byId("home-roster").textContent =
-    roster.length > 0
-      ? `今日名单：${roster.map((entry) => `${entry.displayName}（${SLOT_LABELS[entry.slot] ?? entry.slot}）`).join("、")}`
-      : "今日名单：暂无";
+  const stats = character?.stats;
+  byId("character-stat-intimacy").textContent = stats ? String(Math.round(stats.intimacy)) : "—";
+  byId("character-stat-energy").textContent = stats ? String(Math.round(stats.energy)) : "—";
+  byId("character-stat-mood").textContent = stats ? String(Math.round(stats.mood)) : "—";
 
-  const stats = current?.stats ?? relationship.stats;
-  byId("stat-intimacy").textContent = String(Math.round(stats.intimacy));
-  byId("stat-energy").textContent = String(Math.round(stats.energy));
-  byId("stat-mood").textContent = String(Math.round(stats.mood));
-  byId("home-model").textContent = snapshot.model.configured
-    ? `模型：${snapshot.model.modelName} · Key 仅保存在系统安全存储`
-    : "模型尚未配置";
-  byId("desktop-status").textContent = desktopStatusText(snapshot.desktop);
+  if (!character) {
+    byId("character-roster-state").textContent = "";
+  } else if (character.inRoster) {
+    byId("character-roster-state").textContent = character.isCurrent
+      ? "现在在场。浏览其他角色不会切换或改动今日名单。"
+      : "在今日名单中。浏览不会切换当前在场角色。";
+  } else {
+    byId("character-roster-state").textContent =
+      "不在今日名单；可以临时聊天，聊天结束会回到原来的陪伴安排。";
+  }
 
-  renderRoster(companion);
-  renderCompanionControls(companion);
-  chatPanel.renderLaunch(companion);
+  for (const button of document.querySelectorAll("[data-character-tab]")) {
+    button.disabled = !hasCharacter;
+  }
+  renderCharacterTabs();
+}
+
+function selectCharacter(characterId) {
+  const character = characters().find((item) => item.characterId === characterId);
+  if (!character) {
+    return;
+  }
+  state.selectedCharacterId = characterId;
+  const nicknameSelect = byId("nickname-character");
+  if (
+    nicknameSelect &&
+    Array.from(nicknameSelect.options).some((option) => option.value === characterId)
+  ) {
+    nicknameSelect.value = characterId;
+    byId("nickname-input").value = character.nickname ?? "";
+  }
+  renderCharacters();
+}
+
+function renderCharacters() {
+  const selected = ensureSelectedCharacter();
+  renderCharacterList();
+  renderCharacterDetail(selected);
+  renderCompanionControls(state.snapshot?.companionship);
+}
+
+/* ---------- 设置 ---------- */
+
+function renderSettings() {
+  const model = state.snapshot?.model ?? { configured: false };
+  byId("settings-model-state").textContent = model.configured ? "已配置" : "尚未配置";
+  byId("settings-model-name").textContent = model.configured ? model.modelName : "—";
+  byId("settings-base-url").textContent = model.configured ? model.baseUrl : "—";
+  byId("check-model").disabled = !model.configured;
+  byId("desktop-status").textContent = desktopStatusText(state.snapshot?.desktop);
+}
+
+async function checkStoredModelConnection() {
+  const button = byId("check-model");
+  const status = byId("check-model-status");
+  button.disabled = true;
+  status.dataset.state = "";
+  status.textContent = "正在检查…";
+
+  const result = await callApi("checkStoredModel");
+  button.disabled = false;
+
+  if (!result.ok) {
+    status.dataset.state = "error";
+    status.textContent = result.error.message;
+    return;
+  }
+  status.dataset.state = "ok";
+  status.textContent = "模型连接正常";
+}
+
+/* ---------- 页面切换与陪伴动作 ---------- */
+
+function updateSubtitle() {
+  const page = navigation.currentPage();
+  if (page === "home") {
+    const companion = state.snapshot?.companionship;
+    navigation.setSubtitle(`${presenceText(companion)} · 今日 ${companion?.roster?.length ?? 0} 位`);
+  } else if (page === "characters") {
+    navigation.setSubtitle(
+      state.snapshot?.relationship
+        ? `已结识 ${characters().length} 位 · 浏览不会改变小窝安排`
+        : "已结识的角色",
+    );
+  } else if (page === "settings") {
+    navigation.setSubtitle("模型连接与本机配置");
+  }
+}
+
+function renderPage(page) {
+  if (state.snapshot?.state !== "accepted") {
+    return;
+  }
+  if (page === "home") {
+    renderHome();
+  } else if (page === "characters") {
+    renderCharacters();
+  } else if (page === "settings") {
+    renderSettings();
+  }
+  updateSubtitle();
+}
+
+function renderAll() {
+  renderHome();
+  renderCharacters();
+  renderSettings();
+  updateSubtitle();
 }
 
 async function runCompanionAction(button, call, successText, statusId) {
@@ -429,10 +633,12 @@ async function runCompanionAction(button, call, successText, statusId) {
     return;
   }
   state.snapshot = result.snapshot;
-  renderHome();
+  renderAll();
   const status = byId(statusId);
-  status.dataset.state = "ok";
-  status.textContent = successText;
+  if (status) {
+    status.dataset.state = "ok";
+    status.textContent = successText;
+  }
 }
 
 async function switchCompanion(characterId, button, successText = "已切换到这位 Bayper。") {
@@ -471,39 +677,20 @@ async function saveNickname() {
   );
 }
 
-async function checkStoredModelConnection() {
-  const button = byId("check-model");
-  const status = byId("check-model-status");
-  button.disabled = true;
-  status.dataset.state = "";
-  status.textContent = "正在检查…";
-
-  const result = await callApi("checkStoredModel");
-  button.disabled = false;
-
-  if (!result.ok) {
-    status.dataset.state = "error";
-    status.textContent = result.error.message;
-    return;
-  }
-  status.dataset.state = "ok";
-  status.textContent = "模型连接正常";
-}
-
 /* ---------- 启动 ---------- */
 
 function applySnapshot(snapshot) {
   state.snapshot = snapshot;
   if (snapshot.state === "accepted") {
-    renderHome();
-    showStep("home");
+    renderAll();
+    navigation.showPage("home", { focus: true });
     return;
   }
   if (snapshot.state === "configured") {
-    showStep("wish");
+    showOnboarding("wish");
     return;
   }
-  showStep("config");
+  showOnboarding("config");
 }
 
 async function init() {
@@ -513,7 +700,7 @@ async function init() {
       message: "应用接口没有加载，无法继续。请重新启动 Bayper。",
     });
     byId("config-submit").disabled = true;
-    showStep("config");
+    showOnboarding("config");
     return;
   }
 
@@ -521,7 +708,7 @@ async function init() {
   if (!result.ok) {
     showAlert(byId("config-alert"), result.error);
     byId("config-submit").disabled = true;
-    showStep("config");
+    showOnboarding("config");
     return;
   }
   applySnapshot(result.snapshot);
@@ -559,9 +746,29 @@ byId("roster-list").addEventListener("click", (event) => {
   switchCompanion(button.dataset.characterId, button);
 });
 byId("nickname-character").addEventListener("change", () => {
-  const characters = state.snapshot?.companionship?.characters ?? [];
-  const selected = characters.find((item) => item.characterId === byId("nickname-character").value);
+  const list = state.snapshot?.companionship?.characters ?? [];
+  const selected = list.find((item) => item.characterId === byId("nickname-character").value);
   byId("nickname-input").value = selected?.nickname ?? "";
+});
+document.querySelectorAll("[data-character-tab]").forEach((button) => {
+  button.addEventListener("click", () => {
+    if (state.characterTab === button.dataset.characterTab) {
+      return;
+    }
+    state.characterTab = button.dataset.characterTab;
+    renderCharacterTabs();
+    button.focus();
+  });
+});
+byId("character-chat").addEventListener("click", () => {
+  if (state.selectedCharacterId) {
+    chatPanel.openFor(state.selectedCharacterId, byId("character-chat"));
+  }
+});
+byId("character-memory").addEventListener("click", () => {
+  if (state.selectedCharacterId) {
+    memoryPanel.openFor(state.selectedCharacterId, byId("character-memory"));
+  }
 });
 
 if (api && typeof api.onSnapshotUpdated === "function") {
@@ -570,9 +777,9 @@ if (api && typeof api.onSnapshotUpdated === "function") {
       return;
     }
     state.snapshot = snapshot;
-    renderHome();
-    if (byId("rest-companion").closest('[data-step="home"]').hidden) {
-      showStep("home");
+    renderAll();
+    if (!navigation.isNavVisible()) {
+      navigation.showPage("home");
     }
   });
 }

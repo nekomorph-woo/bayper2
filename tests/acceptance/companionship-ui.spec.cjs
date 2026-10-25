@@ -37,6 +37,17 @@ async function waitForStep(page, name) {
   await page.locator(`[data-step="${name}"]`).waitFor({ state: "visible", timeout: 20000 });
 }
 
+async function openPage(page, name) {
+  await page.locator(`[data-nav="${name}"]`).click();
+  await page.locator(`[data-page="${name}"]`).waitFor({ state: "visible", timeout: 10000 });
+}
+
+async function openArrange(page) {
+  await openPage(page, "characters");
+  await page.locator('[data-character-tab="arrange"]').click();
+  await page.locator("#fixed-select").waitFor({ state: "visible", timeout: 10000 });
+}
+
 async function completeOnboarding(page, baseUrl) {
   await page.locator("#base-url").fill(baseUrl);
   await page.locator("#model-name").fill("fixture-model");
@@ -114,6 +125,7 @@ test("POL-COMPANION-002 UI：真实窗口查看名单、修改固定位与昵称
     const page2 = second.page;
     await waitForStep(page2, "home");
     assert.equal(await page2.locator("#roster-list .roster-row").count(), 3);
+    await openArrange(page2);
     assert.equal(await page2.locator("#fixed-select").inputValue(), "rin");
 
     const before = await getSnapshot(page2);
@@ -149,6 +161,7 @@ test("POL-COMPANION-002 UI：真实窗口查看名单、修改固定位与昵称
         .displayName,
       "小澄",
     );
+    await openPage(page2, "home");
     assert.match(
       await page2.locator('.roster-row[data-character-id="cheng"] .roster-name').textContent(),
       /小澄/,
@@ -165,7 +178,9 @@ test("POL-COMPANION-002 UI：真实窗口查看名单、修改固定位与昵称
     const third = await launchApp(ctx.dataDir);
     app = third.app;
     await waitForStep(third.page, "home");
+    await openArrange(third.page);
     assert.equal(await third.page.locator("#fixed-select").inputValue(), "hu");
+    await openPage(third.page, "home");
     assert.match(
       await third.page.locator('.roster-row[data-character-id="cheng"] .roster-name').textContent(),
       /小澄/,
@@ -269,6 +284,7 @@ test("POL-COMPANION-006 UI：旧 S01 库经真实应用启动升级并保留数�
     await waitForStep(first.page, "home");
     await waitForText(first.page, "#home-name", "凛");
     assert.equal(await first.page.locator("#stat-energy").textContent(), "55");
+    await openArrange(first.page);
     assert.equal(await first.page.locator("#fixed-select").inputValue(), "rin");
     assert.equal(await first.page.locator("#chat-send").count(), 0);
 
