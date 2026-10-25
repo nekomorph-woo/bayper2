@@ -6,6 +6,7 @@ const { app, BrowserWindow, ipcMain, safeStorage, dialog, session } = require("e
 const { AppError, toPublicError } = require("./errors.cjs");
 const { createStore } = require("./store.cjs");
 const { createOnboardingService } = require("./onboarding.cjs");
+const { createCompanionshipService } = require("./companionship.cjs");
 const characterContent = require("./content/characters.json");
 
 const RENDERER_FILE = path.join(__dirname, "renderer", "index.html");
@@ -14,6 +15,7 @@ const RENDERER_DIR_PREFIX = pathToFileURL(`${path.join(__dirname, "renderer")}${
 
 let mainWindow = null;
 let store = null;
+let companionship = null;
 
 function readDataDir(argv) {
   const inline = argv.find((arg) => arg.startsWith("--data-dir="));
@@ -46,6 +48,14 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(startApplication).catch(reportStartupFailure);
   app.on("window-all-closed", () => app.quit());
   app.on("before-quit", () => {
+    if (companionship) {
+      try {
+        companionship.markClosed();
+      } catch (error) {
+        console.error("Bayper 关闭时结算失败：", error?.message ?? error);
+      }
+      companionship = null;
+    }
     if (store) {
       store.close();
       store = null;
@@ -64,6 +74,11 @@ function startApplication() {
     safeStorage,
     candidates: characterContent.candidates,
   });
+  companionship = createCompanionshipService({
+    store,
+    candidates: characterContent.candidates,
+  });
+  companionship.start();
 
   registerIpcHandlers(service);
   mainWindow = createWindow();
@@ -121,11 +136,18 @@ function failureResult(error) {
   return { ok: false, error: toPublicError(error) };
 }
 
+function snapshotForRenderer(onboardingService) {
+  return {
+    ...onboardingService.getSnapshot(),
+    companionship: companionship.getSnapshot(),
+  };
+}
+
 function registerIpcHandlers(service) {
   ipcMain.handle("bayper:snapshot", (event) => {
     try {
       assertTrustedSender(event);
-      return { ok: true, snapshot: service.getSnapshot() };
+      return { ok: true, snapshot: snapshotForRenderer(service) };
     } catch (error) {
       return failureResult(error);
     }
@@ -153,7 +175,9 @@ function registerIpcHandlers(service) {
   ipcMain.handle("bayper:character:accept", (event, characterId) => {
     try {
       assertTrustedSender(event);
-      return { ok: true, ...service.accept(characterId) };
+      const result = service.accept(characterId);
+      companionship.start();
+      return { ok: true, ...result, snapshot: snapshotForRenderer(service) };
     } catch (error) {
       return failureResult(error);
     }
@@ -164,6 +188,46 @@ function registerIpcHandlers(service) {
       assertTrustedSender(event);
       const result = await service.checkStoredModel();
       return { ok: true, ...result };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:companion:nickname", (event, characterId, nickname) => {
+    try {
+      assertTrustedSender(event);
+      const result = companionship.setNickname(characterId, nickname);
+      return { ok: true, ...result, snapshot: snapshotForRenderer(service) };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:companion:fixed", (event, characterId) => {
+    try {
+      assertTrustedSender(event);
+      const result = companionship.setFixed(characterId);
+      return { ok: true, ...result, snapshot: snapshotForRenderer(service) };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:companion:switch", (event, characterId) => {
+    try {
+      assertTrustedSender(event);
+      const result = companionship.switchTo(characterId);
+      return { ok: true, ...result, snapshot: snapshotForRenderer(service) };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:companion:rest", (event) => {
+    try {
+      assertTrustedSender(event);
+      const result = companionship.rest();
+      return { ok: true, ...result, snapshot: snapshotForRenderer(service) };
     } catch (error) {
       return failureResult(error);
     }

@@ -444,6 +444,10 @@ test("POL-ONBOARD-005 配置与隔离边界：拒绝不安全配置与重定向�
       "checkStoredModel",
       "getSnapshot",
       "recommendCharacters",
+      "restCompanion",
+      "setFixedCompanion",
+      "setNickname",
+      "switchCompanion",
       "validateAndSaveModel",
     ]);
     assert.equal(surface.requireType, "undefined");
@@ -504,8 +508,8 @@ test("S01 视觉证据：三个步骤在 1200×800 与 960×680 下截图", asyn
     await page.locator("#config-submit").click();
     await waitForAlert(page, "#config-alert", "AUTH_FAILED");
 
-    await capture(app, page, "s01-01-config-error-1200x800.png");
-    await capture(app, page, "s01-01-config-error-960x680.png", 960, 680);
+    await capture(app, page, "s02-r2-s01-01-config-error-1200x800.png");
+    await capture(app, page, "s02-r2-s01-01-config-error-960x680.png", 960, 680);
 
     await page.locator("#api-key").fill(OK_KEY);
     await page.locator("#config-submit").click();
@@ -514,21 +518,21 @@ test("S01 视觉证据：三个步骤在 1200×800 与 960×680 下截图", asyn
     await page.locator("#wish-submit").click();
     await page.locator("#candidate-card").waitFor({ state: "visible" });
 
-    await capture(app, page, "s01-02-wish-960x680.png", 960, 680);
-    await capture(app, page, "s01-02-wish-1200x800.png");
+    await capture(app, page, "s02-r2-s01-02-wish-960x680.png", 960, 680);
+    await capture(app, page, "s02-r2-s01-02-wish-1200x800.png");
 
     await page.locator("#accept-button").click();
     await waitForStep(page, "home");
-    await capture(app, page, "s01-03-home-960x680.png", 960, 680);
-    await capture(app, page, "s01-03-home-1200x800.png");
+    await capture(app, page, "s02-r2-s01-03-home-960x680.png", 960, 680);
+    await capture(app, page, "s02-r2-s01-03-home-1200x800.png");
 
     for (const name of [
-      "s01-01-config-error-1200x800.png",
-      "s01-01-config-error-960x680.png",
-      "s01-02-wish-960x680.png",
-      "s01-02-wish-1200x800.png",
-      "s01-03-home-960x680.png",
-      "s01-03-home-1200x800.png",
+      "s02-r2-s01-01-config-error-1200x800.png",
+      "s02-r2-s01-01-config-error-960x680.png",
+      "s02-r2-s01-02-wish-960x680.png",
+      "s02-r2-s01-02-wish-1200x800.png",
+      "s02-r2-s01-03-home-960x680.png",
+      "s02-r2-s01-03-home-1200x800.png",
     ]) {
       const stat = fs.statSync(path.join(evidenceDir, name));
       assert.ok(stat.size > 10000, `${name} 应为有效截图`);

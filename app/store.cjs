@@ -3,6 +3,7 @@
 const { DatabaseSync } = require("node:sqlite");
 const fs = require("node:fs");
 const path = require("node:path");
+const { createCompanionStore } = require("./companion-store.cjs");
 
 const DB_FILE_NAME = "bayper.sqlite3";
 
@@ -48,6 +49,9 @@ function createStore(dataDir) {
   const db = new DatabaseSync(dbPath);
   db.exec("PRAGMA foreign_keys = ON");
   db.exec(SCHEMA);
+
+  // S02a 迁移与陪伴方法共用这一条连接，关闭仍由 store 统一负责。
+  const companion = createCompanionStore(db);
 
   const statements = {
     getModel: db.prepare(
@@ -150,6 +154,10 @@ function createStore(dataDir) {
     return statements.getState.get(key)?.value ?? null;
   }
 
+  function setAppState(key, value) {
+    statements.setState.run(key, value);
+  }
+
   function getTodayRoster(day) {
     return statements.getRoster.all(day).map((row) => ({
       slot: row.slot,
@@ -163,11 +171,13 @@ function createStore(dataDir) {
 
   return {
     dbPath,
+    ...companion,
     getModelConfig,
     saveModelConfig,
     getRelationship,
     acceptCharacter,
     getAppState,
+    setAppState,
     getTodayRoster,
     close,
   };

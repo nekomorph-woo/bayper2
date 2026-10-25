@@ -158,6 +158,7 @@
 
           <aside class="card home-side">
             <h2 class="side-title">今天的安排</h2>
+            <p id="home-current" class="side-current"></p>
             <p id="home-fixed" class="side-line"></p>
             <p id="home-roster" class="side-line"></p>
 
@@ -175,9 +176,57 @@
               <span id="check-model-status" class="status-text" role="status" aria-live="polite"></span>
             </div>
             <p class="note">
-              聊天与桌面小窗会在后续切片接入；本页不会伪造模型回复，也不代表桌面动画已经可用。
+              聊天与桌面小窗会在后续切片接入；本轮只验证本地安排与数值，不会伪造回复或探索完成。
             </p>
           </aside>
+
+          <section class="card home-arrange" aria-labelledby="arrange-title">
+            <div class="arrange-head">
+              <h2 id="arrange-title" class="side-title">陪伴安排</h2>
+              <span id="presence-status" class="status-text" role="status" aria-live="polite"></span>
+            </div>
+
+            <div class="arrange-grid">
+              <div>
+                <h3 class="arrange-title">今日名单</h3>
+                <ul id="roster-list" class="roster-list" aria-label="今日陪伴名单"></ul>
+                <div class="presence-actions">
+                  <button id="rest-companion" class="btn btn-ghost btn-small" type="button">
+                    安静休息
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <h3 class="arrange-title">调整安排</h3>
+                <div class="arrange-row">
+                  <label class="arrange-label" for="fixed-select">固定陪伴</label>
+                  <select id="fixed-select"></select>
+                  <button id="fixed-save" class="btn btn-ghost btn-small" type="button">应用</button>
+                </div>
+                <div class="arrange-row">
+                  <label class="arrange-label" for="nickname-character">角色</label>
+                  <select id="nickname-character"></select>
+                </div>
+                <div class="arrange-row">
+                  <label class="arrange-label" for="nickname-input">昵称</label>
+                  <input
+                    id="nickname-input"
+                    type="text"
+                    maxlength="20"
+                    autocomplete="off"
+                    placeholder="留空恢复本名"
+                  />
+                  <button id="nickname-save" class="btn btn-ghost btn-small" type="button">
+                    保存昵称
+                  </button>
+                </div>
+                <p id="arrange-status" class="status-text" role="status" aria-live="polite"></p>
+              </div>
+            </div>
+
+            <div id="home-alert" class="alert" role="alert" hidden></div>
+          </section>
         </div>
       </section>
     </main>

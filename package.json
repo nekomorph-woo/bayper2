@@ -1,13 +1,13 @@
 {
   "name": "bayper",
-  "version": "0.1.59",
+  "version": "0.1.60",
   "private": true,
   "description": "Bayper 桌面陪伴应用",
   "main": "app/main.cjs",
   "scripts": {
     "start": "electron .",
     "test": "node --test tests/unit/*.test.cjs",
-    "test:acceptance": "node --test tests/acceptance/onboarding.spec.cjs",
+    "test:acceptance": "node --test tests/acceptance/companionship.spec.cjs && node --test --test-concurrency=1 tests/acceptance/onboarding.spec.cjs tests/acceptance/companionship-ui.spec.cjs",
     "test:live": "node --test tests/acceptance/live-onboarding.spec.cjs"
   },
   "devDependencies": {

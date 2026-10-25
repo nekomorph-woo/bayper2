@@ -1,5 +1,5 @@
-/* S01 renderer：只做界面状态切换与四类业务调用。
-   不访问文件、数据库或网络，也不使用 localStorage。 */
+/* S02a renderer：界面状态切换、S01 首次相遇与本地陪伴安排。
+   不访问文件、数据库或网络，也不使用 localStorage；聊天与桌面小窗不在本切片。 */
 const api = window.bayper;
 const byId = (id) => document.getElementById(id);
 
@@ -173,10 +173,123 @@ async function acceptCandidate() {
 
 /* ---------- 小窝 ---------- */
 
+const SLOT_LABELS = {
+  fixed: "固定位",
+  random_1: "随机位",
+  random_2: "随机位",
+  random_3: "随机位",
+  random_4: "随机位",
+};
+
+function presenceText(companion) {
+  const current = companion?.current;
+  if (!current) {
+    return "暂无同屏角色";
+  }
+  if (companion.interaction?.temporary) {
+    return `${current.displayName} · 临时互动中`;
+  }
+  if (companion.interaction) {
+    return `${current.displayName} · 互动中`;
+  }
+  if (current.source === "resting") {
+    return `${current.displayName} · 安静休息中`;
+  }
+  return `${current.displayName} · 安静陪伴`;
+}
+
+function renderRoster(companion) {
+  const list = byId("roster-list");
+  const roster = companion?.roster ?? [];
+  if (roster.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "status-text";
+    empty.textContent = "今天还没有可显示的名单。";
+    list.replaceChildren(empty);
+    return;
+  }
+
+  list.replaceChildren(
+    ...roster.map((entry) => {
+      const row = document.createElement("li");
+      row.className = `roster-row${entry.isCurrent ? " is-current" : ""}`;
+      row.dataset.characterId = entry.characterId;
+
+      const slot = document.createElement("span");
+      slot.className = "roster-slot";
+      slot.textContent = SLOT_LABELS[entry.slot] ?? entry.slot;
+
+      const name = document.createElement("span");
+      name.className = "roster-name";
+      name.textContent = entry.displayName;
+
+      row.append(slot, name);
+      if (entry.isCurrent) {
+        const current = document.createElement("span");
+        current.className = "status-text";
+        current.textContent = "当前";
+        row.append(current);
+      } else {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "btn btn-ghost btn-small";
+        button.dataset.action = "switch";
+        button.dataset.characterId = entry.characterId;
+        button.textContent = "请她陪我";
+        row.append(button);
+      }
+      return row;
+    }),
+  );
+}
+
+function replaceOptions(select, characters, selectedId) {
+  select.replaceChildren(
+    ...characters.map((character) => {
+      const option = document.createElement("option");
+      option.value = character.characterId;
+      option.textContent = character.displayName;
+      return option;
+    }),
+  );
+  if (selectedId && characters.some((character) => character.characterId === selectedId)) {
+    select.value = selectedId;
+  }
+}
+
+function renderCompanionControls(companion) {
+  const characters = companion?.characters ?? [];
+  const fixedSelect = byId("fixed-select");
+  const nicknameSelect = byId("nickname-character");
+  const nicknameInput = byId("nickname-input");
+
+  const previousNicknameId =
+    nicknameSelect.value || companion?.current?.characterId || characters[0]?.characterId || "";
+  replaceOptions(fixedSelect, characters, companion?.fixedCharacterId ?? "");
+  replaceOptions(nicknameSelect, characters, previousNicknameId);
+
+  const selected = characters.find((character) => character.characterId === nicknameSelect.value);
+  if (document.activeElement !== nicknameInput) {
+    nicknameInput.value = selected?.nickname ?? "";
+  }
+  const restButton = byId("rest-companion");
+  if (companion?.current?.mode === "resting") {
+    restButton.textContent = "继续陪伴";
+    restButton.dataset.action = "wake";
+    restButton.disabled = false;
+  } else {
+    restButton.textContent = "安静休息";
+    restButton.dataset.action = "rest";
+    restButton.disabled = !companion?.current;
+  }
+}
+
 function renderHome() {
   const snapshot = state.snapshot;
+  const companion = snapshot?.companionship;
   const relationship = snapshot?.relationship;
-  const character = snapshot?.currentCharacter;
+  const current = companion?.current ?? null;
+  const character = current ?? snapshot?.currentCharacter;
   if (!relationship || !character) {
     showAlert(byId("config-alert"), {
       code: "CONTENT_MISSING",
@@ -186,11 +299,12 @@ function renderHome() {
     return;
   }
 
-  byId("home-name").textContent = character.name;
+  const displayName = current?.displayName ?? character.name;
+  byId("home-name").textContent = displayName;
   byId("home-tagline").textContent = character.tagline;
   byId("home-intro").textContent = character.intro;
   byId("home-image").src = character.image;
-  byId("home-image").alt = `${character.name}（开发候选角色图）`;
+  byId("home-image").alt = `${displayName}（开发候选角色图）`;
 
   const traits = byId("home-traits");
   traits.replaceChildren(
@@ -201,21 +315,83 @@ function renderHome() {
     }),
   );
 
-  const fixedName =
-    relationship.fixedCharacterId === character.id ? character.name : relationship.fixedCharacterId;
-  byId("home-fixed").textContent = `固定陪伴：${fixedName}`;
-  byId("home-roster").textContent = `今日名单：${relationship.todayRoster
-    .map((entry) =>
-      entry.characterId === character.id ? `${character.name}（固定位）` : `${entry.characterId}（固定位）`,
-    )
-    .join("、")}`;
+  const characters = companion?.characters ?? [];
+  const fixed = characters.find((item) => item.characterId === companion?.fixedCharacterId);
+  byId("home-current").textContent = presenceText(companion);
+  byId("home-fixed").textContent = `固定陪伴：${fixed?.displayName ?? "未设置"}`;
+  const roster = companion?.roster ?? [];
+  byId("home-roster").textContent =
+    roster.length > 0
+      ? `今日名单：${roster.map((entry) => `${entry.displayName}（${SLOT_LABELS[entry.slot] ?? entry.slot}）`).join("、")}`
+      : "今日名单：暂无";
 
-  byId("stat-intimacy").textContent = String(relationship.stats.intimacy);
-  byId("stat-energy").textContent = String(relationship.stats.energy);
-  byId("stat-mood").textContent = String(relationship.stats.mood);
+  const stats = current?.stats ?? relationship.stats;
+  byId("stat-intimacy").textContent = String(Math.round(stats.intimacy));
+  byId("stat-energy").textContent = String(Math.round(stats.energy));
+  byId("stat-mood").textContent = String(Math.round(stats.mood));
   byId("home-model").textContent = snapshot.model.configured
     ? `模型：${snapshot.model.modelName} · Key 仅保存在系统安全存储`
     : "模型尚未配置";
+
+  renderRoster(companion);
+  renderCompanionControls(companion);
+}
+
+async function runCompanionAction(button, call, successText, statusId) {
+  showAlert(byId("home-alert"), null);
+  const wasDisabled = button?.disabled ?? false;
+  if (button) {
+    button.disabled = true;
+  }
+  const result = await call();
+  if (button) {
+    button.disabled = wasDisabled;
+  }
+  if (!result.ok) {
+    showAlert(byId("home-alert"), result.error);
+    return;
+  }
+  state.snapshot = result.snapshot;
+  renderHome();
+  const status = byId(statusId);
+  status.dataset.state = "ok";
+  status.textContent = successText;
+}
+
+async function switchCompanion(characterId, button, successText = "已切换到这位 Bayper。") {
+  await runCompanionAction(
+    button,
+    () => callApi("switchCompanion", characterId),
+    successText,
+    "presence-status",
+  );
+}
+
+async function restCompanion() {
+  await runCompanionAction(
+    byId("rest-companion"),
+    () => callApi("restCompanion"),
+    "已进入安静休息。",
+    "presence-status",
+  );
+}
+
+async function saveFixed() {
+  await runCompanionAction(
+    byId("fixed-save"),
+    () => callApi("setFixedCompanion", byId("fixed-select").value),
+    "固定陪伴已更新。",
+    "arrange-status",
+  );
+}
+
+async function saveNickname() {
+  await runCompanionAction(
+    byId("nickname-save"),
+    () => callApi("setNickname", byId("nickname-character").value, byId("nickname-input").value),
+    "昵称已保存。",
+    "arrange-status",
+  );
 }
 
 async function checkStoredModelConnection() {
@@ -279,4 +455,27 @@ byId("wish-form").addEventListener("submit", submitWish);
 byId("next-candidate").addEventListener("click", nextCandidate);
 byId("accept-button").addEventListener("click", acceptCandidate);
 byId("check-model").addEventListener("click", checkStoredModelConnection);
+byId("rest-companion").addEventListener("click", () => {
+  const button = byId("rest-companion");
+  const current = state.snapshot?.companionship?.current;
+  if (button.dataset.action === "wake" && current) {
+    switchCompanion(current.characterId, button, "已继续陪伴。");
+    return;
+  }
+  restCompanion();
+});
+byId("fixed-save").addEventListener("click", saveFixed);
+byId("nickname-save").addEventListener("click", saveNickname);
+byId("roster-list").addEventListener("click", (event) => {
+  const button = event.target.closest('button[data-action="switch"]');
+  if (!button) {
+    return;
+  }
+  switchCompanion(button.dataset.characterId, button);
+});
+byId("nickname-character").addEventListener("change", () => {
+  const characters = state.snapshot?.companionship?.characters ?? [];
+  const selected = characters.find((item) => item.characterId === byId("nickname-character").value);
+  byId("nickname-input").value = selected?.nickname ?? "";
+});
 init();

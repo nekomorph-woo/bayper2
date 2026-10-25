@@ -9,5 +9,10 @@ contextBridge.exposeInMainWorld(
     recommendCharacters: (wish) => ipcRenderer.invoke("bayper:wish:recommend", wish),
     acceptCharacter: (characterId) => ipcRenderer.invoke("bayper:character:accept", characterId),
     checkStoredModel: () => ipcRenderer.invoke("bayper:model:check-stored"),
+    setNickname: (characterId, nickname) =>
+      ipcRenderer.invoke("bayper:companion:nickname", characterId, nickname),
+    setFixedCompanion: (characterId) => ipcRenderer.invoke("bayper:companion:fixed", characterId),
+    switchCompanion: (characterId) => ipcRenderer.invoke("bayper:companion:switch", characterId),
+    restCompanion: () => ipcRenderer.invoke("bayper:companion:rest"),
   }),
 );
