@@ -82,6 +82,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var window: NSWindow!
     private var board: BoardView!
     private var heartbeat: Timer?
+    private var commandTimer: Timer?
+    private var lastCommandSeq = 0
+    private var lastBadCommand = ""
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 独立测试底板允许主动激活，便于确认它持有输入焦点。
@@ -122,6 +125,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             ])
         }
 
+        // 可选控制文件只驱动自有底板，不是模拟输入，也不发送 CGEvent。
+        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+            self?.pollBoardCommand()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        commandTimer = timer
+
         appendJSONL([
             "event": "startup",
             "pid": Int(ProcessInfo.processInfo.processIdentifier),
@@ -129,9 +139,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "windowKey": window.isKeyWindow,
         ])
 
-        // GUI 底板最多运行 8 分钟，避免遗留窗口。
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8 * 60) {
+        // GUI 底板最多运行 20 分钟，便于人工做 Space 操作，同时避免遗留窗口。
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20 * 60) {
             appendJSONL(["event": "timeout-terminate", "frontmostPid": Int(frontmostPid())])
+            NSApp.terminate(nil)
+        }
+    }
+
+    // 只接受本进程 control 文件；seq 递增才执行，避免重复触发。
+    private func pollBoardCommand() {
+        let path = (rootPath as NSString).appendingPathComponent("board-command.json")
+        guard let data = FileManager.default.contents(atPath: path) else { return }
+        let raw = String(decoding: data, as: UTF8.self)
+        if raw == lastBadCommand { return }
+        guard let command = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            lastBadCommand = raw
+            appendJSONL(["event": "command-parse-failed", "raw": raw])
+            return
+        }
+        lastBadCommand = ""
+        guard let seq = command["seq"] as? Int, seq > lastCommandSeq else { return }
+        lastCommandSeq = seq
+
+        if let fullscreen = command["fullscreen"] as? Bool {
+            // 只在目标状态与当前状态不同时切换，重复 true/false 不会反向。
+            if window.styleMask.contains(.fullScreen) != fullscreen {
+                window.toggleFullScreen(nil)
+            }
+            // 实际进入/退出全屏以 windowDidEnter/ExitFullScreen 事件为准，这里只记录已发出切换。
+            appendJSONL([
+                "event": "board-command",
+                "seq": seq,
+                "action": "fullscreen",
+                "value": fullscreen,
+                "isFullScreen": window.styleMask.contains(.fullScreen),
+                "frontmostPid": Int(frontmostPid()),
+            ])
+        }
+        if command["active"] as? Bool == true {
+            NSApp.activate(ignoringOtherApps: true)
+            appendJSONL([
+                "event": "board-command",
+                "seq": seq,
+                "action": "active",
+                "windowKey": window.isKeyWindow,
+                "frontmostPid": Int(frontmostPid()),
+            ])
+        }
+        if command["quit"] as? Bool == true {
+            appendJSONL(["event": "board-command", "seq": seq, "action": "quit", "frontmostPid": Int(frontmostPid())])
             NSApp.terminate(nil)
         }
     }

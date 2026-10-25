@@ -1,0 +1,31 @@
+# Bayper Herdr 真实 GUI 生命周期研究插件。
+# 只验证 startup/action 拉起真实 Electron 的进程机制，不是 Bayper 产品插件。
+# 运行 server 时必须由外层设置 BAYPER_RESEARCH_ROOT 指向 /tmp/bayper-herdr-spike-*，
+# 并设置 BAYPER_GUI_BUILD_ROOT 指向 /tmp/bayper-window-spike-*。
+# version 与根目录 VERSION 保持同步，仅为实验产物的版本标注。
+id = "bayper.research.gui"
+name = "Bayper Research GUI Lifecycle"
+version = "0.1.17"
+description = "只用于 Bayper 隔离技术实验的 GUI startup/action fixture"
+min_herdr_version = "0.9.5"
+platforms = ["macos"]
+
+[[startup]]
+command = ["python3", "bridge.py", "ensure"]
+platforms = ["macos"]
+
+[[actions]]
+id = "start"
+title = "Start research GUI"
+description = "清除本会话停止标记并拉起守护进程与真实 Electron"
+command = ["python3", "bridge.py", "start"]
+contexts = ["workspace"]
+platforms = ["macos"]
+
+[[actions]]
+id = "stop"
+title = "Stop research GUI"
+description = "只写入本会话停止标记，由守护进程自行退出"
+command = ["python3", "bridge.py", "stop"]
+contexts = ["workspace"]
+platforms = ["macos"]

@@ -10,6 +10,16 @@ if (!/^\/(?:private\/)?tmp\/bayper-window-spike-/.test(root)) {
 }
 const jsonlPath = path.join(root, 'electron.jsonl');
 const commandPath = path.join(root, 'command.json');
+// BAYPER_PANEL=0 保留普通窗口基线，=1 走 Electron 原生 panel 路线。
+const panelMode = process.env.BAYPER_PANEL === '1';
+// 可选父进程探针：只检测该 PID 是否仍存在，不尝试恢复、不控制其他进程。
+// 仅凭 PID 存在性判断，不抵御 PID 复用；未设置时行为与普通窗口实验一致。
+const ownerPidRaw = process.env.BAYPER_OWNER_PID || '';
+if (ownerPidRaw && !/^[1-9]\d*$/.test(ownerPidRaw)) {
+  console.error(`BAYPER_OWNER_PID 无效: ${ownerPidRaw}`);
+  process.exit(1);
+}
+const ownerPid = ownerPidRaw ? Number(ownerPidRaw) : null;
 let win = null;
 let lastSeq = 0;
 let lastBadCommand = '';
@@ -97,12 +107,36 @@ function pollCommand() {
   applyCommand(cmd);
 }
 
+// 守护进程消失（含 SIGKILL）后 GUI 自行退出；ESRCH 之外（如 EPERM）视为仍存在。
+function watchOwner() {
+  if (ownerPid === null) return;
+  setInterval(() => {
+    try {
+      process.kill(ownerPid, 0);
+    } catch (err) {
+      if (err.code === 'ESRCH') {
+        log({ event: 'owner-exited', ownerPid });
+        app.quit();
+      }
+    }
+  }, 400);
+}
+
 app.whenReady().then(() => {
   app.dock.hide();
+  watchOwner();
+  if (panelMode) {
+    // 可选对照：prohibited 仅用于观察是否仍抢激活；不自动把焦点抢回来。
+    const policy = process.env.BAYPER_ACTIVATION_POLICY === 'prohibited' ? 'prohibited' : 'accessory';
+    const result = app.setActivationPolicy(policy);
+    log({ event: 'activation-policy', value: policy, result });
+  }
   win = new BrowserWindow({
     width: 240, height: 240, x: 400, y: 300,
     backgroundColor: '#00000000', transparent: true, frame: false, hasShadow: false,
     resizable: false, focusable: false, show: false, alwaysOnTop: true,
+    // type=panel 是 Electron 原生 NSPanel 路线，必须配合 focusable:false。
+    ...(panelMode ? { type: 'panel', acceptFirstMouse: true } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
@@ -115,7 +149,8 @@ app.whenReady().then(() => {
   win.webContents.once('did-finish-load', () => {
     win.showInactive();
     log({
-      event: 'startup', pid: process.pid,
+      event: 'startup', pid: process.pid, panel_mode: panelMode,
+      window_kind: panelMode ? 'panel' : 'normal', owner_pid: ownerPid,
       versions: { electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node },
       ...state(),
     });
@@ -136,7 +171,7 @@ app.whenReady().then(() => {
   setTimeout(() => {
     log({ event: 'timeout-quit' });
     app.quit();
-  }, 8 * 60 * 1000);
+  }, 20 * 60 * 1000);
 });
 
 app.on('window-all-closed', () => app.quit());

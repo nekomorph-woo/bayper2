@@ -12,9 +12,15 @@
 
 三个 GUI 程序都有 8 分钟自动退出保护。长时间人工等待可能需要另开批次，不能把退出后的点击算入原批次。
 
+macOS补测将自动退出延长到20分钟。BAYPER_PANEL=0保留普通窗口路径，=1启用panel：Electron使用内置type=panel，Tauri使用固定rev的tauri-nspanel社区适配。BAYPER_ACTIVATION_POLICY=prohibited可选；不设置仍Accessory。模式会写日志，不能把不同模式的点击、Spaces与启动证据混算为同一套配置全部通过。它仅用于本轮无键盘输入的悬浮画布实验。
+
+Tauri锁文件含固定git依赖，首次构建需要可访问其仓库。编译出现旧cocoa API弃用及block未来兼容警告，详见补测报告，不代表已完成长期兼容验证。所有依赖/编译仍在隔离复制件进行。
+
 ## 固定控制与证据
 
 根目录 command.json 是一次性控制数据，seq 必须递增。支持 ignore、visible、animate、x/y 和 quit。Electron 和 Tauri 复用同一控制文件，按顺序单独运行，避免同时响应同一条命令。
+
+补测可为每个候选设置不同的BAYPER_WINDOW_ROOT子目录，以免共享控制文件串扰。写入下一条命令前等待上一seq出现在实际执行日志，不能快速连写后假定每条都执行。底板控制文件board-command.json支持seq、fullscreen、active、quit，仅操作自己的窗口。Electron另支持可选BAYPER_OWNER_PID，每400ms检查owner是否存在，owner不存在则自行退出；该机制不防PID复用，不是系统级守护。
 
 静止不执行 Canvas 动画定时器；动画固定约 30fps，每 30 帧上报实际累计帧数和耗时。资源用 measure.py 的 --root、--label、--pids 和 --seconds 采样；首个 PID 为主进程，其余仅填写已核对归属的 WebKit 等辅助进程。不要自动纳入所有系统 WebKit。
 

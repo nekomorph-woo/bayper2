@@ -7,9 +7,11 @@ use std::{
 };
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, State, WebviewWindow, WindowEvent};
+use tauri_nspanel::{cocoa::appkit::NSWindowCollectionBehavior, ManagerExt, WebviewWindowExt};
 
 struct Probe {
     root: PathBuf,
+    panel_mode: bool,
 }
 
 fn resolve_root() -> PathBuf {
@@ -82,6 +84,18 @@ fn apply_on_main(app: &AppHandle, root: &Path, seq: i64, command: Value) {
         return;
     };
     let mut ok = true;
+    let panel_mode = app.state::<Probe>().panel_mode;
+    let panel = if panel_mode {
+        match app.get_webview_panel("probe") {
+            Ok(panel) => Some(panel),
+            Err(err) => {
+                log(root, json!({"event": "panel-missing", "seq": seq, "error": format!("{err:?}")}));
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     if let Some(ignore) = command.get("ignore").and_then(Value::as_bool) {
         ok &= log_outcome(root, "command-action", seq, "ignore", json!(ignore), window.set_ignore_cursor_events(ignore));
@@ -119,8 +133,26 @@ fn apply_on_main(app: &AppHandle, root: &Path, seq: i64, command: Value) {
         }
     }
     if let Some(visible) = command.get("visible").and_then(Value::as_bool) {
-        let result = if visible { window.show() } else { window.hide() };
-        ok &= log_outcome(root, "command-action", seq, "visible", json!(visible), result);
+        if panel_mode {
+            // 后续 show/hide 也只能走 panel 接口，window.show() 会激活应用。
+            match &panel {
+                Some(panel) => {
+                    if visible {
+                        panel.order_front_regardless();
+                    } else {
+                        panel.order_out(None);
+                    }
+                    log(root, json!({"event": "command-action", "seq": seq, "action": "visible", "value": visible, "ok": true, "route": "panel"}));
+                }
+                None => {
+                    ok = false;
+                    log(root, json!({"event": "command-action", "seq": seq, "action": "visible", "value": visible, "ok": false, "error": "panel 不存在，未回退到 window.show/hide"}));
+                }
+            }
+        } else {
+            let result = if visible { window.show() } else { window.hide() };
+            ok &= log_outcome(root, "command-action", seq, "visible", json!(visible), result);
+        }
     }
 
     log(root, json!({"event": "command", "seq": seq, "ok": ok, "state": window_state(&window)}));
@@ -187,17 +219,29 @@ fn log_event(event: Value, state: State<'_, Probe>) -> Result<(), String> {
 
 fn main() {
     let root = resolve_root();
+    let panel_mode = std::env::var("BAYPER_PANEL").map(|value| value == "1").unwrap_or(false);
     let setup_root = root.clone();
-    tauri::Builder::default()
-        .manage(Probe { root })
-        .invoke_handler(tauri::generate_handler![log_event])
+    let builder = tauri::Builder::default()
+        .manage(Probe { root, panel_mode })
+        .invoke_handler(tauri::generate_handler![log_event]);
+    // 只有 panel 模式注册 nspanel 插件，普通窗口基线保持原路径。
+    let builder = if panel_mode { builder.plugin(tauri_nspanel::init()) } else { builder };
+    builder
         .setup(move |app| {
             // App 不进入 Dock，也不主动抢焦点，点击写日志由窗口自身完成。
             // set_activation_policy 返回 () 而非 Result，无法观测成功或错误，只记录已发出调用。
             #[cfg(target_os = "macos")]
             {
-                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-                log(&setup_root, json!({"event": "startup-action", "seq": 0, "action": "activation-policy", "value": "Accessory", "result": "called"}));
+                // 可选对照：prohibited 仅用于观察是否仍抢激活；不自动把焦点抢回来。
+                let prohibited = panel_mode
+                    && std::env::var("BAYPER_ACTIVATION_POLICY").map(|value| value == "prohibited").unwrap_or(false);
+                let policy = if prohibited {
+                    tauri::ActivationPolicy::Prohibited
+                } else {
+                    tauri::ActivationPolicy::Accessory
+                };
+                app.set_activation_policy(policy);
+                log(&setup_root, json!({"event": "startup-action", "seq": 0, "action": "activation-policy", "value": if prohibited { "Prohibited" } else { "Accessory" }, "result": "called"}));
             }
 
             let window = match app.get_webview_window("probe") {
@@ -211,6 +255,8 @@ fn main() {
             log(&setup_root, json!({
                 "event": "startup",
                 "pid": process::id(),
+                "panel_mode": panel_mode,
+                "window_kind": if panel_mode { "nspanel" } else { "normal" },
                 "versions": {
                     "probe": env!("CARGO_PKG_VERSION"),
                     "package": app.package_info().version.to_string(),
@@ -231,14 +277,49 @@ fn main() {
             });
 
             let mut ok = log_outcome(&setup_root, "startup-action", 0, "ignore", json!(false), window.set_ignore_cursor_events(false));
-            ok &= log_outcome(&setup_root, "startup-action", 0, "show", json!(true), window.show());
+            if panel_mode {
+                // tauri-nspanel 在 objc runtime 中把 NSWindow 的 class swizzle 为 NSPanel 子类，
+                // 属额外社区原生适配；只在此处调用一次 to_panel()。
+                match window.to_panel() {
+                    Ok(panel) => {
+                        panel.set_style_mask(1 << 7); // NSNonactivatingPanelMask
+                        panel.set_collection_behaviour(
+                            NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
+                                | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary,
+                        );
+                        panel.set_hides_on_deactivate(false);
+                        panel.set_becomes_key_only_if_needed(true);
+                        // 初始显示用 order_front_regardless，避免 makeKeyAndOrderFront 抢焦点。
+                        panel.order_front_regardless();
+                        log(&setup_root, json!({
+                            "event": "startup-action", "seq": 0, "action": "panel-show",
+                            "value": {
+                                "route": "tauri-nspanel",
+                                "rev": "18ffb9a201fbf6fedfaa382fd4b92315ea30ab1a",
+                                "note": "NSWindow 经 tauri-nspanel 在 runtime swizzle 为 NSPanel，属额外社区原生适配",
+                                "style_mask": 1 << 7,
+                                "collection_behavior": ["canJoinAllSpaces", "fullScreenAuxiliary"],
+                                "hides_on_deactivate": false,
+                                "becomes_key_only_if_needed": true,
+                            },
+                            "ok": true,
+                        }));
+                    }
+                    Err(err) => {
+                        log(&setup_root, json!({"event": "startup-failed", "action": "to-panel", "error": err.to_string()}));
+                        process::exit(1);
+                    }
+                }
+            } else {
+                ok &= log_outcome(&setup_root, "startup-action", 0, "show", json!(true), window.show());
+            }
             log(&setup_root, json!({"event": "shown", "ok": ok, "state": window_state(&window)}));
 
             start_command_thread(app.handle().clone(), setup_root.clone());
             let timeout_app = app.handle().clone();
             let timeout_root = setup_root.clone();
             thread::spawn(move || {
-                thread::sleep(Duration::from_secs(8 * 60));
+                thread::sleep(Duration::from_secs(20 * 60));
                 log(&timeout_root, json!({"event": "timeout-quit"}));
                 timeout_app.exit(0);
             });
