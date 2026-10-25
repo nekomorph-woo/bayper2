@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Bayper Window Probe</title>
+  <style>
+    /* 整窗 240×240 透明，只有画布中心色块不透明。 */
+    html, body {
+      width: 240px;
+      height: 240px;
+      margin: 0;
+      overflow: hidden;
+      background: transparent;
+    }
+    canvas {
+      display: block;
+      width: 240px;
+      height: 240px;
+      background: transparent;
+    }
+    #status {
+      position: fixed;
+      top: 6px;
+      left: 8px;
+      font: 12px -apple-system, sans-serif;
+      color: #003b3b;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="view" width="240" height="240"></canvas>
+  <div id="status"></div>
+  <script>
+    (() => {
+      const canvas = document.getElementById('view');
+      const ctx = canvas.getContext('2d');
+      const status = document.getElementById('status');
+      const param = new URLSearchParams(location.search).get('backend');
+      const backend = param || (window.__TAURI_INTERNALS__ ? 'Tauri' : 'unknown');
+      let clicks = 0;
+      let frame = 0;
+      let animationStart = 0;
+      let timer = null;
+
+      function draw() {
+        ctx.clearRect(0, 0, 240, 240);
+        // 动画时色块绕中心小幅移动，静止时回到初始位置。
+        const dx = timer ? Math.round(6 * Math.sin((frame / 30) * Math.PI * 2)) : 0;
+        const dy = timer ? Math.round(4 * Math.cos((frame / 30) * Math.PI * 2)) : 0;
+        ctx.fillStyle = '#00c8c8';
+        ctx.fillRect(60 + dx, 60 + dy, 120, 120);
+        ctx.fillStyle = '#ff2d2d';
+        ctx.fillRect(116 + dx, 116 + dy, 8, 8);
+        status.textContent = `${backend} clicks=${clicks}`;
+      }
+
+      window.setAnimation = (enabled) => {
+        if (enabled && !timer) {
+          frame = 0;
+          animationStart = performance.now();
+          timer = setInterval(() => {
+            frame += 1;
+            draw();
+            // 每 30 帧（30fps 下约 1 秒）记录一次实际节奏，用于证明动画真的在跑。
+            if (frame % 30 === 0) {
+              logEvent({
+                event: 'animation-sample',
+                backend,
+                frame,
+                elapsedMs: performance.now() - animationStart,
+              });
+            }
+          }, 1000 / 30);
+        } else if (!enabled && timer) {
+          clearInterval(timer);
+          timer = null;
+          logEvent({
+            event: 'animation-stop',
+            backend,
+            frame,
+            elapsedMs: performance.now() - animationStart,
+          });
+          frame = 0;
+        }
+        draw();
+      };
+
+      function logEvent(event) {
+        if (window.probeLog) {
+          window.probeLog(event);
+          return;
+        }
+        if (window.__TAURI_INTERNALS__) {
+          window.__TAURI_INTERNALS__.invoke('log_event', { event }).catch((err) => {
+            // 写入失败要在界面上可见，不能把点击当成已记录。
+            status.textContent = `${backend} log failed: ${String(err)}`;
+          });
+          return;
+        }
+        status.textContent = `${backend} log bridge missing`;
+      }
+
+      // 不调用 preventDefault/stopPropagation，原生事件继续按平台规则传递。
+      canvas.addEventListener('click', (event) => {
+        clicks += 1;
+        draw();
+        logEvent({
+          event: 'click',
+          backend,
+          clicks,
+          x: Number(event.clientX.toFixed(1)),
+          y: Number(event.clientY.toFixed(1)),
+        });
+      });
+
+      draw();
+    })();
+  </script>
+</body>
+</html>
