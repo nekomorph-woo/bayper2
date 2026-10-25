@@ -25,3 +25,11 @@ idle-v1原件`exec-55482bf3-add4-4667-83be-8c571cea0581.png`，已原样保存�
 ```text
 Create one full-body production master sprite of Hu (琥珀), an original cat-eared maid companion, on truly transparent RGBA background. Image1 is Hu's identity reference: preserve chestnut brown wavy twin-tail hair, amber eyes, brown cat ears with cream interiors, olive green side ribbons with small ivory flowers, cream maid headband and lively friendly expression. Image2 is the approved STYLE AND BODY PROPORTION reference ONLY: match its compact approximately three-head-tall full-body anime pixel-art proportions, detailed crisp pixel clusters and ordered dither shading; do not copy its black hair or burgundy outfit. Extend Hu into a coherent complete standing character: muted forest-olive maid dress with cream apron and frill hem, small brown neck bow with ivory flower brooch, practical brown ankle boots, cream socks, one fluffy chestnut cat tail curling on image right. Outfit modest and practical for an energetic collector, no weapons or held props. Full body from ear tips to boot soles, front three-quarter view matching Image2, both arms relaxed beside skirt, symmetrical balanced feet. Warm smile, alert eyes, adventurous personality conveyed subtly. Lock a clear readable silhouette and restrained green/cream/brown palette. Center figure with 12 percent clear padding on all sides. No text, no labels, no scenery, no ground shadow, no grid. Preserve fine 2D pixel style rather than smooth painting or vector-filter effect.
 ```
+
+## 新版像素母版候选 v1（2026-10-26）
+
+Codex内置imagegen生成，原件exec-3c75ff59-2602-4db9-9740-3017524604a5.png，原样保存在master-pixel-v1.png。参考旧Hu身份与凛master-pixel-v2画风。Codex静态审查：琥珀棕发/金眼/绿裙/单尾/鞋与开朗表情保持，但发丝和衣褶仍过于细密，像素颗粒比已认可凛参考更小；暂不接受为新正式风格，继续定向简化。未替换运行资产、未验收128pt实际播放或透明通道。
+
+## 新版像素母版候选 v2（2026-10-26）
+
+Codex内置imagegen定向编辑v1，原件exec-c5a1ddb0-fb21-4c8d-8ec7-8181c9c89df3.png，原样保存master-pixel-v2.png。完整提示见master-pixel-prompts.md。静态审查：较v1显著减少细碎发丝与衣褶，阶梯轮廓、方形像素簇和棕/绿/奶油色块更接近凛新版；棕色双尾卷发、金眼、花朵发饰、单猫尾、棕靴与开朗表情保持。Codex接受作为后续待机图集参考候选，非用户亲自确认。尚未通过128pt渲染、深浅背景透明边缘与动作连续验收，不替换生产素材。
