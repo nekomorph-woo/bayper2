@@ -1,0 +1,12 @@
+OK window {"count":1,"bounds":{"x":920,"y":410,"width":720,"height":620},"userData":"/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-sprite-verify-lYSH8q"}
+OK sandbox {"require":"undefined","process":"undefined","ipc":"undefined","frames":8}
+OK display-size {"scale":0.42524916943521596,"target":{"width":108.86378737541528,"height":163.2956810631229},"rendered":{"width":108.859375,"height":163.28125,"naturalWidth":256,"naturalHeight":384,"imageRendering":"pixelated"},"toleranceCssPx":0.015625}
+OK normal {"covered":true,"mode":"stop-at-end","status":"帧 8 / 8　循环 0","playLabel":"播放"}
+OK replay {"status":"帧 1 / 8　循环 0"}
+OK pause {"before":"帧 1 / 8　循环 0","pausedAt":"帧 1 / 8　循环 0","pausedLater":"帧 1 / 8　循环 0"}
+OK step {"before":1,"next":2,"prev":1}
+OK slow {"covered":true,"speed":"0.25","frame":1,"frameDurationMs":180,"expectedMs":720,"probeMs":360,"sameAtProbe":true,"advancedMs":739,"frameAfter":2}
+OK background {"dark":"dark","light":"","screenshots":["codex-rin-pixel-attention-v1-128pt-r2-dark.png","codex-rin-pixel-attention-v1-128pt-r2-light.png"]}
+OK navigation-block {"url":"file:///Volumes/Under_M2/morphiiouo/bayper/tools/sprite-pipeline/player.html","windows":1}
+OK cleanup {"path":"/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-sprite-verify-lYSH8q","error":null}
+OK exit {"code":0}

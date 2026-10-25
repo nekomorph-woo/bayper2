@@ -42,6 +42,8 @@ if (durations.some((duration) => !(duration > 0))) {
 }
 const totalMs = durations.reduce((sum, duration) => sum + duration, 0);
 const MAX_WAIT_MS = 30000;
+// Chromium LayoutUnit 以 1/64 CSS 点量化布局；容许一个量化单位的舍入，仍远小于 1 个可见像素。
+const LAYOUT_QUANTUM_CSS_PX = 1 / 64;
 const evidenceFile = path.resolve(evidencePath);
 const outputDir = path.dirname(evidenceFile);
 const prefix = path.basename(evidenceFile, '.json');
@@ -118,13 +120,14 @@ function saveEvidence(errorMessage) {
     const frameSize = manifest.spec.frame_size;
     const targetSize = { width: frameSize.width * displayScale,
       height: frameSize.height * displayScale };
-    const near = (actual, expected) => Math.abs(actual - expected) < 0.01;
+    const near = (actual, expected) => Math.abs(actual - expected) <= LAYOUT_QUANTUM_CSS_PX;
     expect('display-size', near(rendered.width, targetSize.width)
       && near(rendered.height, targetSize.height)
       && rendered.naturalWidth === frameSize.width
       && rendered.naturalHeight === frameSize.height
       && rendered.imageRendering === 'pixelated',
-      { scale: displayScale, target: targetSize, rendered });
+      { scale: displayScale, target: targetSize, rendered,
+        toleranceCssPx: LAYOUT_QUANTUM_CSS_PX });
     const pause = async () => {
       if ((await page.textContent('#play')) === '暂停') {
         await page.click('#play');

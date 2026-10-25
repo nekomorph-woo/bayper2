@@ -90,3 +90,5 @@ python3 tools/sprite-pipeline/test_sprite_pipeline.py -v
 播放器及验证器支持 `--display-scale 0.5`（默认1，允许0.1～4），仅设置CSS尺寸，源帧和manifest保持不变。256×384源帧在0.5时为128×192 CSS点，仍为pixelated。验证器新增display-size证据，记录实际getBoundingClientRect、源尺寸及计算样式。
 
 2026-10-26 Codex独立运行参数构造检查，并对rin/idle-pixel-v2运行0.5验证：实际128×192，循环、暂停、逐帧、慢放、背景切换及清理通过。证据`evidence/codex-rin-pixel-idle-v2-half.json`。这是工具能力与候选导入证据，不能代替连续视觉、跨动作和正式桌面合成验收。
+
+2026-10-26 非整数缩放复验：显示尺寸容差按1/64 CSS点布局量化单位限定，仍核对实际DOM、源尺寸和pixelated；避免0.01阈值误判0.014431点舍入。attention-pixel-v1按128/301比例的独立复验通过，首轮失败及r2证据均保留。该比例依据所有候选动作共同包围范围，不能逐帧fit改变角色大小；尚未替代正式桌面体验验收。
