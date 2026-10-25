@@ -445,3 +445,127 @@ test("POL-BUDGET-005 begin 前复核预算失败会取消未发送预留", (t) =
   assert.equal(activeCount(ctx), 0);
   assert.equal(sentCount(ctx), 1);
 });
+
+test("POL-BUDGET-006 精确恢复收尾失败的令牌而不清其他活跃", (t) => {
+  const ctx = makeContext(t);
+  const reservation = ctx.budget.reserve({ requestId: "cleanup-1", characterId: "a" });
+  assert.equal(reservation.reserved, true);
+  assert.equal(ctx.budget.beginAttempt(reservation.token).canSend, true);
+  ctx.db.exec(`
+    CREATE TRIGGER fail_cleanup BEFORE UPDATE ON automatic_budget_attempts
+    BEGIN SELECT RAISE(ABORT, 'forced failure'); END
+  `);
+  storageFailure(() => ctx.budget.finish(reservation.token, "success"));
+  assert.equal(rowOf(ctx, reservation.token).status, "in_flight");
+  assert.equal(rowOf(ctx, reservation.token).sent, 1);
+  assert.equal(sentCount(ctx), 1);
+
+  // 恢复 SQL 仍故障时必须明确存储失败，不能伪装成普通 BUSY。
+  storageFailure(() =>
+    ctx.budget.reserve({ requestId: "during-recovery-failure", characterId: "b" }),
+  );
+  assert.equal(rowOf(ctx, reservation.token).status, "in_flight");
+  ctx.db.exec("DROP TRIGGER fail_cleanup");
+
+  const recovered = ctx.budget.recover(reservation.token);
+  assert.equal(recovered.recovered, true);
+  assert.equal(rowOf(ctx, reservation.token).status, "success");
+  assert.equal(rowOf(ctx, reservation.token).sent, 1);
+  assert.equal(activeCount(ctx), 0);
+
+  ctx.setNow(START + 2 * HOUR);
+  const next = ctx.budget.reserve({ requestId: "next-active", characterId: "b" });
+  assert.equal(next.reserved, true);
+  const unknown = ctx.budget.recover("missing-token");
+  assert.deepEqual(unknown, { recovered: false, reason: "NOT_PENDING" });
+  assert.equal(rowOf(ctx, next.token).status, "reserved");
+  assert.equal(activeCount(ctx), 1);
+  ctx.budget.cancel(next.token);
+  assert.equal(activeCount(ctx), 0);
+});
+
+test("POL-BUDGET-007 恢复事务回滚保留待收尾令牌", (t) => {
+  const ctx = makeContext(t);
+  const reservation = ctx.budget.reserve({ requestId: "rollback-1", characterId: "a" });
+  assert.equal(reservation.reserved, true);
+  assert.equal(ctx.budget.beginAttempt(reservation.token).canSend, true);
+  ctx.db.exec(`
+    CREATE TRIGGER fail_update BEFORE UPDATE ON automatic_budget_attempts
+    BEGIN SELECT RAISE(ABORT, 'forced failure'); END
+  `);
+  storageFailure(() => ctx.budget.finish(reservation.token, "success"));
+  assert.equal(rowOf(ctx, reservation.token).status, "in_flight");
+
+  // 恢复 SQL 仍故障：reserve 必须抛存储错误，而不是返回 BUSY。
+  storageFailure(() =>
+    ctx.budget.reserve({ requestId: "recovery-fails", characterId: "b" }),
+  );
+  assert.equal(rowOf(ctx, reservation.token).status, "in_flight");
+  ctx.db.exec("DROP TRIGGER fail_update");
+
+  // 恢复 UPDATE 成功但随后 INSERT 失败时，整笔事务回滚，内存待收尾标记必须保留。
+  ctx.setNow(START + 2 * HOUR);
+  ctx.db.exec(`
+    CREATE TRIGGER fail_insert BEFORE INSERT ON automatic_budget_attempts
+    BEGIN SELECT RAISE(ABORT, 'forced failure'); END
+  `);
+  storageFailure(() =>
+    ctx.budget.reserve({ requestId: "insert-fails", characterId: "b" }),
+  );
+  assert.equal(rowOf(ctx, reservation.token).status, "in_flight");
+  assert.equal(rowOf(ctx, reservation.token).sent, 1);
+  ctx.db.exec("DROP TRIGGER fail_insert");
+
+  const next = ctx.budget.reserve({ requestId: "after-rollback", characterId: "b" });
+  assert.equal(next.reserved, true);
+  const recovered = rowOf(ctx, reservation.token);
+  assert.equal(recovered.status, "success");
+  assert.equal(recovered.sent, 1);
+  assert.equal(sentCount(ctx), 1);
+  ctx.budget.cancel(next.token);
+  assert.equal(activeCount(ctx), 0);
+});
+
+test("POL-BUDGET-008 成功 finish/cancel 清理精确待收尾标记", (t) => {
+  const ctx = makeContext(t);
+  const finished = ctx.budget.reserve({ requestId: "finish-cleanup", characterId: "a" });
+  assert.equal(finished.reserved, true);
+  assert.equal(ctx.budget.beginAttempt(finished.token).canSend, true);
+  ctx.db.exec(`
+    CREATE TRIGGER fail_cleanup_finish BEFORE UPDATE ON automatic_budget_attempts
+    BEGIN SELECT RAISE(ABORT, 'forced failure'); END
+  `);
+  storageFailure(() => ctx.budget.finish(finished.token, "success"));
+  ctx.db.exec("DROP TRIGGER fail_cleanup_finish");
+  assert.equal(ctx.budget.finish(finished.token, "success").status, "success");
+  assert.deepEqual(ctx.budget.recover(finished.token), {
+    recovered: false,
+    reason: "NOT_PENDING",
+  });
+  assert.equal(ctx.budget.finish(finished.token, "failed").duplicate, true);
+  assert.deepEqual(ctx.budget.recover(finished.token), {
+    recovered: false,
+    reason: "NOT_PENDING",
+  });
+
+  ctx.setNow(START + 2 * HOUR);
+  const cancelled = ctx.budget.reserve({ requestId: "cancel-cleanup", characterId: "b" });
+  assert.equal(cancelled.reserved, true);
+  assert.equal(ctx.budget.beginAttempt(cancelled.token).canSend, true);
+  ctx.db.exec(`
+    CREATE TRIGGER fail_cleanup_cancel BEFORE UPDATE ON automatic_budget_attempts
+    BEGIN SELECT RAISE(ABORT, 'forced failure'); END
+  `);
+  storageFailure(() => ctx.budget.cancel(cancelled.token));
+  ctx.db.exec("DROP TRIGGER fail_cleanup_cancel");
+  assert.equal(ctx.budget.cancel(cancelled.token).status, "cancelled");
+  assert.deepEqual(ctx.budget.recover(cancelled.token), {
+    recovered: false,
+    reason: "NOT_PENDING",
+  });
+  assert.equal(ctx.budget.cancel(cancelled.token).duplicate, true);
+  assert.deepEqual(ctx.budget.recover(cancelled.token), {
+    recovered: false,
+    reason: "NOT_PENDING",
+  });
+});

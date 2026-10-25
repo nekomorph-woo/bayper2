@@ -104,3 +104,5 @@ POL-BUDGET-001～005：Codex独立automatic-budget.spec.cjs 5/5通过；005补�
 预算r2补测真正未finish的in_flight重启，Codex独立5/5通过，POL-BUDGET-003模块分支补齐；当前001～005模块契约PASS，详见s06a-review.md与s06a-codex-r2.log。
 
 POL-MEMUI-001～006当前模块PASS：Codex独立真实Electron/SQLite/受控HTTP验收6/6，相关聊天UI10/10、聊天及记忆服务32/32通过。005/006完整Contract补入s03c-memory-ui-plan.md；矩阵、失败→修复及边界见s03c-review.md。当前用户可按角色分页查看并本地纠正/删除，旧显示与在途隔离；自然语言定位、主动共享和全页native未覆盖。
+
+POL-BUDGET-006～008收尾存储故障/精确恢复/事务回滚契约与Oracle见s06a-review.md末节；Codex独立预算8/8通过（s04c-codex-budget-r3.log同批还含6项来源回归）。仅已失败token可恢复，内存记录提交后清除。来源006未通过，不将本次预算结果冒充来源分析全部完成。

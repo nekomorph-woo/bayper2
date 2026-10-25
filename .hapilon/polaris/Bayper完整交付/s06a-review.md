@@ -17,3 +17,15 @@ r2补齐003后受托接受预算模块；模块接受不等于自动活动接受
 审查发现：003使用send helper，该helper已经finish(success)，因此不能证明in_flight重启恢复。补一个未finish的真实begin，关闭重开后断言interrupted、sent保留、占位释放、旧token与ID不可再发送、额度不释放；不能把开发者自述当该分支证据。
 
 r2：Claude仅增33行测试，Codex审查diff并独立回归5/5通过（evidence/s06a-codex-r2.log）；没有修改生产实现。首轮日志保留，明确区分原覆盖缺口与补验后的结论。
+
+## S04集成发现的预算收尾恢复
+
+2026-10-26，source-analysis真实SQLite故障揭示finish/cancel失败会遗留in_flight。新增精确token待收尾记录，reserve/recover仅重做本地收尾，不重发网络、不回退sent/冷却。首次返修在事务内提前清内存，后续INSERT回滚会丢恢复标记，Codex退回补失败再修；现在仅COMMIT成功后清记录，持续SQL错误明确BUDGET_STORAGE_FAILED，不伪装BUSY。
+
+| Contract | Given / When / Expected与Oracle | 结果 |
+| --- | --- | --- |
+| POL-BUDGET-006 | 已发请求finish/cancel SQL故障→恢复：仅该token可收尾，未知token不能释放另一个活跃请求；SQL行与计数独立核对 | PASS |
+| POL-BUDGET-007 | 收尾UPDATE失败后解除，再让reserve INSERT失败回滚→再次解除：旧row仍in_flight但恢复标记保留，下一次可终结并正常占位；sent保持1，持续故障明确报错 | PASS |
+| POL-BUDGET-008 | 收尾故障后成功finish/cancel及重复终态：精确标记清除，recover返回NOT_PENDING，不改变其他请求 | PASS |
+
+Codex独立运行预算001～008及来源001～005/007，14/14通过，evidence/s04c-codex-budget-r3.log；开发失败为s04c-analysis/11-budget-prefix-failure.log，测试时序中间失败亦保留。只接受本预算修复；来源006仍已知FAIL、整个S04未接受，source-analysis文件暂不纳入本次预算提交。

@@ -101,6 +101,11 @@ function createAutomaticBudget({ db, now = () => Date.now() } = {}) {
       SET status = 'cancelled', finished_at = ?, updated_at = ?
       WHERE id = ? AND status IN ('reserved', 'in_flight')
     `),
+    recover: db.prepare(`
+      UPDATE automatic_budget_attempts
+      SET status = ?, finished_at = ?, updated_at = ?
+      WHERE id = ? AND status IN ('reserved', 'in_flight')
+    `),
     counts: db.prepare(`
       SELECT
         SUM(CASE WHEN sent_at > ? THEN 1 ELSE 0 END) AS hour,
@@ -186,6 +191,58 @@ function createAutomaticBudget({ db, now = () => Date.now() } = {}) {
     return null;
   }
 
+  /* 收尾 UPDATE 失败时只记住该 token 与目标状态；下一次写操作按精确 token
+     重试恢复，绝不扫描或释放其他活跃记录。 */
+  const cleanupNeeded = new Map();
+
+  function recoverToken(at, token, entry) {
+    const result = statements.recover.run(entry.status, at, at, token);
+    if (Number(result.changes) === 1) {
+      return true;
+    }
+    // 行已不存在或已被其他路径终结时，同样不再占用占位。
+    const row = statements.byId.get(token);
+    return !row || TERMINAL_STATUSES.has(row.status);
+  }
+
+  /* 只在事务内做数据库恢复；内存标记由调用方在 COMMIT 成功后清除。
+     恢复 SQL 持续失败时抛出存储错误，从而禁止新发送，不能伪装成 BUSY。 */
+  function recoverPending(at) {
+    const recovered = [];
+    for (const [token, entry] of [...cleanupNeeded]) {
+      if (!recoverToken(at, token, entry)) {
+        throw new AppError("BUDGET_STORAGE_FAILED", "预算占位恢复未生效。");
+      }
+      recovered.push(token);
+    }
+    return recovered;
+  }
+
+  function forgetRecovered(tokens) {
+    for (const token of tokens) {
+      cleanupNeeded.delete(token);
+    }
+  }
+
+  function recover(tokenValue) {
+    const token = cleanText(tokenValue, "token");
+    const entry = cleanupNeeded.get(token);
+    if (!entry) {
+      return { recovered: false, reason: "NOT_PENDING" };
+    }
+    const outcome = transact(() => {
+      const at = logicalNow();
+      persistLogicalTime(at);
+      if (!recoverToken(at, token, entry)) {
+        throw new AppError("BUDGET_STORAGE_FAILED", "预算占位恢复未生效。");
+      }
+      return { recovered: true, status: entry.status };
+    });
+    // COMMIT 成功后才清内存；失败时保留待恢复标记。
+    cleanupNeeded.delete(token);
+    return outcome;
+  }
+
   /* 构造时恢复上次未终结记录：已发送的保留消耗，未发送的保持 sent=0，
      两者都释放全局占位。约定每个运行实例只构造一次；不能用构造恢复去
      主动释放另一个仍在运行的实例。 */
@@ -198,32 +255,42 @@ function createAutomaticBudget({ db, now = () => Date.now() } = {}) {
   function reserve({ requestId, characterId } = {}) {
     const request = cleanText(requestId, "requestId");
     const character = cleanText(characterId, "characterId");
-    return transact(() => {
+    const outcome = transact(() => {
       const at = logicalNow();
       persistLogicalTime(at);
+      const recovered = recoverPending(at);
 
       const existing = statements.byRequest.get(request);
       if (existing) {
         return {
-          reserved: false,
-          token: existing.id,
-          reason: "DUPLICATE_REQUEST",
-          status: existing.status,
+          result: {
+            reserved: false,
+            token: existing.id,
+            reason: "DUPLICATE_REQUEST",
+            status: existing.status,
+          },
+          recovered,
         };
       }
       const active = statements.active.get();
       if (active) {
-        return { reserved: false, token: null, reason: "BUSY", status: active.status };
+        return {
+          result: { reserved: false, token: null, reason: "BUSY", status: active.status },
+          recovered,
+        };
       }
       const blocked = budgetBlock(countsAt(at), lastSentFor(character), at);
       if (blocked) {
-        return { reserved: false, token: null, reason: blocked };
+        return { result: { reserved: false, token: null, reason: blocked }, recovered };
       }
 
       const token = crypto.randomUUID();
       statements.insert.run(token, request, character, at, at);
-      return { reserved: true, token, reason: null };
+      return { result: { reserved: true, token, reason: null }, recovered };
     });
+    // INSERT/DENY 与恢复共同提交后才清内存；任何回滚都完整保留待恢复标记。
+    forgetRecovered(outcome.recovered);
+    return outcome.result;
   }
 
   /* 首次 begin 才返回 canSend=true；重复调用或已结束令牌一律 false。
@@ -258,45 +325,67 @@ function createAutomaticBudget({ db, now = () => Date.now() } = {}) {
     if (!OUTCOMES.has(outcome)) {
       throw new AppError("INVALID_INPUT", "发送结果无效。");
     }
-    return transact(() => {
-      const at = logicalNow();
-      persistLogicalTime(at);
-      const row = statements.byId.get(token);
-      if (!row) {
-        throw new AppError("ATTEMPT_NOT_FOUND", "自动发送预留不存在。");
+    try {
+      const result = transact(() => {
+        const at = logicalNow();
+        persistLogicalTime(at);
+        const row = statements.byId.get(token);
+        if (!row) {
+          throw new AppError("ATTEMPT_NOT_FOUND", "自动发送预留不存在。");
+        }
+        if (TERMINAL_STATUSES.has(row.status)) {
+          return { finished: true, status: row.status, sent: row.sent === 1, duplicate: true };
+        }
+        if (row.status === "reserved") {
+          // 未发送尝试不能宣称发送结果；由 cancel 结束并释放占位。
+          return { finished: false, status: "reserved", sent: false, reason: "NOT_SENT" };
+        }
+        const changed = statements.finish.run(outcome, at, at, row.id);
+        if (Number(changed.changes) !== 1) {
+          const current = statements.byId.get(token);
+          return { finished: true, status: current.status, sent: current.sent === 1, duplicate: true };
+        }
+        return { finished: true, status: outcome, sent: true, duplicate: false };
+      });
+      if (TERMINAL_STATUSES.has(result.status)) {
+        cleanupNeeded.delete(token);
       }
-      if (TERMINAL_STATUSES.has(row.status)) {
-        return { finished: true, status: row.status, sent: row.sent === 1, duplicate: true };
+      return result;
+    } catch (error) {
+      if (error instanceof AppError && error.code === "BUDGET_STORAGE_FAILED") {
+        cleanupNeeded.set(token, { status: outcome });
       }
-      if (row.status === "reserved") {
-        // 未发送尝试不能宣称发送结果；由 cancel 结束并释放占位。
-        return { finished: false, status: "reserved", sent: false, reason: "NOT_SENT" };
-      }
-      const result = statements.finish.run(outcome, at, at, row.id);
-      if (Number(result.changes) !== 1) {
-        const current = statements.byId.get(token);
-        return { finished: true, status: current.status, sent: current.sent === 1, duplicate: true };
-      }
-      return { finished: true, status: outcome, sent: true, duplicate: false };
-    });
+      throw error;
+    }
   }
 
   /* 发送前取消不消耗次数；发送后取消保留已消耗尝试，二者都释放占位。 */
   function cancel(tokenValue) {
     const token = cleanText(tokenValue, "token");
-    return transact(() => {
-      const at = logicalNow();
-      persistLogicalTime(at);
-      const row = statements.byId.get(token);
-      if (!row) {
-        throw new AppError("ATTEMPT_NOT_FOUND", "自动发送预留不存在。");
+    try {
+      const result = transact(() => {
+        const at = logicalNow();
+        persistLogicalTime(at);
+        const row = statements.byId.get(token);
+        if (!row) {
+          throw new AppError("ATTEMPT_NOT_FOUND", "自动发送预留不存在。");
+        }
+        if (TERMINAL_STATUSES.has(row.status)) {
+          return { cancelled: true, status: row.status, sent: row.sent === 1, duplicate: true };
+        }
+        statements.cancel.run(at, at, row.id);
+        return { cancelled: true, status: "cancelled", sent: row.sent === 1, duplicate: false };
+      });
+      if (TERMINAL_STATUSES.has(result.status)) {
+        cleanupNeeded.delete(token);
       }
-      if (TERMINAL_STATUSES.has(row.status)) {
-        return { cancelled: true, status: row.status, sent: row.sent === 1, duplicate: true };
+      return result;
+    } catch (error) {
+      if (error instanceof AppError && error.code === "BUDGET_STORAGE_FAILED") {
+        cleanupNeeded.set(token, { status: "cancelled" });
       }
-      statements.cancel.run(at, at, row.id);
-      return { cancelled: true, status: "cancelled", sent: row.sent === 1, duplicate: false };
-    });
+      throw error;
+    }
   }
 
   function status(characterIdValue) {
@@ -321,7 +410,7 @@ function createAutomaticBudget({ db, now = () => Date.now() } = {}) {
     };
   }
 
-  return { reserve, beginAttempt, finish, cancel, status };
+  return { reserve, beginAttempt, finish, cancel, recover, status };
 }
 
 module.exports = { createAutomaticBudget };
