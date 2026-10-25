@@ -96,3 +96,9 @@ POL-SOURCE-006补充授权许可释放与事务失败保持，完整Contract见s
 POL-MEMUI-001～004的完整Contract见[s03c-memory-ui-plan.md](s03c-memory-ui-plan.md)，POL-SOURCE-007～011见[s04b-reader-plan.md](s04b-reader-plan.md)。Codex受托确认；尚未独立执行，均NOT_COVERED。各规格明确真实业务入口、构造数据边界及独立Oracle，不用读取适配器替代完整来源分析。
 
 POL-SOURCE-007～012读取适配：完整Contract见s04b-reader-plan.md与s04b-review.md的012补充。Codex独立权限+读取12/12通过（evidence/s04b-codex-r2.log），当前模块边界PASS；设置、自动分析预算与实际记忆发布仍NOT_COVERED。旧初版结果不能替代r2。
+
+POL-BUDGET-001～004正式Contract见[s06a-budget-plan.md](s06a-budget-plan.md)，Codex受托确认，共用自动请求滚动额度、发送尝试幂等、重启/时钟及事务边界。尚未实现验收，NOT_COVERED；不以预算模块替代自动活动调度。
+
+POL-BUDGET-001～005：Codex独立automatic-budget.spec.cjs 5/5通过；005补充Contract与覆盖矩阵见s06a-review.md，证据evidence/s06a-codex-first.log。003真正in_flight重启分支尚需补测，当前不标完整预算契约PASS；真实调度/HTTP集成未覆盖。
+
+预算r2补测真正未finish的in_flight重启，Codex独立5/5通过，POL-BUDGET-003模块分支补齐；当前001～005模块契约PASS，详见s06a-review.md与s06a-codex-r2.log。
