@@ -1,0 +1,9 @@
+# 澄新版像素招呼候选
+
+2026-10-26，Codex内置imagegen，参考master-pixel-v1，原始exec-e76ec2b6-9746-4ba7-b5fc-dc76c26bbbe5.png保存wave-pixel-v1.png。4×2八帧；既有Claude实现的sprite_pipeline导出256×384、neutral-height298、统一scale0.622129，no-loop，时序180/100/110/160/160/140/110/220ms。源哈希/脚锚详animations/wave-pixel-v1/manifest.json，执行日志见完整交付evidence/cheng-wave-pixel-v1-export.log。
+
+Codex查看原图与浅棋盘对照：两只垂耳、小圆尾、鞋完整，同一只手抬起与收回，银白短发/蓝灰眼/蓝裙身份基本稳定。细微脸与裙边轮廓差异仍需实际128pt及idle→wave→idle衔接审查；不把导出成功当正式播放或自然度PASS。GUI由S08a测试占用，本轮未启播放器、未接生产。源帧画布不是桌面本体尺寸，继续按本体约128×128pt等比适配。
+
+```text
+Production candidate pixel animation sprite sheet of EXACT Cheng reference. EIGHT frames FOUR columns TWO rows, equal cells, whole figure each cell. Very generous transparent margins: character including BOTH long drooping rabbit ears uses at most60% cell width and70% cell height, centrally placed. No ears/hands/feet touch edges. Cheng silverwhite bob, bluegray eyes, TWO long white lop rabbit ears pinkinsides symmetrically draping to shoulders, navybows and small creamflowers, cream maid headband, slateblue maid dress creamapron navy neckbow, ivory tights navyMaryJane shoes goldbuckles, ONE small round white rabbit tail viewer-right. Match chunky square pixels and stepped contour and3-head compact proportion, no soft detail/texture/dithering/glow. Fixed camera same face/headsize/bodycostume in ALL8. Soft CLOSED smile, open eyes. Gentle reserved greeting using only hand on IMAGE LEFT:1 neutral botharms relaxed;2 leftimage hand rises to waist;3 rises to chest;4 palmout near left shoulder below ear;5 wrist tilts slightly outward;6 wrist returns;7 handlowers to chest;8 exactneutral like1. IMAGE RIGHT arm staysdown ALWAYS. Both feet identical planted baseline, head torso ears andtail steady, no turn no mirrored body. All ear tips whole. Actual transparent RGBA, no shadow/background/text/grid/labels/motionlines. This is one continuous movement of the same character, not independent redesigned poses.
+```
