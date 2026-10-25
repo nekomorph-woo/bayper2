@@ -23,3 +23,7 @@ Edit this Cheng eight-frame idle sprite sheet. Keep exact character identity and
 ```sh
 python3 tools/sprite-pipeline/sprite_pipeline.py --source assets/characters/cheng/source/idle-pixel-v2.png --columns 4 --rows 2 --frame-size 256x384 --neutral-height 298 --output assets/characters/cheng/animations/idle-pixel-v2
 ```
+
+## v2实际128pt播放器检查
+
+Codex运行既有verify-player，display-scale=128/301=0.4252491694（按全帧最大本体高301）；显示画布约108.86×163.30 CSS点，本体高约128pt，画布留白不算本体。循环、暂停、逐帧、0.25×速度、深浅背景、导航限制与退出/临时目录清理全部通过。证据tools/sprite-pipeline/evidence/codex-cheng-pixel-idle-v2-128pt.json及配套log/light/dark图。Codex实际查看两背景截图，银发/蓝裙/长耳/鞋保持可辨，没有明显背景光晕；截图与自动播放检查不代替持续自然度、首尾接缝及正式桌面跨动作体验。仍为候选，未接生产。
