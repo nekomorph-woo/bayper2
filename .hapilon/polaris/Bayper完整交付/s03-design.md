@@ -1,6 +1,6 @@
 # S03 对话与独属记忆设计
 
-Codex受托决定，2026-10-25。依据PRD、memory-and-sharing.md及本目录memory-source-review.md。分S03a本地记忆业务与检索对照、S03b真实模型聊天与在途失效；权限目录分析在S05接入同一记忆入口。
+Codex受托决定，2026-10-25。依据PRD、memory-and-sharing.md及本目录memory-source-review.md。分S03a本地记忆业务与检索对照、S03b真实模型聊天与在途失效；权限目录分析在S04接入同一记忆入口。
 
 ## 数据职责
 
