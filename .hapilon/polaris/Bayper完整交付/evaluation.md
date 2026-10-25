@@ -108,3 +108,9 @@ Codex查看实际窗口截图并核对真实GUI测试操作。当前1200×800及
 两轮独立审查修复五项首版风险和消息同毫秒UUID排序、启动遗留pending、退出收束问题，见s03b-review.md与s03b-recovery-review.md。启动恢复是显式选项，main下一轮必须开启；dispose必须在关闭数据库之前await，不能把服务存在说成主进程已经使用。构造关闭重开数据库不是真实操作系统崩溃，后续需进程级证据。
 
 记忆提炼采用保守词面grounding：保存引用原话，不直接信任模型改述；不宣称事实判断或稳定语义键已解决。生产chat约700行、chat-store约300行、测试约1100行，按请求/持久化职责分开，没有通用框架。服务阶段可保存；整个聊天记忆系统尚未验收，继续s03b-window-plan.md第一切片。
+
+## POL-CHAT-008真实服务首轮：FAIL
+
+Codex显式执行`node --no-warnings --test tests/acceptance/live-chat.spec.cjs`。2026-10-26本地时间，实际GET /models确认deepseek-flash；独立临时SQLite、真实生产chat/memory服务，未经过GUI。真实chat只发1次，无自动重试、无测试seed。模型回应“温茶。好，我记着了。”，但memoryApplied=0，活动记忆为空，测试在学习环节正确失败；重开回忆、纠正和删除后三步未执行，不记为通过。
+
+证据`s03b-codex-live-chat-first.log`及`s03b-pol-chat-008-live-first-failure.json`只包含构造内容与必要计数，不含Key/Authorization/reasoning_content。独立语义判断同样FAIL：口头承诺与保存事实不一致；回复中的虚构茶壶动作也不能作为共同经历入库。失败规格见s03b-live-review.md，待窗口开发释放共享文件后修复并复验。该测试入口属于有效的失败检测成果，不表示生产功能已通过；保留明确单独执行入口，避免默认回归消耗真实API。
