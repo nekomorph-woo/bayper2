@@ -1,0 +1,122 @@
+✔ POL-MEMORY-001 A 独属记忆、重复来源与昵称变化 (12.946125ms)
+✖ POL-MEMORY-003 已定位纠正更新原始与派生持有者并保留来源 (8.796958ms)
+✔ POL-MEMORY-004 默认删除正文、重建索引、旧来源不能回填 (9.526292ms)
+✔ POL-MEMORY-005 只 A 忘记、拒绝回流与明确新许可 (8.089417ms)
+✔ POL-MEMORY-006 临时偏好到期、长期内容与时间门禁 (8.832ms)
+✔ POL-MEMORY-007 指定分享只复制片段且拒绝二次转发 (7.35475ms)
+✔ 上下文版本、回滚与错误边界 (9.10075ms)
+✔ 记忆正文中的指令不被执行，错误不泄漏其他角色正文 (6.621875ms)
+✔ REVIEW-1 correct 排除原始与独立持有者旧来源并保留新纠正来源 (9.612709ms)
+✖ REVIEW-2 A仅自己忘记后B仍可纠正且不会恢复A（r2 Oracle） (7.314584ms)
+✔ REVIEW-3 同一来源多个事实的提炼批次重扫幂等 (6.629709ms)
+✖ REVIEW-4 自然提问命中相关记忆并保留无关干扰项 (11.770084ms)
+✖ REVIEW-5 B可纠正并默认删除自己持有的共享记忆（r2 Oracle） (6.500708ms)
+✖ REVIEW-6 反问与不同否定表达保留正反候选，时效/删除/隔离仍硬过滤 (8.649125ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 9
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 166.487167
+
+✖ failing tests:
+
+test at tests/acceptance/memory.spec.cjs:113:1
+✖ POL-MEMORY-003 已定位纠正更新原始与派生持有者并保留来源 (8.796958ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  2 !== 3
+  
+      at TestContext.<anonymous> (/Volumes/Under_M2/morphiiouo/bayper/tests/acceptance/memory.spec.cjs:151:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1103:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:785:18)
+      at Test.postRun (node:internal/test_runner/test:1232:19)
+      at Test.run (node:internal/test_runner/test:1160:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 3,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/memory.spec.cjs:681:1
+✖ REVIEW-2 A仅自己忘记后B仍可纠正且不会恢复A（r2 Oracle） (7.314584ms)
+  Error [MemoryError]: 只能纠正自己持有的原始事实。
+      at /Volumes/Under_M2/morphiiouo/bayper/app/memory.cjs:456:15
+      at Object.transaction (/Volumes/Under_M2/morphiiouo/bayper/app/memory-store.cjs:395:22)
+      at Object.correct (/Volumes/Under_M2/morphiiouo/bayper/app/memory.cjs:453:18)
+      at TestContext.<anonymous> (/Volumes/Under_M2/morphiiouo/bayper/tests/acceptance/memory.spec.cjs:710:33)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1103:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:785:18)
+      at Test.postRun (node:internal/test_runner/test:1232:19)
+      at Test.run (node:internal/test_runner/test:1160:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {
+    code: 'FACT_NOT_HELD'
+  }
+
+test at tests/acceptance/memory.spec.cjs:820:1
+✖ REVIEW-4 自然提问命中相关记忆并保留无关干扰项 (11.770084ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert.ok(negated.some((entry) => entry.id === cilantroLike.entry.id))
+  
+      at TestContext.<anonymous> (/Volumes/Under_M2/morphiiouo/bayper/tests/acceptance/memory.spec.cjs:904:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1103:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:785:18)
+      at Test.postRun (node:internal/test_runner/test:1232:19)
+      at Test.run (node:internal/test_runner/test:1160:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/memory.spec.cjs:914:1
+✖ REVIEW-5 B可纠正并默认删除自己持有的共享记忆（r2 Oracle） (6.500708ms)
+  Error [MemoryError]: 只能纠正自己持有的原始事实。
+      at /Volumes/Under_M2/morphiiouo/bayper/app/memory.cjs:456:15
+      at Object.transaction (/Volumes/Under_M2/morphiiouo/bayper/app/memory-store.cjs:395:22)
+      at Object.correct (/Volumes/Under_M2/morphiiouo/bayper/app/memory.cjs:453:18)
+      at TestContext.<anonymous> (/Volumes/Under_M2/morphiiouo/bayper/tests/acceptance/memory.spec.cjs:929:33)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1103:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:785:18)
+      at Test.postRun (node:internal/test_runner/test:1232:19)
+      at Test.run (node:internal/test_runner/test:1160:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {
+    code: 'FACT_NOT_HELD'
+  }
+
+test at tests/acceptance/memory.spec.cjs:987:1
+✖ REVIEW-6 反问与不同否定表达保留正反候选，时效/删除/隔离仍硬过滤 (8.649125ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert.ok(coffeeIds.includes(coffeeLike.entry.id))
+  
+      at TestContext.<anonymous> (/Volumes/Under_M2/morphiiouo/bayper/tests/acceptance/memory.spec.cjs:1039:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1103:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:785:18)
+      at Test.postRun (node:internal/test_runner/test:1232:19)
+      at Test.run (node:internal/test_runner/test:1160:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

@@ -1,0 +1,47 @@
+✔ POL-MEMORY-001 A 独属记忆、重复来源与昵称变化 (14.448959ms)
+✔ POL-MEMORY-003 已定位纠正更新原始与派生持有者并保留来源 (10.093917ms)
+✔ POL-MEMORY-004 默认删除正文、重建索引、旧来源不能回填 (9.792833ms)
+✔ POL-MEMORY-005 只 A 忘记、拒绝回流与明确新许可 (7.699291ms)
+✔ POL-MEMORY-006 临时偏好到期、长期内容与时间门禁 (9.003208ms)
+✔ POL-MEMORY-007 指定分享只复制片段且拒绝二次转发 (8.496959ms)
+✔ 上下文版本、回滚与错误边界 (7.993ms)
+✔ 记忆正文中的指令不被执行，错误不泄漏其他角色正文 (7.597542ms)
+✔ REVIEW-1 correct 排除原始与独立持有者旧来源并保留新纠正来源 (10.602084ms)
+✔ REVIEW-2 A仅自己忘记后B仍可纠正且不会恢复A（r2 Oracle） (9.306958ms)
+✔ REVIEW-3 同一来源多个事实的提炼批次重扫幂等 (7.355375ms)
+✔ REVIEW-4 自然提问命中相关记忆并保留无关干扰项 (12.123875ms)
+✔ REVIEW-5 B可纠正并默认删除自己持有的共享记忆（r2 Oracle） (8.711375ms)
+✔ REVIEW-6 反问与不同否定表达保留正反候选，时效/删除/隔离仍硬过滤 (8.950708ms)
+✖ REVIEW-7 索引重建覆盖第 10000 条之后的尾部记忆 (846.488ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 14
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1029.232875
+
+✖ failing tests:
+
+test at tests/acceptance/memory.spec.cjs:1075:1
+✖ REVIEW-7 索引重建覆盖第 10000 条之后的尾部记忆 (846.488ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  10000 !== 10001
+  
+      at TestContext.<anonymous> (/Volumes/Under_M2/morphiiouo/bayper/tests/acceptance/memory.spec.cjs:1116:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1103:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:785:18)
+      at Test.postRun (node:internal/test_runner/test:1232:19)
+      at Test.run (node:internal/test_runner/test:1160:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 10000,
+    expected: 10001,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

@@ -1,0 +1,6736 @@
+{
+  "generatedAt": "2026-10-25T15:57:23.835Z",
+  "scenarioTime": "2026-10-25T14:00:00.000Z",
+  "defaultStrategy": "hybrid",
+  "strategies": {
+    "char": {
+      "strategy": "char",
+      "overall": {
+        "queries": 44,
+        "expected": 38,
+        "hits": 29,
+        "recall": 0.7632,
+        "top1Hits": 26,
+        "top1Eligible": 34,
+        "falseHits": 1,
+        "violations": 0,
+        "cleanQueries": 35,
+        "avgLatencyMs": 0.06,
+        "p50LatencyMs": 0.053
+      },
+      "splits": {
+        "tune": {
+          "queries": 29,
+          "expected": 27,
+          "hits": 27,
+          "recall": 1,
+          "top1Hits": 24,
+          "top1Eligible": 24,
+          "falseHits": 1,
+          "violations": 0,
+          "cleanQueries": 28,
+          "avgLatencyMs": 0.067,
+          "p50LatencyMs": 0.056
+        },
+        "holdout": {
+          "queries": 11,
+          "expected": 8,
+          "hits": 2,
+          "recall": 0.25,
+          "top1Hits": 2,
+          "top1Eligible": 7,
+          "falseHits": 0,
+          "violations": 0,
+          "cleanQueries": 6,
+          "avgLatencyMs": 0.037,
+          "p50LatencyMs": 0.036
+        },
+        "codex": {
+          "queries": 4,
+          "expected": 3,
+          "hits": 0,
+          "recall": 0,
+          "top1Hits": 0,
+          "top1Eligible": 3,
+          "falseHits": 0,
+          "violations": 0,
+          "cleanQueries": 1,
+          "avgLatencyMs": 0.067,
+          "p50LatencyMs": 0.071
+        }
+      },
+      "rows": [
+        {
+          "id": "t01",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "雨天",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "rain-coffee"
+          ],
+          "returnedLabels": [
+            "rain-coffee"
+          ],
+          "hitLabels": [
+            "rain-coffee"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.276,
+          "results": [
+            {
+              "id": "6c7cd2eb-140b-41ed-8f0c-ab4608dff872",
+              "label": "rain-coffee",
+              "score": -4.947242,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "雨"
+                ],
+                [
+                  "天"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t02",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "雨",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "rain-coffee"
+          ],
+          "returnedLabels": [
+            "rain-coffee"
+          ],
+          "hitLabels": [
+            "rain-coffee"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.069,
+          "results": [
+            {
+              "id": "6c7cd2eb-140b-41ed-8f0c-ab4608dff872",
+              "label": "rain-coffee",
+              "score": -3.090262,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "雨"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t03",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "咖啡",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "rain-coffee",
+            "coffee-corrected",
+            "review-coffee-plain"
+          ],
+          "returnedLabels": [
+            "coffee-corrected",
+            "rain-coffee",
+            "review-coffee-plain",
+            "review-coffee-repair"
+          ],
+          "hitLabels": [
+            "coffee-corrected",
+            "rain-coffee",
+            "review-coffee-plain"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [
+            "review-coffee-repair"
+          ],
+          "violations": [],
+          "latencyMs": 0.081,
+          "results": [
+            {
+              "id": "825f62f2-297c-4da7-8bdc-03d3ca6e93fb",
+              "label": "coffee-corrected",
+              "score": -4.018258,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "咖"
+                ],
+                [
+                  "啡"
+                ]
+              ],
+              "concepts": []
+            },
+            {
+              "id": "6c7cd2eb-140b-41ed-8f0c-ab4608dff872",
+              "label": "rain-coffee",
+              "score": -3.71396,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "咖"
+                ],
+                [
+                  "啡"
+                ]
+              ],
+              "concepts": []
+            },
+            {
+              "id": "f89201b1-0c7a-45ad-ab2a-f1623acfb44f",
+              "label": "review-coffee-plain",
+              "score": -3.71396,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "咖"
+                ],
+                [
+                  "啡"
+                ]
+              ],
+              "concepts": []
+            },
+            {
+              "id": "df3b3dff-0a33-4e18-9924-5cd129794d93",
+              "label": "review-coffee-repair",
+              "score": -3.71396,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "咖"
+                ],
+                [
+                  "啡"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t04",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "无糖咖啡",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "coffee-corrected"
+          ],
+          "returnedLabels": [
+            "coffee-corrected"
+          ],
+          "hitLabels": [
+            "coffee-corrected"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.07,
+          "results": [
+            {
+              "id": "825f62f2-297c-4da7-8bdc-03d3ca6e93fb",
+              "label": "coffee-corrected",
+              "score": -9.689437,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "无"
+                ],
+                [
+                  "糖"
+                ],
+                [
+                  "咖"
+                ],
+                [
+                  "啡"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t05",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "团子",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cat"
+          ],
+          "returnedLabels": [
+            "cat"
+          ],
+          "hitLabels": [
+            "cat"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.059,
+          "results": [
+            {
+              "id": "4caabf57-8ca0-45d8-98a0-a3a6b4e0f0d2",
+              "label": "cat",
+              "score": -5.827478,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "团"
+                ],
+                [
+                  "子"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t06",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "猫",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cat"
+          ],
+          "returnedLabels": [
+            "cat"
+          ],
+          "hitLabels": [
+            "cat"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.045,
+          "results": [
+            {
+              "id": "4caabf57-8ca0-45d8-98a0-a3a6b4e0f0d2",
+              "label": "cat",
+              "score": -2.913739,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "猫"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t07",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "Bayper",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "project"
+          ],
+          "returnedLabels": [
+            "project"
+          ],
+          "hitLabels": [
+            "project"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.083,
+          "results": [
+            {
+              "id": "156c8f6d-95a5-4766-8d97-09418de5d1b5",
+              "label": "project",
+              "score": -3.044156,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "bayper"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t08",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "项目代号",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "project"
+          ],
+          "returnedLabels": [
+            "project"
+          ],
+          "hitLabels": [
+            "project"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.068,
+          "results": [
+            {
+              "id": "156c8f6d-95a5-4766-8d97-09418de5d1b5",
+              "label": "project",
+              "score": -9.602043,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "项"
+                ],
+                [
+                  "目"
+                ],
+                [
+                  "代"
+                ],
+                [
+                  "号"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t09",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "node.js",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "latin"
+          ],
+          "returnedLabels": [
+            "latin"
+          ],
+          "hitLabels": [
+            "latin"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.053,
+          "results": [
+            {
+              "id": "376dc0a2-5ea5-4bed-aa18-d6373f3d250f",
+              "label": "latin",
+              "score": -6.686916,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "node"
+                ],
+                [
+                  "js"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t10",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "番茄钟",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "pomodoro"
+          ],
+          "returnedLabels": [
+            "pomodoro"
+          ],
+          "hitLabels": [
+            "pomodoro"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.074,
+          "results": [
+            {
+              "id": "926df6f9-48fd-4077-88f0-4a697c28fc29",
+              "label": "pomodoro",
+              "score": -8.500437,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "番"
+                ],
+                [
+                  "茄"
+                ],
+                [
+                  "钟"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t11",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "讨厌香菜",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cilantro-dislike"
+          ],
+          "returnedLabels": [
+            "cilantro-dislike"
+          ],
+          "hitLabels": [
+            "cilantro-dislike"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.072,
+          "results": [
+            {
+              "id": "426ebfa0-23e9-4c91-b22d-8a9f52b685d3",
+              "label": "cilantro-dislike",
+              "score": -11.779784,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "讨"
+                ],
+                [
+                  "厌"
+                ],
+                [
+                  "香"
+                ],
+                [
+                  "菜"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t12",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "香菜拌牛肉",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cilantro-dish"
+          ],
+          "returnedLabels": [
+            "cilantro-dish"
+          ],
+          "hitLabels": [
+            "cilantro-dish"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.079,
+          "results": [
+            {
+              "id": "dc2b8e49-0a2b-4e5a-a55e-7a0d8dee1ee5",
+              "label": "cilantro-dish",
+              "score": -15.017143,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "香"
+                ],
+                [
+                  "菜"
+                ],
+                [
+                  "拌"
+                ],
+                [
+                  "牛"
+                ],
+                [
+                  "肉"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t13",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "自行车",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "returnedLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "hitLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.068,
+          "results": [
+            {
+              "id": "bd4d8440-22b5-494e-a16e-f668069031b7",
+              "label": "bike",
+              "score": -7.215464,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "自"
+                ],
+                [
+                  "行"
+                ],
+                [
+                  "车"
+                ]
+              ],
+              "concepts": []
+            },
+            {
+              "id": "0d6cc9db-0f96-4998-b174-10da35587e70",
+              "label": "review-bike-river",
+              "score": -6.707512,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "自"
+                ],
+                [
+                  "行"
+                ],
+                [
+                  "车"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t14",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "通勤",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "bike"
+          ],
+          "returnedLabels": [
+            "bike"
+          ],
+          "hitLabels": [
+            "bike"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.052,
+          "results": [
+            {
+              "id": "bd4d8440-22b5-494e-a16e-f668069031b7",
+              "label": "bike",
+              "score": -6.180524,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "通"
+                ],
+                [
+                  "勤"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t15",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "摄影",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "camera"
+          ],
+          "returnedLabels": [
+            "camera"
+          ],
+          "hitLabels": [
+            "camera"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.054,
+          "results": [
+            {
+              "id": "d9acb7b9-fdab-4fa0-a143-663097e46786",
+              "label": "camera",
+              "score": -5.014664,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "摄"
+                ],
+                [
+                  "影"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t16",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "拍街景",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "camera"
+          ],
+          "returnedLabels": [
+            "camera"
+          ],
+          "hitLabels": [
+            "camera"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.055,
+          "results": [
+            {
+              "id": "d9acb7b9-fdab-4fa0-a143-663097e46786",
+              "label": "camera",
+              "score": -8.268879,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "拍"
+                ],
+                [
+                  "街"
+                ],
+                [
+                  "景"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t17",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "可乐",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cola"
+          ],
+          "returnedLabels": [
+            "cola"
+          ],
+          "hitLabels": [
+            "cola"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.046,
+          "results": [
+            {
+              "id": "617d91eb-c447-4230-b2e1-4a5bfad17337",
+              "label": "cola",
+              "score": -7.032642,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "可"
+                ],
+                [
+                  "乐"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t18",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "红茶",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "tea"
+          ],
+          "returnedLabels": [
+            "tea"
+          ],
+          "hitLabels": [
+            "tea"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.044,
+          "results": [
+            {
+              "id": "aabf8d60-6f78-49dc-a939-ab00a0ba2697",
+              "label": "tea",
+              "score": -6.184264,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "红"
+                ],
+                [
+                  "茶"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t19",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "茶",
+          "gate": "expiry",
+          "note": null,
+          "expectedLabels": [
+            "tea"
+          ],
+          "returnedLabels": [
+            "tea"
+          ],
+          "hitLabels": [
+            "tea"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.041,
+          "results": [
+            {
+              "id": "aabf8d60-6f78-49dc-a939-ab00a0ba2697",
+              "label": "tea",
+              "score": -2.785104,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "茶"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t20",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "奶茶",
+          "gate": "expiry",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.034,
+          "results": []
+        },
+        {
+          "id": "t21",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "甜咖啡",
+          "gate": "correction",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.038,
+          "results": []
+        },
+        {
+          "id": "t22",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "海边日出",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "sea-sunrise"
+          ],
+          "returnedLabels": [
+            "sea-sunrise"
+          ],
+          "hitLabels": [
+            "sea-sunrise"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.06,
+          "results": [
+            {
+              "id": "bb11ab63-0a8f-4689-8e5d-1d10d541d1b1",
+              "label": "sea-sunrise",
+              "score": -9.358213,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "海"
+                ],
+                [
+                  "边"
+                ],
+                [
+                  "日"
+                ],
+                [
+                  "出"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t23",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "青岛蛤蜊",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "anecdote"
+          ],
+          "returnedLabels": [
+            "anecdote"
+          ],
+          "hitLabels": [
+            "anecdote"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.059,
+          "results": [
+            {
+              "id": "9098ad89-b6e0-4769-8aa3-0ff62f10caac",
+              "label": "anecdote",
+              "score": -8.681646,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "青"
+                ],
+                [
+                  "岛"
+                ],
+                [
+                  "蛤"
+                ],
+                [
+                  "蜊"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t24",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "花生",
+          "gate": "deleted",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.033,
+          "results": []
+        },
+        {
+          "id": "t25",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "同事林舟",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "work-contact"
+          ],
+          "returnedLabels": [
+            "work-contact"
+          ],
+          "hitLabels": [
+            "work-contact"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.056,
+          "results": [
+            {
+              "id": "93165c73-f277-42fa-a407-475354f66625",
+              "label": "work-contact",
+              "score": -9.598806,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "同"
+                ],
+                [
+                  "事"
+                ],
+                [
+                  "林"
+                ],
+                [
+                  "舟"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t26",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "杭州",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "city"
+          ],
+          "returnedLabels": [
+            "city"
+          ],
+          "hitLabels": [
+            "city"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.046,
+          "results": [
+            {
+              "id": "e6b4e8f9-e225-4b9d-b4d6-f4544f98d5da",
+              "label": "city",
+              "score": -7.416066,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "杭"
+                ],
+                [
+                  "州"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t27",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "等这个项目结束以后想坐慢车去北方看雪",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "long"
+          ],
+          "returnedLabels": [
+            "long"
+          ],
+          "hitLabels": [
+            "long"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.161,
+          "results": [
+            {
+              "id": "0f047b03-4232-44ea-9070-b6ecd3c97d3f",
+              "label": "long",
+              "score": -37.949988,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "等"
+                ],
+                [
+                  "这"
+                ],
+                [
+                  "个"
+                ],
+                [
+                  "项"
+                ],
+                [
+                  "目"
+                ],
+                [
+                  "结"
+                ],
+                [
+                  "束"
+                ],
+                [
+                  "以"
+                ],
+                [
+                  "后"
+                ],
+                [
+                  "想"
+                ],
+                [
+                  "坐"
+                ],
+                [
+                  "慢"
+                ],
+                [
+                  "车"
+                ],
+                [
+                  "去"
+                ],
+                [
+                  "北"
+                ],
+                [
+                  "方"
+                ],
+                [
+                  "看"
+                ],
+                [
+                  "雪"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t28",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "潜水",
+          "gate": "isolation",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.036,
+          "results": []
+        },
+        {
+          "id": "t29",
+          "split": "tune",
+          "character": "b",
+          "characterId": "role-b",
+          "query": "天文",
+          "gate": "isolation",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.034,
+          "results": []
+        },
+        {
+          "id": "h01",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "下雨天",
+          "gate": null,
+          "note": "同义表达，关键词无共同字面",
+          "expectedLabels": [
+            "rain-coffee"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "rain-coffee"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.036,
+          "results": []
+        },
+        {
+          "id": "h02",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "单车",
+          "gate": null,
+          "note": "同义表达",
+          "expectedLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.032,
+          "results": []
+        },
+        {
+          "id": "h03",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "相机",
+          "gate": null,
+          "note": "同义表达",
+          "expectedLabels": [
+            "camera"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "camera"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.032,
+          "results": []
+        },
+        {
+          "id": "h04",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "北方的雪",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "long"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "long"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.038,
+          "results": []
+        },
+        {
+          "id": "h05",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "核桃",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "nut"
+          ],
+          "returnedLabels": [
+            "nut"
+          ],
+          "hitLabels": [
+            "nut"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.045,
+          "results": [
+            {
+              "id": "e24bed03-f9a0-4881-9a9c-f9e8af0c5b77",
+              "label": "nut",
+              "score": -6.798318,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "核"
+                ],
+                [
+                  "桃"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "h06",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "杏仁",
+          "gate": "deleted",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.032,
+          "results": []
+        },
+        {
+          "id": "h07",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "番茄酱",
+          "gate": null,
+          "note": "相近但无关的假阳性探测",
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.035,
+          "results": []
+        },
+        {
+          "id": "h08",
+          "split": "holdout",
+          "character": "b",
+          "characterId": "role-b",
+          "query": "潜水",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "b-sea"
+          ],
+          "returnedLabels": [
+            "b-sea"
+          ],
+          "hitLabels": [
+            "b-sea"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.045,
+          "results": [
+            {
+              "id": "5300458e-d8f7-45fa-bf5a-dbe2c3933622",
+              "label": "b-sea",
+              "score": -6.180524,
+              "originCharacterId": "role-b",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "潜"
+                ],
+                [
+                  "水"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "h09",
+          "split": "holdout",
+          "character": "b",
+          "characterId": "role-b",
+          "query": "项目代号",
+          "gate": "isolation",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.039,
+          "results": []
+        },
+        {
+          "id": "h10",
+          "split": "holdout",
+          "character": "b",
+          "characterId": "role-b",
+          "query": "甜咖啡",
+          "gate": "correction",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.035,
+          "results": []
+        },
+        {
+          "id": "h11",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "影片",
+          "gate": null,
+          "note": "未加入概念表，用于记录有限同义扩展的漏召回边界",
+          "expectedLabels": [
+            "cinema"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "cinema"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.04,
+          "results": []
+        },
+        {
+          "id": "c01",
+          "split": "codex",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "还记得我平时喝什么咖啡吗",
+          "gate": null,
+          "note": "自然提问；同库含咖啡机维修干扰",
+          "expectedLabels": [
+            "review-coffee-plain"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "review-coffee-plain"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.073,
+          "results": []
+        },
+        {
+          "id": "c02",
+          "split": "codex",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "我想骑车放松通常去哪里",
+          "gate": null,
+          "note": "自然提问；同库含河流地图干扰",
+          "expectedLabels": [
+            "review-bike-river"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "review-bike-river"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.068,
+          "results": []
+        },
+        {
+          "id": "c03",
+          "split": "codex",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "我们上次在海边看到了什么",
+          "gate": null,
+          "note": "自然提问；同库含日落壁纸干扰",
+          "expectedLabels": [
+            "review-seaside-sunset"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "review-seaside-sunset"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.071,
+          "results": []
+        },
+        {
+          "id": "c04",
+          "split": "codex",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "你还记得蓝鲸吗",
+          "gate": "isolation",
+          "note": "宽召回下的角色隔离",
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.054,
+          "results": []
+        }
+      ]
+    },
+    "segment": {
+      "strategy": "segment",
+      "overall": {
+        "queries": 44,
+        "expected": 38,
+        "hits": 31,
+        "recall": 0.8158,
+        "top1Hits": 28,
+        "top1Eligible": 34,
+        "falseHits": 1,
+        "violations": 0,
+        "cleanQueries": 37,
+        "avgLatencyMs": 0.044,
+        "p50LatencyMs": 0.043
+      },
+      "splits": {
+        "tune": {
+          "queries": 29,
+          "expected": 27,
+          "hits": 27,
+          "recall": 1,
+          "top1Hits": 24,
+          "top1Eligible": 24,
+          "falseHits": 1,
+          "violations": 0,
+          "cleanQueries": 28,
+          "avgLatencyMs": 0.047,
+          "p50LatencyMs": 0.046
+        },
+        "holdout": {
+          "queries": 11,
+          "expected": 8,
+          "hits": 3,
+          "recall": 0.375,
+          "top1Hits": 3,
+          "top1Eligible": 7,
+          "falseHits": 0,
+          "violations": 0,
+          "cleanQueries": 7,
+          "avgLatencyMs": 0.037,
+          "p50LatencyMs": 0.035
+        },
+        "codex": {
+          "queries": 4,
+          "expected": 3,
+          "hits": 1,
+          "recall": 0.3333,
+          "top1Hits": 1,
+          "top1Eligible": 3,
+          "falseHits": 0,
+          "violations": 0,
+          "cleanQueries": 2,
+          "avgLatencyMs": 0.043,
+          "p50LatencyMs": 0.042
+        }
+      },
+      "rows": [
+        {
+          "id": "t01",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "雨天",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "rain-coffee"
+          ],
+          "returnedLabels": [
+            "rain-coffee"
+          ],
+          "hitLabels": [
+            "rain-coffee"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.077,
+          "results": [
+            {
+              "id": "6c7cd2eb-140b-41ed-8f0c-ab4608dff872",
+              "label": "rain-coffee",
+              "score": -3.090262,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "雨天"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t02",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "雨",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "rain-coffee"
+          ],
+          "returnedLabels": [
+            "rain-coffee"
+          ],
+          "hitLabels": [
+            "rain-coffee"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.044,
+          "results": [
+            {
+              "id": "6c7cd2eb-140b-41ed-8f0c-ab4608dff872",
+              "label": "rain-coffee",
+              "score": -3.090262,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "雨"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t03",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "咖啡",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "rain-coffee",
+            "coffee-corrected",
+            "review-coffee-plain"
+          ],
+          "returnedLabels": [
+            "coffee-corrected",
+            "rain-coffee",
+            "review-coffee-plain",
+            "review-coffee-repair"
+          ],
+          "hitLabels": [
+            "coffee-corrected",
+            "rain-coffee",
+            "review-coffee-plain"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [
+            "review-coffee-repair"
+          ],
+          "violations": [],
+          "latencyMs": 0.053,
+          "results": [
+            {
+              "id": "825f62f2-297c-4da7-8bdc-03d3ca6e93fb",
+              "label": "coffee-corrected",
+              "score": -2.009129,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "咖啡"
+                ]
+              ],
+              "concepts": []
+            },
+            {
+              "id": "6c7cd2eb-140b-41ed-8f0c-ab4608dff872",
+              "label": "rain-coffee",
+              "score": -1.85698,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "咖啡"
+                ]
+              ],
+              "concepts": []
+            },
+            {
+              "id": "f89201b1-0c7a-45ad-ab2a-f1623acfb44f",
+              "label": "review-coffee-plain",
+              "score": -1.85698,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "咖啡"
+                ]
+              ],
+              "concepts": []
+            },
+            {
+              "id": "df3b3dff-0a33-4e18-9924-5cd129794d93",
+              "label": "review-coffee-repair",
+              "score": -1.85698,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "咖啡"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t04",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "无糖咖啡",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "coffee-corrected"
+          ],
+          "returnedLabels": [
+            "coffee-corrected"
+          ],
+          "hitLabels": [
+            "coffee-corrected"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.058,
+          "results": [
+            {
+              "id": "825f62f2-297c-4da7-8bdc-03d3ca6e93fb",
+              "label": "coffee-corrected",
+              "score": -9.547971,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "无"
+                ],
+                [
+                  "糖"
+                ],
+                [
+                  "咖啡"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t05",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "团子",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cat"
+          ],
+          "returnedLabels": [
+            "cat"
+          ],
+          "hitLabels": [
+            "cat"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.049,
+          "results": [
+            {
+              "id": "4caabf57-8ca0-45d8-98a0-a3a6b4e0f0d2",
+              "label": "cat",
+              "score": -8.095527,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "团"
+                ],
+                [
+                  "子"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t06",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "猫",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cat"
+          ],
+          "returnedLabels": [
+            "cat"
+          ],
+          "hitLabels": [
+            "cat"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.043,
+          "results": [
+            {
+              "id": "4caabf57-8ca0-45d8-98a0-a3a6b4e0f0d2",
+              "label": "cat",
+              "score": -4.047763,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "猫"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t07",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "Bayper",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "project"
+          ],
+          "returnedLabels": [
+            "project"
+          ],
+          "hitLabels": [
+            "project"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.043,
+          "results": [
+            {
+              "id": "156c8f6d-95a5-4766-8d97-09418de5d1b5",
+              "label": "project",
+              "score": -3.044156,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "bayper"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t08",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "项目代号",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "project"
+          ],
+          "returnedLabels": [
+            "project"
+          ],
+          "hitLabels": [
+            "project"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.047,
+          "results": [
+            {
+              "id": "156c8f6d-95a5-4766-8d97-09418de5d1b5",
+              "label": "project",
+              "score": -4.988465,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "项目"
+                ],
+                [
+                  "代号"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t09",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "node.js",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "latin"
+          ],
+          "returnedLabels": [
+            "latin"
+          ],
+          "hitLabels": [
+            "latin"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.04,
+          "results": [
+            {
+              "id": "376dc0a2-5ea5-4bed-aa18-d6373f3d250f",
+              "label": "latin",
+              "score": -3.343458,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "nodejs"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t10",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "番茄钟",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "pomodoro"
+          ],
+          "returnedLabels": [
+            "pomodoro"
+          ],
+          "hitLabels": [
+            "pomodoro"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.049,
+          "results": [
+            {
+              "id": "926df6f9-48fd-4077-88f0-4a697c28fc29",
+              "label": "pomodoro",
+              "score": -6.690533,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "番茄"
+                ],
+                [
+                  "钟"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t11",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "讨厌香菜",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cilantro-dislike"
+          ],
+          "returnedLabels": [
+            "cilantro-dislike"
+          ],
+          "hitLabels": [
+            "cilantro-dislike"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.046,
+          "results": [
+            {
+              "id": "426ebfa0-23e9-4c91-b22d-8a9f52b685d3",
+              "label": "cilantro-dislike",
+              "score": -5.889892,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "讨厌"
+                ],
+                [
+                  "香菜"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t12",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "香菜拌牛肉",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cilantro-dish"
+          ],
+          "returnedLabels": [
+            "cilantro-dish"
+          ],
+          "hitLabels": [
+            "cilantro-dish"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.053,
+          "results": [
+            {
+              "id": "dc2b8e49-0a2b-4e5a-a55e-7a0d8dee1ee5",
+              "label": "cilantro-dish",
+              "score": -10.239684,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "香菜"
+                ],
+                [
+                  "拌"
+                ],
+                [
+                  "牛肉"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t13",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "自行车",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "returnedLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "hitLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.05,
+          "results": [
+            {
+              "id": "bd4d8440-22b5-494e-a16e-f668069031b7",
+              "label": "bike",
+              "score": -5.466501,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "自行"
+                ],
+                [
+                  "车"
+                ]
+              ],
+              "concepts": []
+            },
+            {
+              "id": "0d6cc9db-0f96-4998-b174-10da35587e70",
+              "label": "review-bike-river",
+              "score": -5.144142,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "自行"
+                ],
+                [
+                  "车"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t14",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "通勤",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "bike"
+          ],
+          "returnedLabels": [
+            "bike"
+          ],
+          "hitLabels": [
+            "bike"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.047,
+          "results": [
+            {
+              "id": "bd4d8440-22b5-494e-a16e-f668069031b7",
+              "label": "bike",
+              "score": -3.090262,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "通勤"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t15",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "摄影",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "camera"
+          ],
+          "returnedLabels": [
+            "camera"
+          ],
+          "hitLabels": [
+            "camera"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.04,
+          "results": [
+            {
+              "id": "d9acb7b9-fdab-4fa0-a143-663097e46786",
+              "label": "camera",
+              "score": -2.756293,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "摄影"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t16",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "拍街景",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "camera"
+          ],
+          "returnedLabels": [
+            "camera"
+          ],
+          "hitLabels": [
+            "camera"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.046,
+          "results": [
+            {
+              "id": "d9acb7b9-fdab-4fa0-a143-663097e46786",
+              "label": "camera",
+              "score": -6.649582,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "拍"
+                ],
+                [
+                  "街景"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t17",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "可乐",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cola"
+          ],
+          "returnedLabels": [
+            "cola"
+          ],
+          "hitLabels": [
+            "cola"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.043,
+          "results": [
+            {
+              "id": "617d91eb-c447-4230-b2e1-4a5bfad17337",
+              "label": "cola",
+              "score": -3.516321,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "可乐"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t18",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "红茶",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "tea"
+          ],
+          "returnedLabels": [
+            "tea"
+          ],
+          "hitLabels": [
+            "tea"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.039,
+          "results": [
+            {
+              "id": "aabf8d60-6f78-49dc-a939-ab00a0ba2697",
+              "label": "tea",
+              "score": -3.399159,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "红茶"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t19",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "茶",
+          "gate": "expiry",
+          "note": null,
+          "expectedLabels": [
+            "tea"
+          ],
+          "returnedLabels": [
+            "tea"
+          ],
+          "hitLabels": [
+            "tea"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.039,
+          "results": [
+            {
+              "id": "aabf8d60-6f78-49dc-a939-ab00a0ba2697",
+              "label": "tea",
+              "score": -2.785104,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "茶"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t20",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "奶茶",
+          "gate": "expiry",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.032,
+          "results": []
+        },
+        {
+          "id": "t21",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "甜咖啡",
+          "gate": "correction",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.034,
+          "results": []
+        },
+        {
+          "id": "t22",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "海边日出",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "sea-sunrise"
+          ],
+          "returnedLabels": [
+            "sea-sunrise"
+          ],
+          "hitLabels": [
+            "sea-sunrise"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.055,
+          "results": [
+            {
+              "id": "bb11ab63-0a8f-4689-8e5d-1d10d541d1b1",
+              "label": "sea-sunrise",
+              "score": -9.253197,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "海边"
+                ],
+                [
+                  "日"
+                ],
+                [
+                  "出"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t23",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "青岛蛤蜊",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "anecdote"
+          ],
+          "returnedLabels": [
+            "anecdote"
+          ],
+          "hitLabels": [
+            "anecdote"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.047,
+          "results": [
+            {
+              "id": "9098ad89-b6e0-4769-8aa3-0ff62f10caac",
+              "label": "anecdote",
+              "score": -4.340823,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "青岛"
+                ],
+                [
+                  "蛤蜊"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t24",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "花生",
+          "gate": "deleted",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.03,
+          "results": []
+        },
+        {
+          "id": "t25",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "同事林舟",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "work-contact"
+          ],
+          "returnedLabels": [
+            "work-contact"
+          ],
+          "hitLabels": [
+            "work-contact"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.052,
+          "results": [
+            {
+              "id": "93165c73-f277-42fa-a407-475354f66625",
+              "label": "work-contact",
+              "score": -9.446708,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "同事"
+                ],
+                [
+                  "林"
+                ],
+                [
+                  "舟"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t26",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "杭州",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "city"
+          ],
+          "returnedLabels": [
+            "city"
+          ],
+          "hitLabels": [
+            "city"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.04,
+          "results": [
+            {
+              "id": "e6b4e8f9-e225-4b9d-b4d6-f4544f98d5da",
+              "label": "city",
+              "score": -3.708033,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "杭州"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t27",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "等这个项目结束以后想坐慢车去北方看雪",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "long"
+          ],
+          "returnedLabels": [
+            "long"
+          ],
+          "hitLabels": [
+            "long"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.112,
+          "results": [
+            {
+              "id": "0f047b03-4232-44ea-9070-b6ecd3c97d3f",
+              "label": "long",
+              "score": -27.976333,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "等"
+                ],
+                [
+                  "这个"
+                ],
+                [
+                  "项目"
+                ],
+                [
+                  "结束"
+                ],
+                [
+                  "以后"
+                ],
+                [
+                  "想坐"
+                ],
+                [
+                  "慢"
+                ],
+                [
+                  "车"
+                ],
+                [
+                  "北方"
+                ],
+                [
+                  "看"
+                ],
+                [
+                  "雪"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t28",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "潜水",
+          "gate": "isolation",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.031,
+          "results": []
+        },
+        {
+          "id": "t29",
+          "split": "tune",
+          "character": "b",
+          "characterId": "role-b",
+          "query": "天文",
+          "gate": "isolation",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.034,
+          "results": []
+        },
+        {
+          "id": "h01",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "下雨天",
+          "gate": null,
+          "note": "同义表达，关键词无共同字面",
+          "expectedLabels": [
+            "rain-coffee"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "rain-coffee"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.033,
+          "results": []
+        },
+        {
+          "id": "h02",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "单车",
+          "gate": null,
+          "note": "同义表达",
+          "expectedLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.033,
+          "results": []
+        },
+        {
+          "id": "h03",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "相机",
+          "gate": null,
+          "note": "同义表达",
+          "expectedLabels": [
+            "camera"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "camera"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.033,
+          "results": []
+        },
+        {
+          "id": "h04",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "北方的雪",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "long"
+          ],
+          "returnedLabels": [
+            "long"
+          ],
+          "hitLabels": [
+            "long"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.05,
+          "results": [
+            {
+              "id": "0f047b03-4232-44ea-9070-b6ecd3c97d3f",
+              "label": "long",
+              "score": -5.752453,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "北方"
+                ],
+                [
+                  "雪"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "h05",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "核桃",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "nut"
+          ],
+          "returnedLabels": [
+            "nut"
+          ],
+          "hitLabels": [
+            "nut"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.043,
+          "results": [
+            {
+              "id": "e24bed03-f9a0-4881-9a9c-f9e8af0c5b77",
+              "label": "nut",
+              "score": -3.399159,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "核桃"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "h06",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "杏仁",
+          "gate": "deleted",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.038,
+          "results": []
+        },
+        {
+          "id": "h07",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "番茄酱",
+          "gate": null,
+          "note": "相近但无关的假阳性探测",
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.04,
+          "results": []
+        },
+        {
+          "id": "h08",
+          "split": "holdout",
+          "character": "b",
+          "characterId": "role-b",
+          "query": "潜水",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "b-sea"
+          ],
+          "returnedLabels": [
+            "b-sea"
+          ],
+          "hitLabels": [
+            "b-sea"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.039,
+          "results": [
+            {
+              "id": "5300458e-d8f7-45fa-bf5a-dbe2c3933622",
+              "label": "b-sea",
+              "score": -3.090262,
+              "originCharacterId": "role-b",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "潜水"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "h09",
+          "split": "holdout",
+          "character": "b",
+          "characterId": "role-b",
+          "query": "项目代号",
+          "gate": "isolation",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.035,
+          "results": []
+        },
+        {
+          "id": "h10",
+          "split": "holdout",
+          "character": "b",
+          "characterId": "role-b",
+          "query": "甜咖啡",
+          "gate": "correction",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.033,
+          "results": []
+        },
+        {
+          "id": "h11",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "影片",
+          "gate": null,
+          "note": "未加入概念表，用于记录有限同义扩展的漏召回边界",
+          "expectedLabels": [
+            "cinema"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "cinema"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.03,
+          "results": []
+        },
+        {
+          "id": "c01",
+          "split": "codex",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "还记得我平时喝什么咖啡吗",
+          "gate": null,
+          "note": "自然提问；同库含咖啡机维修干扰",
+          "expectedLabels": [
+            "review-coffee-plain"
+          ],
+          "returnedLabels": [
+            "review-coffee-plain"
+          ],
+          "hitLabels": [
+            "review-coffee-plain"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.056,
+          "results": [
+            {
+              "id": "f89201b1-0c7a-45ad-ab2a-f1623acfb44f",
+              "label": "review-coffee-plain",
+              "score": -7.480094,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "平时"
+                ],
+                [
+                  "喝"
+                ],
+                [
+                  "咖啡"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "c02",
+          "split": "codex",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "我想骑车放松通常去哪里",
+          "gate": null,
+          "note": "自然提问；同库含河流地图干扰",
+          "expectedLabels": [
+            "review-bike-river"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "review-bike-river"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.04,
+          "results": []
+        },
+        {
+          "id": "c03",
+          "split": "codex",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "我们上次在海边看到了什么",
+          "gate": null,
+          "note": "自然提问；同库含日落壁纸干扰",
+          "expectedLabels": [
+            "review-seaside-sunset"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "review-seaside-sunset"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.042,
+          "results": []
+        },
+        {
+          "id": "c04",
+          "split": "codex",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "你还记得蓝鲸吗",
+          "gate": "isolation",
+          "note": "宽召回下的角色隔离",
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.034,
+          "results": []
+        }
+      ]
+    },
+    "expanded": {
+      "strategy": "expanded",
+      "overall": {
+        "queries": 44,
+        "expected": 38,
+        "hits": 35,
+        "recall": 0.9211,
+        "top1Hits": 31,
+        "top1Eligible": 34,
+        "falseHits": 1,
+        "violations": 0,
+        "cleanQueries": 40,
+        "avgLatencyMs": 0.072,
+        "p50LatencyMs": 0.058
+      },
+      "splits": {
+        "tune": {
+          "queries": 29,
+          "expected": 27,
+          "hits": 27,
+          "recall": 1,
+          "top1Hits": 24,
+          "top1Eligible": 24,
+          "falseHits": 1,
+          "violations": 0,
+          "cleanQueries": 28,
+          "avgLatencyMs": 0.072,
+          "p50LatencyMs": 0.058
+        },
+        "holdout": {
+          "queries": 11,
+          "expected": 8,
+          "hits": 7,
+          "recall": 0.875,
+          "top1Hits": 6,
+          "top1Eligible": 7,
+          "falseHits": 0,
+          "violations": 0,
+          "cleanQueries": 10,
+          "avgLatencyMs": 0.073,
+          "p50LatencyMs": 0.05
+        },
+        "codex": {
+          "queries": 4,
+          "expected": 3,
+          "hits": 1,
+          "recall": 0.3333,
+          "top1Hits": 1,
+          "top1Eligible": 3,
+          "falseHits": 0,
+          "violations": 0,
+          "cleanQueries": 2,
+          "avgLatencyMs": 0.067,
+          "p50LatencyMs": 0.076
+        }
+      },
+      "rows": [
+        {
+          "id": "t01",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "雨天",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "rain-coffee"
+          ],
+          "returnedLabels": [
+            "rain-coffee"
+          ],
+          "hitLabels": [
+            "rain-coffee"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.345,
+          "results": [
+            {
+              "id": "6c7cd2eb-140b-41ed-8f0c-ab4608dff872",
+              "label": "rain-coffee",
+              "score": -3.090262,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "雨天",
+                  "下雨",
+                  "雨天",
+                  "下雨天"
+                ]
+              ],
+              "concepts": [
+                "下雨/雨天/下雨天"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "t02",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "雨",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "rain-coffee"
+          ],
+          "returnedLabels": [
+            "rain-coffee"
+          ],
+          "hitLabels": [
+            "rain-coffee"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.079,
+          "results": [
+            {
+              "id": "6c7cd2eb-140b-41ed-8f0c-ab4608dff872",
+              "label": "rain-coffee",
+              "score": -3.090262,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "雨"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t03",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "咖啡",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "rain-coffee",
+            "coffee-corrected",
+            "review-coffee-plain"
+          ],
+          "returnedLabels": [
+            "coffee-corrected",
+            "rain-coffee",
+            "review-coffee-plain",
+            "review-coffee-repair"
+          ],
+          "hitLabels": [
+            "coffee-corrected",
+            "rain-coffee",
+            "review-coffee-plain"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [
+            "review-coffee-repair"
+          ],
+          "violations": [],
+          "latencyMs": 0.099,
+          "results": [
+            {
+              "id": "825f62f2-297c-4da7-8bdc-03d3ca6e93fb",
+              "label": "coffee-corrected",
+              "score": -2.009129,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "咖啡",
+                  "咖啡",
+                  "拿铁"
+                ]
+              ],
+              "concepts": [
+                "咖啡/拿铁"
+              ]
+            },
+            {
+              "id": "6c7cd2eb-140b-41ed-8f0c-ab4608dff872",
+              "label": "rain-coffee",
+              "score": -1.85698,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "咖啡",
+                  "咖啡",
+                  "拿铁"
+                ]
+              ],
+              "concepts": [
+                "咖啡/拿铁"
+              ]
+            },
+            {
+              "id": "f89201b1-0c7a-45ad-ab2a-f1623acfb44f",
+              "label": "review-coffee-plain",
+              "score": -1.85698,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "咖啡",
+                  "咖啡",
+                  "拿铁"
+                ]
+              ],
+              "concepts": [
+                "咖啡/拿铁"
+              ]
+            },
+            {
+              "id": "df3b3dff-0a33-4e18-9924-5cd129794d93",
+              "label": "review-coffee-repair",
+              "score": -1.85698,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "咖啡",
+                  "咖啡",
+                  "拿铁"
+                ]
+              ],
+              "concepts": [
+                "咖啡/拿铁"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "t04",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "无糖咖啡",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "coffee-corrected"
+          ],
+          "returnedLabels": [
+            "coffee-corrected"
+          ],
+          "hitLabels": [
+            "coffee-corrected"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.098,
+          "results": [
+            {
+              "id": "825f62f2-297c-4da7-8bdc-03d3ca6e93fb",
+              "label": "coffee-corrected",
+              "score": -9.547971,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "无"
+                ],
+                [
+                  "糖"
+                ],
+                [
+                  "咖啡",
+                  "咖啡",
+                  "拿铁"
+                ]
+              ],
+              "concepts": [
+                "咖啡/拿铁"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "t05",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "团子",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cat"
+          ],
+          "returnedLabels": [
+            "cat"
+          ],
+          "hitLabels": [
+            "cat"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.063,
+          "results": [
+            {
+              "id": "4caabf57-8ca0-45d8-98a0-a3a6b4e0f0d2",
+              "label": "cat",
+              "score": -8.095527,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "团"
+                ],
+                [
+                  "子"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t06",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "猫",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cat"
+          ],
+          "returnedLabels": [
+            "cat"
+          ],
+          "hitLabels": [
+            "cat"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.074,
+          "results": [
+            {
+              "id": "4caabf57-8ca0-45d8-98a0-a3a6b4e0f0d2",
+              "label": "cat",
+              "score": -4.047763,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "猫",
+                  "猫",
+                  "猫咪"
+                ]
+              ],
+              "concepts": [
+                "猫/猫咪"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "t07",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "Bayper",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "project"
+          ],
+          "returnedLabels": [
+            "project"
+          ],
+          "hitLabels": [
+            "project"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.061,
+          "results": [
+            {
+              "id": "156c8f6d-95a5-4766-8d97-09418de5d1b5",
+              "label": "project",
+              "score": -3.044156,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "bayper"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t08",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "项目代号",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "project"
+          ],
+          "returnedLabels": [
+            "project"
+          ],
+          "hitLabels": [
+            "project"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.058,
+          "results": [
+            {
+              "id": "156c8f6d-95a5-4766-8d97-09418de5d1b5",
+              "label": "project",
+              "score": -4.988465,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "项目"
+                ],
+                [
+                  "代号"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t09",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "node.js",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "latin"
+          ],
+          "returnedLabels": [
+            "latin"
+          ],
+          "hitLabels": [
+            "latin"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.05,
+          "results": [
+            {
+              "id": "376dc0a2-5ea5-4bed-aa18-d6373f3d250f",
+              "label": "latin",
+              "score": -3.343458,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "nodejs"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t10",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "番茄钟",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "pomodoro"
+          ],
+          "returnedLabels": [
+            "pomodoro"
+          ],
+          "hitLabels": [
+            "pomodoro"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.077,
+          "results": [
+            {
+              "id": "926df6f9-48fd-4077-88f0-4a697c28fc29",
+              "label": "pomodoro",
+              "score": -6.690533,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "番茄",
+                  "番茄",
+                  "西红柿"
+                ],
+                [
+                  "钟"
+                ]
+              ],
+              "concepts": [
+                "番茄/西红柿"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "t11",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "讨厌香菜",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cilantro-dislike"
+          ],
+          "returnedLabels": [
+            "cilantro-dislike"
+          ],
+          "hitLabels": [
+            "cilantro-dislike"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.056,
+          "results": [
+            {
+              "id": "426ebfa0-23e9-4c91-b22d-8a9f52b685d3",
+              "label": "cilantro-dislike",
+              "score": -5.889892,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "讨厌"
+                ],
+                [
+                  "香菜"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t12",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "香菜拌牛肉",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cilantro-dish"
+          ],
+          "returnedLabels": [
+            "cilantro-dish"
+          ],
+          "hitLabels": [
+            "cilantro-dish"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.066,
+          "results": [
+            {
+              "id": "dc2b8e49-0a2b-4e5a-a55e-7a0d8dee1ee5",
+              "label": "cilantro-dish",
+              "score": -10.239684,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "香菜"
+                ],
+                [
+                  "拌"
+                ],
+                [
+                  "牛肉"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t13",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "自行车",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "returnedLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "hitLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.091,
+          "results": [
+            {
+              "id": "bd4d8440-22b5-494e-a16e-f668069031b7",
+              "label": "bike",
+              "score": -2.532009,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "自行车",
+                  "自行车",
+                  "单车",
+                  "骑车"
+                ]
+              ],
+              "concepts": [
+                "自行车/单车/骑车"
+              ]
+            },
+            {
+              "id": "0d6cc9db-0f96-4998-b174-10da35587e70",
+              "label": "review-bike-river",
+              "score": -2.353762,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "自行车",
+                  "自行车",
+                  "单车",
+                  "骑车"
+                ]
+              ],
+              "concepts": [
+                "自行车/单车/骑车"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "t14",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "通勤",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "bike"
+          ],
+          "returnedLabels": [
+            "bike"
+          ],
+          "hitLabels": [
+            "bike"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.048,
+          "results": [
+            {
+              "id": "bd4d8440-22b5-494e-a16e-f668069031b7",
+              "label": "bike",
+              "score": -3.090262,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "通勤"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t15",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "摄影",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "camera"
+          ],
+          "returnedLabels": [
+            "camera"
+          ],
+          "hitLabels": [
+            "camera"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.087,
+          "results": [
+            {
+              "id": "d9acb7b9-fdab-4fa0-a143-663097e46786",
+              "label": "camera",
+              "score": -2.756293,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "摄影",
+                  "摄影",
+                  "拍照",
+                  "相机",
+                  "拍摄"
+                ]
+              ],
+              "concepts": [
+                "摄影/拍照/相机/拍摄"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "t16",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "拍街景",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "camera"
+          ],
+          "returnedLabels": [
+            "camera"
+          ],
+          "hitLabels": [
+            "camera"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.049,
+          "results": [
+            {
+              "id": "d9acb7b9-fdab-4fa0-a143-663097e46786",
+              "label": "camera",
+              "score": -6.649582,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "拍"
+                ],
+                [
+                  "街景"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t17",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "可乐",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cola"
+          ],
+          "returnedLabels": [
+            "cola"
+          ],
+          "hitLabels": [
+            "cola"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.041,
+          "results": [
+            {
+              "id": "617d91eb-c447-4230-b2e1-4a5bfad17337",
+              "label": "cola",
+              "score": -3.516321,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "可乐"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t18",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "红茶",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "tea"
+          ],
+          "returnedLabels": [
+            "tea"
+          ],
+          "hitLabels": [
+            "tea"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.057,
+          "results": [
+            {
+              "id": "aabf8d60-6f78-49dc-a939-ab00a0ba2697",
+              "label": "tea",
+              "score": -3.399159,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "红茶"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t19",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "茶",
+          "gate": "expiry",
+          "note": null,
+          "expectedLabels": [
+            "tea"
+          ],
+          "returnedLabels": [
+            "tea"
+          ],
+          "hitLabels": [
+            "tea"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.052,
+          "results": [
+            {
+              "id": "aabf8d60-6f78-49dc-a939-ab00a0ba2697",
+              "label": "tea",
+              "score": -2.785104,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "茶"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t20",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "奶茶",
+          "gate": "expiry",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.04,
+          "results": []
+        },
+        {
+          "id": "t21",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "甜咖啡",
+          "gate": "correction",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.051,
+          "results": []
+        },
+        {
+          "id": "t22",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "海边日出",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "sea-sunrise"
+          ],
+          "returnedLabels": [
+            "sea-sunrise"
+          ],
+          "hitLabels": [
+            "sea-sunrise"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.066,
+          "results": [
+            {
+              "id": "bb11ab63-0a8f-4689-8e5d-1d10d541d1b1",
+              "label": "sea-sunrise",
+              "score": -9.253197,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "海边"
+                ],
+                [
+                  "日"
+                ],
+                [
+                  "出"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t23",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "青岛蛤蜊",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "anecdote"
+          ],
+          "returnedLabels": [
+            "anecdote"
+          ],
+          "hitLabels": [
+            "anecdote"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.058,
+          "results": [
+            {
+              "id": "9098ad89-b6e0-4769-8aa3-0ff62f10caac",
+              "label": "anecdote",
+              "score": -4.340823,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "青岛"
+                ],
+                [
+                  "蛤蜊"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t24",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "花生",
+          "gate": "deleted",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.038,
+          "results": []
+        },
+        {
+          "id": "t25",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "同事林舟",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "work-contact"
+          ],
+          "returnedLabels": [
+            "work-contact"
+          ],
+          "hitLabels": [
+            "work-contact"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.065,
+          "results": [
+            {
+              "id": "93165c73-f277-42fa-a407-475354f66625",
+              "label": "work-contact",
+              "score": -9.446708,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "同事"
+                ],
+                [
+                  "林"
+                ],
+                [
+                  "舟"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t26",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "杭州",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "city"
+          ],
+          "returnedLabels": [
+            "city"
+          ],
+          "hitLabels": [
+            "city"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.046,
+          "results": [
+            {
+              "id": "e6b4e8f9-e225-4b9d-b4d6-f4544f98d5da",
+              "label": "city",
+              "score": -3.708033,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "杭州"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t27",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "等这个项目结束以后想坐慢车去北方看雪",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "long"
+          ],
+          "returnedLabels": [
+            "long"
+          ],
+          "hitLabels": [
+            "long"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.113,
+          "results": [
+            {
+              "id": "0f047b03-4232-44ea-9070-b6ecd3c97d3f",
+              "label": "long",
+              "score": -27.976333,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "等"
+                ],
+                [
+                  "这个"
+                ],
+                [
+                  "项目"
+                ],
+                [
+                  "结束"
+                ],
+                [
+                  "以后"
+                ],
+                [
+                  "想坐"
+                ],
+                [
+                  "慢"
+                ],
+                [
+                  "车"
+                ],
+                [
+                  "北方"
+                ],
+                [
+                  "看"
+                ],
+                [
+                  "雪"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t28",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "潜水",
+          "gate": "isolation",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.035,
+          "results": []
+        },
+        {
+          "id": "t29",
+          "split": "tune",
+          "character": "b",
+          "characterId": "role-b",
+          "query": "天文",
+          "gate": "isolation",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.034,
+          "results": []
+        },
+        {
+          "id": "h01",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "下雨天",
+          "gate": null,
+          "note": "同义表达，关键词无共同字面",
+          "expectedLabels": [
+            "rain-coffee"
+          ],
+          "returnedLabels": [
+            "rain-coffee"
+          ],
+          "hitLabels": [
+            "rain-coffee"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.061,
+          "results": [
+            {
+              "id": "6c7cd2eb-140b-41ed-8f0c-ab4608dff872",
+              "label": "rain-coffee",
+              "score": -3.090262,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "下雨天",
+                  "下雨",
+                  "雨天",
+                  "下雨天"
+                ]
+              ],
+              "concepts": [
+                "下雨/雨天/下雨天"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "h02",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "单车",
+          "gate": null,
+          "note": "同义表达",
+          "expectedLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "returnedLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "hitLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.079,
+          "results": [
+            {
+              "id": "bd4d8440-22b5-494e-a16e-f668069031b7",
+              "label": "bike",
+              "score": -2.532009,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "单车",
+                  "自行车",
+                  "单车",
+                  "骑车"
+                ]
+              ],
+              "concepts": [
+                "自行车/单车/骑车"
+              ]
+            },
+            {
+              "id": "0d6cc9db-0f96-4998-b174-10da35587e70",
+              "label": "review-bike-river",
+              "score": -2.353762,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "单车",
+                  "自行车",
+                  "单车",
+                  "骑车"
+                ]
+              ],
+              "concepts": [
+                "自行车/单车/骑车"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "h03",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "相机",
+          "gate": null,
+          "note": "同义表达",
+          "expectedLabels": [
+            "camera"
+          ],
+          "returnedLabels": [
+            "camera"
+          ],
+          "hitLabels": [
+            "camera"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.102,
+          "results": [
+            {
+              "id": "d9acb7b9-fdab-4fa0-a143-663097e46786",
+              "label": "camera",
+              "score": -2.756293,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "相机",
+                  "摄影",
+                  "拍照",
+                  "相机",
+                  "拍摄"
+                ]
+              ],
+              "concepts": [
+                "摄影/拍照/相机/拍摄"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "h04",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "北方的雪",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "long"
+          ],
+          "returnedLabels": [
+            "long"
+          ],
+          "hitLabels": [
+            "long"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.05,
+          "results": [
+            {
+              "id": "0f047b03-4232-44ea-9070-b6ecd3c97d3f",
+              "label": "long",
+              "score": -5.752453,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "北方"
+                ],
+                [
+                  "雪"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "h05",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "核桃",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "nut"
+          ],
+          "returnedLabels": [
+            "nut"
+          ],
+          "hitLabels": [
+            "nut"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.054,
+          "results": [
+            {
+              "id": "e24bed03-f9a0-4881-9a9c-f9e8af0c5b77",
+              "label": "nut",
+              "score": -3.399159,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "核桃"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "h06",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "杏仁",
+          "gate": "deleted",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.039,
+          "results": []
+        },
+        {
+          "id": "h07",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "番茄酱",
+          "gate": null,
+          "note": "相近但无关的假阳性探测",
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.245,
+          "results": []
+        },
+        {
+          "id": "h08",
+          "split": "holdout",
+          "character": "b",
+          "characterId": "role-b",
+          "query": "潜水",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "b-sea"
+          ],
+          "returnedLabels": [
+            "b-sea"
+          ],
+          "hitLabels": [
+            "b-sea"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.048,
+          "results": [
+            {
+              "id": "5300458e-d8f7-45fa-bf5a-dbe2c3933622",
+              "label": "b-sea",
+              "score": -3.090262,
+              "originCharacterId": "role-b",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "潜水"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "h09",
+          "split": "holdout",
+          "character": "b",
+          "characterId": "role-b",
+          "query": "项目代号",
+          "gate": "isolation",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.043,
+          "results": []
+        },
+        {
+          "id": "h10",
+          "split": "holdout",
+          "character": "b",
+          "characterId": "role-b",
+          "query": "甜咖啡",
+          "gate": "correction",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.05,
+          "results": []
+        },
+        {
+          "id": "h11",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "影片",
+          "gate": null,
+          "note": "未加入概念表，用于记录有限同义扩展的漏召回边界",
+          "expectedLabels": [
+            "cinema"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "cinema"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.036,
+          "results": []
+        },
+        {
+          "id": "c01",
+          "split": "codex",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "还记得我平时喝什么咖啡吗",
+          "gate": null,
+          "note": "自然提问；同库含咖啡机维修干扰",
+          "expectedLabels": [
+            "review-coffee-plain"
+          ],
+          "returnedLabels": [
+            "review-coffee-plain"
+          ],
+          "hitLabels": [
+            "review-coffee-plain"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.079,
+          "results": [
+            {
+              "id": "f89201b1-0c7a-45ad-ab2a-f1623acfb44f",
+              "label": "review-coffee-plain",
+              "score": -7.480094,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "平时"
+                ],
+                [
+                  "喝"
+                ],
+                [
+                  "咖啡",
+                  "咖啡",
+                  "拿铁"
+                ]
+              ],
+              "concepts": [
+                "咖啡/拿铁"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "c02",
+          "split": "codex",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "我想骑车放松通常去哪里",
+          "gate": null,
+          "note": "自然提问；同库含河流地图干扰",
+          "expectedLabels": [
+            "review-bike-river"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "review-bike-river"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.074,
+          "results": []
+        },
+        {
+          "id": "c03",
+          "split": "codex",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "我们上次在海边看到了什么",
+          "gate": null,
+          "note": "自然提问；同库含日落壁纸干扰",
+          "expectedLabels": [
+            "review-seaside-sunset"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "review-seaside-sunset"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.076,
+          "results": []
+        },
+        {
+          "id": "c04",
+          "split": "codex",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "你还记得蓝鲸吗",
+          "gate": "isolation",
+          "note": "宽召回下的角色隔离",
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.041,
+          "results": []
+        }
+      ]
+    },
+    "hybrid": {
+      "strategy": "hybrid",
+      "overall": {
+        "queries": 44,
+        "expected": 38,
+        "hits": 37,
+        "recall": 0.9737,
+        "top1Hits": 33,
+        "top1Eligible": 34,
+        "falseHits": 3,
+        "violations": 0,
+        "cleanQueries": 40,
+        "avgLatencyMs": 0.068,
+        "p50LatencyMs": 0.052
+      },
+      "splits": {
+        "tune": {
+          "queries": 29,
+          "expected": 27,
+          "hits": 27,
+          "recall": 1,
+          "top1Hits": 24,
+          "top1Eligible": 24,
+          "falseHits": 1,
+          "violations": 0,
+          "cleanQueries": 28,
+          "avgLatencyMs": 0.054,
+          "p50LatencyMs": 0.048
+        },
+        "holdout": {
+          "queries": 11,
+          "expected": 8,
+          "hits": 7,
+          "recall": 0.875,
+          "top1Hits": 6,
+          "top1Eligible": 7,
+          "falseHits": 0,
+          "violations": 0,
+          "cleanQueries": 10,
+          "avgLatencyMs": 0.066,
+          "p50LatencyMs": 0.067
+        },
+        "codex": {
+          "queries": 4,
+          "expected": 3,
+          "hits": 3,
+          "recall": 1,
+          "top1Hits": 3,
+          "top1Eligible": 3,
+          "falseHits": 2,
+          "violations": 0,
+          "cleanQueries": 2,
+          "avgLatencyMs": 0.179,
+          "p50LatencyMs": 0.201
+        }
+      },
+      "rows": [
+        {
+          "id": "t01",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "雨天",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "rain-coffee"
+          ],
+          "returnedLabels": [
+            "rain-coffee"
+          ],
+          "hitLabels": [
+            "rain-coffee"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.047,
+          "results": [
+            {
+              "id": "6c7cd2eb-140b-41ed-8f0c-ab4608dff872",
+              "label": "rain-coffee",
+              "score": -3.090262,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "雨天"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t02",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "雨",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "rain-coffee"
+          ],
+          "returnedLabels": [
+            "rain-coffee"
+          ],
+          "hitLabels": [
+            "rain-coffee"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.043,
+          "results": [
+            {
+              "id": "6c7cd2eb-140b-41ed-8f0c-ab4608dff872",
+              "label": "rain-coffee",
+              "score": -3.090262,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "雨"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t03",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "咖啡",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "rain-coffee",
+            "coffee-corrected",
+            "review-coffee-plain"
+          ],
+          "returnedLabels": [
+            "coffee-corrected",
+            "rain-coffee",
+            "review-coffee-plain",
+            "review-coffee-repair"
+          ],
+          "hitLabels": [
+            "coffee-corrected",
+            "rain-coffee",
+            "review-coffee-plain"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [
+            "review-coffee-repair"
+          ],
+          "violations": [],
+          "latencyMs": 0.055,
+          "results": [
+            {
+              "id": "825f62f2-297c-4da7-8bdc-03d3ca6e93fb",
+              "label": "coffee-corrected",
+              "score": -2.009129,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "咖啡"
+                ]
+              ],
+              "concepts": []
+            },
+            {
+              "id": "6c7cd2eb-140b-41ed-8f0c-ab4608dff872",
+              "label": "rain-coffee",
+              "score": -1.85698,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "咖啡"
+                ]
+              ],
+              "concepts": []
+            },
+            {
+              "id": "f89201b1-0c7a-45ad-ab2a-f1623acfb44f",
+              "label": "review-coffee-plain",
+              "score": -1.85698,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "咖啡"
+                ]
+              ],
+              "concepts": []
+            },
+            {
+              "id": "df3b3dff-0a33-4e18-9924-5cd129794d93",
+              "label": "review-coffee-repair",
+              "score": -1.85698,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "咖啡"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t04",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "无糖咖啡",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "coffee-corrected"
+          ],
+          "returnedLabels": [
+            "coffee-corrected"
+          ],
+          "hitLabels": [
+            "coffee-corrected"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.068,
+          "results": [
+            {
+              "id": "825f62f2-297c-4da7-8bdc-03d3ca6e93fb",
+              "label": "coffee-corrected",
+              "score": -9.547971,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "无"
+                ],
+                [
+                  "糖"
+                ],
+                [
+                  "咖啡"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t05",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "团子",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cat"
+          ],
+          "returnedLabels": [
+            "cat"
+          ],
+          "hitLabels": [
+            "cat"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.05,
+          "results": [
+            {
+              "id": "4caabf57-8ca0-45d8-98a0-a3a6b4e0f0d2",
+              "label": "cat",
+              "score": -8.095527,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "团"
+                ],
+                [
+                  "子"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t06",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "猫",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cat"
+          ],
+          "returnedLabels": [
+            "cat"
+          ],
+          "hitLabels": [
+            "cat"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.042,
+          "results": [
+            {
+              "id": "4caabf57-8ca0-45d8-98a0-a3a6b4e0f0d2",
+              "label": "cat",
+              "score": -4.047763,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "猫"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t07",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "Bayper",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "project"
+          ],
+          "returnedLabels": [
+            "project"
+          ],
+          "hitLabels": [
+            "project"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.042,
+          "results": [
+            {
+              "id": "156c8f6d-95a5-4766-8d97-09418de5d1b5",
+              "label": "project",
+              "score": -3.044156,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "bayper"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t08",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "项目代号",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "project"
+          ],
+          "returnedLabels": [
+            "project"
+          ],
+          "hitLabels": [
+            "project"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.05,
+          "results": [
+            {
+              "id": "156c8f6d-95a5-4766-8d97-09418de5d1b5",
+              "label": "project",
+              "score": -4.988465,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "项目"
+                ],
+                [
+                  "代号"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t09",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "node.js",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "latin"
+          ],
+          "returnedLabels": [
+            "latin"
+          ],
+          "hitLabels": [
+            "latin"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.044,
+          "results": [
+            {
+              "id": "376dc0a2-5ea5-4bed-aa18-d6373f3d250f",
+              "label": "latin",
+              "score": -3.343458,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "nodejs"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t10",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "番茄钟",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "pomodoro"
+          ],
+          "returnedLabels": [
+            "pomodoro"
+          ],
+          "hitLabels": [
+            "pomodoro"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.051,
+          "results": [
+            {
+              "id": "926df6f9-48fd-4077-88f0-4a697c28fc29",
+              "label": "pomodoro",
+              "score": -6.690533,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "番茄"
+                ],
+                [
+                  "钟"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t11",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "讨厌香菜",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cilantro-dislike"
+          ],
+          "returnedLabels": [
+            "cilantro-dislike"
+          ],
+          "hitLabels": [
+            "cilantro-dislike"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.048,
+          "results": [
+            {
+              "id": "426ebfa0-23e9-4c91-b22d-8a9f52b685d3",
+              "label": "cilantro-dislike",
+              "score": -5.889892,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "讨厌"
+                ],
+                [
+                  "香菜"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t12",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "香菜拌牛肉",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cilantro-dish"
+          ],
+          "returnedLabels": [
+            "cilantro-dish"
+          ],
+          "hitLabels": [
+            "cilantro-dish"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.052,
+          "results": [
+            {
+              "id": "dc2b8e49-0a2b-4e5a-a55e-7a0d8dee1ee5",
+              "label": "cilantro-dish",
+              "score": -10.239684,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "香菜"
+                ],
+                [
+                  "拌"
+                ],
+                [
+                  "牛肉"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t13",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "自行车",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "returnedLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "hitLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.048,
+          "results": [
+            {
+              "id": "bd4d8440-22b5-494e-a16e-f668069031b7",
+              "label": "bike",
+              "score": -5.466501,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "自行"
+                ],
+                [
+                  "车"
+                ]
+              ],
+              "concepts": []
+            },
+            {
+              "id": "0d6cc9db-0f96-4998-b174-10da35587e70",
+              "label": "review-bike-river",
+              "score": -5.144142,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "自行"
+                ],
+                [
+                  "车"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t14",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "通勤",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "bike"
+          ],
+          "returnedLabels": [
+            "bike"
+          ],
+          "hitLabels": [
+            "bike"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.037,
+          "results": [
+            {
+              "id": "bd4d8440-22b5-494e-a16e-f668069031b7",
+              "label": "bike",
+              "score": -3.090262,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "通勤"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t15",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "摄影",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "camera"
+          ],
+          "returnedLabels": [
+            "camera"
+          ],
+          "hitLabels": [
+            "camera"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.037,
+          "results": [
+            {
+              "id": "d9acb7b9-fdab-4fa0-a143-663097e46786",
+              "label": "camera",
+              "score": -2.756293,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "摄影"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t16",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "拍街景",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "camera"
+          ],
+          "returnedLabels": [
+            "camera"
+          ],
+          "hitLabels": [
+            "camera"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.044,
+          "results": [
+            {
+              "id": "d9acb7b9-fdab-4fa0-a143-663097e46786",
+              "label": "camera",
+              "score": -6.649582,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "拍"
+                ],
+                [
+                  "街景"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t17",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "可乐",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "cola"
+          ],
+          "returnedLabels": [
+            "cola"
+          ],
+          "hitLabels": [
+            "cola"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.037,
+          "results": [
+            {
+              "id": "617d91eb-c447-4230-b2e1-4a5bfad17337",
+              "label": "cola",
+              "score": -3.516321,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "可乐"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t18",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "红茶",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "tea"
+          ],
+          "returnedLabels": [
+            "tea"
+          ],
+          "hitLabels": [
+            "tea"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.037,
+          "results": [
+            {
+              "id": "aabf8d60-6f78-49dc-a939-ab00a0ba2697",
+              "label": "tea",
+              "score": -3.399159,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "红茶"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t19",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "茶",
+          "gate": "expiry",
+          "note": null,
+          "expectedLabels": [
+            "tea"
+          ],
+          "returnedLabels": [
+            "tea"
+          ],
+          "hitLabels": [
+            "tea"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.039,
+          "results": [
+            {
+              "id": "aabf8d60-6f78-49dc-a939-ab00a0ba2697",
+              "label": "tea",
+              "score": -2.785104,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "茶"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t20",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "奶茶",
+          "gate": "expiry",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.103,
+          "results": []
+        },
+        {
+          "id": "t21",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "甜咖啡",
+          "gate": "correction",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.101,
+          "results": []
+        },
+        {
+          "id": "t22",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "海边日出",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "sea-sunrise"
+          ],
+          "returnedLabels": [
+            "sea-sunrise"
+          ],
+          "hitLabels": [
+            "sea-sunrise"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.054,
+          "results": [
+            {
+              "id": "bb11ab63-0a8f-4689-8e5d-1d10d541d1b1",
+              "label": "sea-sunrise",
+              "score": -9.253197,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "海边"
+                ],
+                [
+                  "日"
+                ],
+                [
+                  "出"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t23",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "青岛蛤蜊",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "anecdote"
+          ],
+          "returnedLabels": [
+            "anecdote"
+          ],
+          "hitLabels": [
+            "anecdote"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.046,
+          "results": [
+            {
+              "id": "9098ad89-b6e0-4769-8aa3-0ff62f10caac",
+              "label": "anecdote",
+              "score": -4.340823,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "青岛"
+                ],
+                [
+                  "蛤蜊"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t24",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "花生",
+          "gate": "deleted",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.059,
+          "results": []
+        },
+        {
+          "id": "t25",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "同事林舟",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "work-contact"
+          ],
+          "returnedLabels": [
+            "work-contact"
+          ],
+          "hitLabels": [
+            "work-contact"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.052,
+          "results": [
+            {
+              "id": "93165c73-f277-42fa-a407-475354f66625",
+              "label": "work-contact",
+              "score": -9.446708,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "同事"
+                ],
+                [
+                  "林"
+                ],
+                [
+                  "舟"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t26",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "杭州",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "city"
+          ],
+          "returnedLabels": [
+            "city"
+          ],
+          "hitLabels": [
+            "city"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.038,
+          "results": [
+            {
+              "id": "e6b4e8f9-e225-4b9d-b4d6-f4544f98d5da",
+              "label": "city",
+              "score": -3.708033,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "杭州"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t27",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "等这个项目结束以后想坐慢车去北方看雪",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "long"
+          ],
+          "returnedLabels": [
+            "long"
+          ],
+          "hitLabels": [
+            "long"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.106,
+          "results": [
+            {
+              "id": "0f047b03-4232-44ea-9070-b6ecd3c97d3f",
+              "label": "long",
+              "score": -27.976333,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "等"
+                ],
+                [
+                  "这个"
+                ],
+                [
+                  "项目"
+                ],
+                [
+                  "结束"
+                ],
+                [
+                  "以后"
+                ],
+                [
+                  "想坐"
+                ],
+                [
+                  "慢"
+                ],
+                [
+                  "车"
+                ],
+                [
+                  "北方"
+                ],
+                [
+                  "看"
+                ],
+                [
+                  "雪"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "t28",
+          "split": "tune",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "潜水",
+          "gate": "isolation",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.061,
+          "results": []
+        },
+        {
+          "id": "t29",
+          "split": "tune",
+          "character": "b",
+          "characterId": "role-b",
+          "query": "天文",
+          "gate": "isolation",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.068,
+          "results": []
+        },
+        {
+          "id": "h01",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "下雨天",
+          "gate": null,
+          "note": "同义表达，关键词无共同字面",
+          "expectedLabels": [
+            "rain-coffee"
+          ],
+          "returnedLabels": [
+            "rain-coffee"
+          ],
+          "hitLabels": [
+            "rain-coffee"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.084,
+          "results": [
+            {
+              "id": "6c7cd2eb-140b-41ed-8f0c-ab4608dff872",
+              "label": "rain-coffee",
+              "score": -3.090262,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "下雨天",
+                  "下雨",
+                  "雨天",
+                  "下雨天"
+                ]
+              ],
+              "concepts": [
+                "下雨/雨天/下雨天"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "h02",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "单车",
+          "gate": null,
+          "note": "同义表达",
+          "expectedLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "returnedLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "hitLabels": [
+            "bike",
+            "review-bike-river"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.094,
+          "results": [
+            {
+              "id": "bd4d8440-22b5-494e-a16e-f668069031b7",
+              "label": "bike",
+              "score": -2.532009,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "单车",
+                  "自行车",
+                  "单车",
+                  "骑车"
+                ]
+              ],
+              "concepts": [
+                "自行车/单车/骑车"
+              ]
+            },
+            {
+              "id": "0d6cc9db-0f96-4998-b174-10da35587e70",
+              "label": "review-bike-river",
+              "score": -2.353762,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "单车",
+                  "自行车",
+                  "单车",
+                  "骑车"
+                ]
+              ],
+              "concepts": [
+                "自行车/单车/骑车"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "h03",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "相机",
+          "gate": null,
+          "note": "同义表达",
+          "expectedLabels": [
+            "camera"
+          ],
+          "returnedLabels": [
+            "camera"
+          ],
+          "hitLabels": [
+            "camera"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.094,
+          "results": [
+            {
+              "id": "d9acb7b9-fdab-4fa0-a143-663097e46786",
+              "label": "camera",
+              "score": -2.756293,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "相机",
+                  "摄影",
+                  "拍照",
+                  "相机",
+                  "拍摄"
+                ]
+              ],
+              "concepts": [
+                "摄影/拍照/相机/拍摄"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "h04",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "北方的雪",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "long"
+          ],
+          "returnedLabels": [
+            "long"
+          ],
+          "hitLabels": [
+            "long"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.045,
+          "results": [
+            {
+              "id": "0f047b03-4232-44ea-9070-b6ecd3c97d3f",
+              "label": "long",
+              "score": -5.752453,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "北方"
+                ],
+                [
+                  "雪"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "h05",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "核桃",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "nut"
+          ],
+          "returnedLabels": [
+            "nut"
+          ],
+          "hitLabels": [
+            "nut"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.038,
+          "results": [
+            {
+              "id": "e24bed03-f9a0-4881-9a9c-f9e8af0c5b77",
+              "label": "nut",
+              "score": -3.399159,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "核桃"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "h06",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "杏仁",
+          "gate": "deleted",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.058,
+          "results": []
+        },
+        {
+          "id": "h07",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "番茄酱",
+          "gate": null,
+          "note": "相近但无关的假阳性探测",
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.078,
+          "results": []
+        },
+        {
+          "id": "h08",
+          "split": "holdout",
+          "character": "b",
+          "characterId": "role-b",
+          "query": "潜水",
+          "gate": null,
+          "note": null,
+          "expectedLabels": [
+            "b-sea"
+          ],
+          "returnedLabels": [
+            "b-sea"
+          ],
+          "hitLabels": [
+            "b-sea"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.039,
+          "results": [
+            {
+              "id": "5300458e-d8f7-45fa-bf5a-dbe2c3933622",
+              "label": "b-sea",
+              "score": -3.090262,
+              "originCharacterId": "role-b",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "潜水"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "h09",
+          "split": "holdout",
+          "character": "b",
+          "characterId": "role-b",
+          "query": "项目代号",
+          "gate": "isolation",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.067,
+          "results": []
+        },
+        {
+          "id": "h10",
+          "split": "holdout",
+          "character": "b",
+          "characterId": "role-b",
+          "query": "甜咖啡",
+          "gate": "correction",
+          "note": null,
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.074,
+          "results": []
+        },
+        {
+          "id": "h11",
+          "split": "holdout",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "影片",
+          "gate": null,
+          "note": "未加入概念表，用于记录有限同义扩展的漏召回边界",
+          "expectedLabels": [
+            "cinema"
+          ],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [
+            "cinema"
+          ],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.06,
+          "results": []
+        },
+        {
+          "id": "c01",
+          "split": "codex",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "还记得我平时喝什么咖啡吗",
+          "gate": null,
+          "note": "自然提问；同库含咖啡机维修干扰",
+          "expectedLabels": [
+            "review-coffee-plain"
+          ],
+          "returnedLabels": [
+            "review-coffee-plain"
+          ],
+          "hitLabels": [
+            "review-coffee-plain"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.053,
+          "results": [
+            {
+              "id": "f89201b1-0c7a-45ad-ab2a-f1623acfb44f",
+              "label": "review-coffee-plain",
+              "score": -7.480094,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "平时"
+                ],
+                [
+                  "喝"
+                ],
+                [
+                  "咖啡"
+                ]
+              ],
+              "concepts": []
+            }
+          ]
+        },
+        {
+          "id": "c02",
+          "split": "codex",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "我想骑车放松通常去哪里",
+          "gate": null,
+          "note": "自然提问；同库含河流地图干扰",
+          "expectedLabels": [
+            "review-bike-river"
+          ],
+          "returnedLabels": [
+            "review-bike-river",
+            "bike"
+          ],
+          "hitLabels": [
+            "review-bike-river"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [
+            "bike"
+          ],
+          "violations": [],
+          "latencyMs": 0.362,
+          "results": [
+            {
+              "id": "0d6cc9db-0f96-4998-b174-10da35587e70",
+              "label": "review-bike-river",
+              "score": -5.226477,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "我想"
+                ],
+                [
+                  "骑车",
+                  "自行车",
+                  "单车",
+                  "骑车"
+                ],
+                [
+                  "放松",
+                  "放松",
+                  "散心"
+                ]
+              ],
+              "concepts": [
+                "自行车/单车/骑车",
+                "放松/散心"
+              ]
+            },
+            {
+              "id": "bd4d8440-22b5-494e-a16e-f668069031b7",
+              "label": "bike",
+              "score": -2.532009,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "我想"
+                ],
+                [
+                  "骑车",
+                  "自行车",
+                  "单车",
+                  "骑车"
+                ],
+                [
+                  "放松",
+                  "放松",
+                  "散心"
+                ]
+              ],
+              "concepts": [
+                "自行车/单车/骑车",
+                "放松/散心"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "c03",
+          "split": "codex",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "我们上次在海边看到了什么",
+          "gate": null,
+          "note": "自然提问；同库含日落壁纸干扰",
+          "expectedLabels": [
+            "review-seaside-sunset"
+          ],
+          "returnedLabels": [
+            "review-seaside-sunset",
+            "sea-sunrise"
+          ],
+          "hitLabels": [
+            "review-seaside-sunset"
+          ],
+          "missedLabels": [],
+          "unexpectedLabels": [
+            "sea-sunrise"
+          ],
+          "violations": [],
+          "latencyMs": 0.201,
+          "results": [
+            {
+              "id": "e68ea2f4-f2dc-42f5-bb9f-dbbc05067306",
+              "label": "review-seaside-sunset",
+              "score": -4.757585,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "我们",
+                  "我们",
+                  "一起",
+                  "共同"
+                ],
+                [
+                  "海边"
+                ],
+                [
+                  "看到"
+                ]
+              ],
+              "concepts": [
+                "我们/一起/共同"
+              ]
+            },
+            {
+              "id": "bb11ab63-0a8f-4689-8e5d-1d10d541d1b1",
+              "label": "sea-sunrise",
+              "score": -2.387375,
+              "originCharacterId": "role-a",
+              "derivedFromEntryId": null,
+              "expiresAt": null,
+              "terms": [
+                [
+                  "我们",
+                  "我们",
+                  "一起",
+                  "共同"
+                ],
+                [
+                  "海边"
+                ],
+                [
+                  "看到"
+                ]
+              ],
+              "concepts": [
+                "我们/一起/共同"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "c04",
+          "split": "codex",
+          "character": "a",
+          "characterId": "role-a",
+          "query": "你还记得蓝鲸吗",
+          "gate": "isolation",
+          "note": "宽召回下的角色隔离",
+          "expectedLabels": [],
+          "returnedLabels": [],
+          "hitLabels": [],
+          "missedLabels": [],
+          "unexpectedLabels": [],
+          "violations": [],
+          "latencyMs": 0.102,
+          "results": []
+        }
+      ]
+    }
+  },
+  "dataset": {
+    "characters": 3,
+    "memories": 31,
+    "removed": 3,
+    "queries": 44,
+    "tune": 29,
+    "holdout": 11,
+    "codex": 4,
+    "holdoutLabel": "开发留出组（由实现者同时设计，非盲测）",
+    "holdoutKind": "development"
+  },
+  "config": {
+    "limit": 5,
+    "maxQueryChars": 200,
+    "maxQueryTokens": 24,
+    "concepts": 12
+  },
+  "boundaries": [
+    "仅本地 FTS5/BM25 召回，不含 embedding 或模型语义检索",
+    "Expected 为人工标注，未参与查询构造或服务调用",
+    "holdout 由实现者同时设计，仅作开发留出组，不是盲测",
+    "Codex 指定场景为开发复核，不能替代独立验收数据",
+    "工具结果不能替代真实模型聊天、纠正定位与 GUI 验收"
+  ]
+}

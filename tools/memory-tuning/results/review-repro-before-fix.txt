@@ -1,0 +1,104 @@
+✔ POL-MEMORY-001 A 独属记忆、重复来源与昵称变化 (9.111834ms)
+✔ POL-MEMORY-003 已定位纠正更新已知持有者并失效派生 (7.851625ms)
+✔ POL-MEMORY-004 默认删除正文、重建索引、旧来源不能回填 (7.338666ms)
+✔ POL-MEMORY-005 只 A 忘记、拒绝回流与明确新许可 (6.106ms)
+✔ POL-MEMORY-006 临时偏好到期、长期内容与时间门禁 (6.717833ms)
+✔ POL-MEMORY-007 指定分享只复制片段且拒绝二次转发 (5.725084ms)
+✔ 上下文版本、回滚与错误边界 (6.422292ms)
+✔ 记忆正文中的指令不被执行，错误不泄漏其他角色正文 (6.089958ms)
+✖ REVIEW-1 correct 排除原始与独立持有者旧来源并保留新纠正来源 (9.373916ms)
+✖ REVIEW-2 A仅自己忘记后B派生身份稳定且不能当原始持有者 (5.81175ms)
+✖ REVIEW-3 同一来源多个事实的提炼批次重扫幂等 (4.484834ms)
+✖ REVIEW-4 自然提问命中相关记忆并保留无关干扰项 (7.509625ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 8
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 122.116667
+
+✖ failing tests:
+
+test at tests/acceptance/memory.spec.cjs:563:1
+✖ REVIEW-1 correct 排除原始与独立持有者旧来源并保留新纠正来源 (9.373916ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert.ok(ctx.service.listExcludedSources("a").includes(sha256("a-old-source")))
+  
+      at TestContext.<anonymous> (/Volumes/Under_M2/morphiiouo/bayper/tests/acceptance/memory.spec.cjs:591:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1103:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:785:18)
+      at Test.postRun (node:internal/test_runner/test:1232:19)
+      at Test.run (node:internal/test_runner/test:1160:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/memory.spec.cjs:608:1
+✖ REVIEW-2 A仅自己忘记后B派生身份稳定且不能当原始持有者 (5.81175ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + undefined
+  - true
+  
+      at TestContext.<anonymous> (/Volumes/Under_M2/morphiiouo/bayper/tests/acceptance/memory.spec.cjs:621:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1103:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:785:18)
+      at Test.postRun (node:internal/test_runner/test:1232:19)
+      at Test.run (node:internal/test_runner/test:1160:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/memory.spec.cjs:665:1
+✖ REVIEW-3 同一来源多个事实的提炼批次重扫幂等 (4.484834ms)
+  TypeError: ctx.service.applyExtractionBatch is not a function
+      at TestContext.<anonymous> (/Volumes/Under_M2/morphiiouo/bayper/tests/acceptance/memory.spec.cjs:685:29)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1103:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:785:18)
+      at Test.postRun (node:internal/test_runner/test:1232:19)
+      at Test.run (node:internal/test_runner/test:1160:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7)
+
+test at tests/acceptance/memory.spec.cjs:722:1
+✖ REVIEW-4 自然提问命中相关记忆并保留无关干扰项 (7.509625ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + undefined
+  - '2f887983-ba29-4640-879e-d7decdd54bb4'
+  
+      at TestContext.<anonymous> (/Volumes/Under_M2/morphiiouo/bayper/tests/acceptance/memory.spec.cjs:777:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1103:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:785:18)
+      at Test.postRun (node:internal/test_runner/test:1232:19)
+      at Test.run (node:internal/test_runner/test:1160:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: '2f887983-ba29-4640-879e-d7decdd54bb4',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
