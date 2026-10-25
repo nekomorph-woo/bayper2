@@ -6,6 +6,7 @@ const { test } = require("node:test");
 const { DatabaseSync } = require("node:sqlite");
 const { _electron: electron } = require("playwright");
 const { startModelServer } = require("./fixture-server.cjs");
+const { SCHEMA_VERSION } = require("../../app/companion-store.cjs");
 const {
   dbPath,
   localDay,
@@ -293,7 +294,10 @@ test("POL-COMPANION-006 UI：旧 S01 库经真实应用启动升级并保留数�
 
     const db = new DatabaseSync(dbPath(dataDir), { readOnly: true });
     try {
-      assert.equal(db.prepare("PRAGMA user_version").get().user_version, 1);
+      assert.equal(
+        db.prepare("PRAGMA user_version").get().user_version,
+        SCHEMA_VERSION,
+      );
       const model = db.prepare("SELECT api_key_cipher FROM model_config WHERE id = 1").get();
       assert.equal(Buffer.from(model.api_key_cipher).equals(cipher), true);
       const relationship = db

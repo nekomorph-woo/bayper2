@@ -6,6 +6,7 @@ const { test } = require("node:test");
 const { DatabaseSync } = require("node:sqlite");
 const { createStore } = require("../../app/store.cjs");
 const { createCompanionshipService } = require("../../app/companionship.cjs");
+const { SCHEMA_VERSION } = require("../../app/companion-store.cjs");
 const {
   dbPath,
   localDay,
@@ -1088,7 +1089,7 @@ test("POL-COMPANION-006 旧 S01 schema 迁移：保留密文/关系/数值并可
 
     const db = openDb(dataDir, true);
     try {
-      assert.equal(db.prepare("PRAGMA user_version").get().user_version, 1);
+      assert.equal(db.prepare("PRAGMA user_version").get().user_version, SCHEMA_VERSION);
       const rosterSql = db
         .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'roster'")
         .get().sql;

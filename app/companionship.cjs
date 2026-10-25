@@ -1,5 +1,6 @@
 /* S02a 陪伴业务入口：每日名单、固定位、昵称、显式同屏、互动生命周期、
-   低精力交接与本地时间结算。聊天模型、自动探索和原生 panel 不在本切片。 */
+   低精力交接与本地时间结算。S06c 的日常/探索生命周期复用这里的名单、
+   模式与精力结算；聊天模型和原生 panel 仍不在本切片。 */
 const { AppError } = require("./errors.cjs");
 
 const SLOT_ORDER = ["fixed", "random_1", "random_2", "random_3", "random_4"];
@@ -8,6 +9,9 @@ const LOW_ENERGY = 30;
 const READY_ENERGY = 60;
 const AUTO_EXIT_COOLDOWN_MS = 30 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
+const DAILY_WINDOW_MS = HOUR_MS;
+const EXPLORATION_4H_MS = 4 * HOUR_MS;
+const EXPLORATION_24H_MS = 24 * HOUR_MS;
 
 /* 每小时的精力变化。interacting 在 S02a 中不结算：真实有效互动事件在 S03 接入，
    这里既不伪造互动收益，也不把等待模型的时间算成陪伴消耗。 */
@@ -17,6 +21,8 @@ const ENERGY_RATE_PER_HOUR = Object.freeze({
   resting: 20,
   offline: 10,
   interacting: 0,
+  daily: 0,
+  exploring: 0,
 });
 
 function localDay(date) {
@@ -143,26 +149,28 @@ function createCompanionshipService({
     });
   }
 
+  function settleAllWork(nowMs) {
+    for (const companion of store.listCompanions()) {
+      const runtime = store.getRuntime(companion.characterId);
+      if (!runtime || runtime.lastSettledAt === null) {
+        store.setLastSettled(companion.characterId, nowMs);
+        continue;
+      }
+      if (nowMs <= runtime.lastSettledAt) {
+        continue;
+      }
+      const hours = (nowMs - runtime.lastSettledAt) / HOUR_MS;
+      const rate = ENERGY_RATE_PER_HOUR[runtime.mode] ?? 0;
+      const energy = clampEnergy(companion.stats.energy + rate * hours);
+      store.applySettlement(companion.characterId, { energy, lastSettledAt: nowMs });
+    }
+    // 结算锚点与最后活跃时间一起提交，避免失败后按旧心跳重复补算。
+    touchActive(nowMs);
+  }
+
   function settleAll(nowMs) {
     // 精力与结算锚点必须一起提交，避免存储失败后重复结算。
-    store.runInTransaction(() => {
-      for (const companion of store.listCompanions()) {
-        const runtime = store.getRuntime(companion.characterId);
-        if (!runtime || runtime.lastSettledAt === null) {
-          store.setLastSettled(companion.characterId, nowMs);
-          continue;
-        }
-        if (nowMs <= runtime.lastSettledAt) {
-          continue;
-        }
-        const hours = (nowMs - runtime.lastSettledAt) / HOUR_MS;
-        const rate = ENERGY_RATE_PER_HOUR[runtime.mode] ?? 0;
-        const energy = clampEnergy(companion.stats.energy + rate * hours);
-        store.applySettlement(companion.characterId, { energy, lastSettledAt: nowMs });
-      }
-      // 结算锚点与最后活跃时间一起提交，避免失败后按旧心跳重复补算。
-      touchActive(nowMs);
-    });
+    store.runInTransaction(() => settleAllWork(nowMs));
   }
 
   function applyOfflineRecovery(nowMs) {
@@ -188,6 +196,8 @@ function createCompanionshipService({
     const nowMs = nowDate.getTime();
 
     if (!started) {
+      // 进程重建后未完成活动只能保持暂停，离线时间不推进活动。
+      store.activities.pauseAllRunning(nowMs);
       applyOfflineRecovery(nowMs);
 
       initState(nowMs);
@@ -201,12 +211,14 @@ function createCompanionshipService({
       return;
     }
 
-    // 反复 start 时先把旧模式下的区间结算掉，再切换模式和推进锚点。
+    // 反复 start 时先推进活动并结算旧模式，再按当前活动/名单派生模式。
     initState(nowMs);
+    advanceActivityLifecycle(nowMs);
     settleAll(nowMs);
     store.settleMoods(nowMs);
     if (store.listCompanions().length > 0) {
-      ensureDailyRoster(nowDate);
+      const roster = ensureDailyRoster(nowDate);
+      pauseActivitiesOutsideRoster(roster, nowMs);
       applyStoredModes(nowMs);
     }
     touchActive(nowMs);
@@ -219,8 +231,11 @@ function createCompanionshipService({
 
     store.runInTransaction(() => {
       for (const companion of store.listCompanions()) {
+        const activity = store.activities.getOpenForCharacter(companion.characterId);
         let mode = "waiting";
-        if (interaction && companion.characterId === interaction.characterId) {
+        if (activity?.status === "running") {
+          mode = activityMode(activity.kind);
+        } else if (interaction && companion.characterId === interaction.characterId) {
           mode = "interacting";
         } else if (companion.characterId === stableId) {
           if (interaction) {
@@ -246,6 +261,8 @@ function createCompanionshipService({
     }
     const nowDate = now();
     const nowMs = nowDate.getTime();
+    // 锁屏/休眠恢复不推进离线活动；活动保持暂停，由显式恢复入口继续。
+    store.activities.pauseAllRunning(nowMs);
     applyOfflineRecovery(nowMs);
     initState(nowMs);
     settleAll(nowMs);
@@ -309,12 +326,301 @@ function createCompanionshipService({
     return store.getRoster(day);
   }
 
+  function activityText(value, field) {
+    if (typeof value !== "string") {
+      throw new AppError("INVALID_INPUT", `${field} 必须是字符串。`);
+    }
+    const text = value.trim();
+    if (text.length === 0 || text.length > 200 || /[\u0000-\u001f\u007f]/u.test(text)) {
+      throw new AppError("INVALID_INPUT", `${field} 无效。`);
+    }
+    return text;
+  }
+
+  function activityMode(kind) {
+    return kind === "daily" ? "daily" : "exploring";
+  }
+
+  function realModeFor(characterId) {
+    const interaction = store.getInteraction();
+    if (interaction && interaction.characterId === characterId) {
+      return "interacting";
+    }
+    return getState("current_character_id") === characterId ? currentMode() : "waiting";
+  }
+
+  function isOnScreen(characterId) {
+    return (
+      getState("current_character_id") === characterId &&
+      currentMode() === "companion" &&
+      !store.getInteraction()
+    );
+  }
+
+  function activityPublic(activity) {
+    if (!activity) {
+      return null;
+    }
+    return {
+      activityId: activity.activityId,
+      kind: activity.kind,
+      status: activity.status,
+      durationMs: activity.durationMs,
+      activeElapsedMs: activity.activeElapsedMs,
+    };
+  }
+
+  function activityEligibility(characterId, kind, roster) {
+    const companion = store.getCompanion(characterId);
+    if (!companion) {
+      return "CHARACTER_UNKNOWN";
+    }
+    if (!roster.some((entry) => entry.characterId === characterId)) {
+      return "NOT_IN_ROSTER";
+    }
+    if (store.getInteraction()) {
+      return "INTERACTION";
+    }
+    if (pendingReason()) {
+      return "PENDING_ROTATION";
+    }
+    if (companion.runtime.exploring) {
+      return "EXPLORING";
+    }
+    if (["daily", "exploring"].includes(companion.runtime.mode)) {
+      return "BUSY";
+    }
+    if (kind === "daily") {
+      if (!isOnScreen(characterId)) {
+        return "DAILY_CURRENT_ONLY";
+      }
+      if (companion.stats.energy <= LOW_ENERGY) {
+        return "LOW_ENERGY";
+      }
+    } else if (kind === "exploration") {
+      if (companion.stats.energy < READY_ENERGY) {
+        return "LOW_ENERGY";
+      }
+      if (
+        getState("current_character_id") === characterId &&
+        !isOnScreen(characterId)
+      ) {
+        return "NOT_ON_SCREEN";
+      }
+    } else {
+      return "INVALID_KIND";
+    }
+    return null;
+  }
+
+  function activityResumeEligibility(activity, roster) {
+    const companion = store.getCompanion(activity.characterId);
+    if (!companion) {
+      return "CHARACTER_UNKNOWN";
+    }
+    if (!roster.some((entry) => entry.characterId === activity.characterId)) {
+      return "NOT_IN_ROSTER";
+    }
+    if (store.getInteraction()) {
+      return "INTERACTION";
+    }
+    if (pendingReason()) {
+      return "PENDING_ROTATION";
+    }
+    const currentId = getState("current_character_id");
+    if (activity.kind === "daily") {
+      if (
+        currentId !== activity.characterId ||
+        currentMode() !== "companion" ||
+        companion.runtime.mode === "daily"
+      ) {
+        return "DAILY_CURRENT_ONLY";
+      }
+      return companion.stats.energy > LOW_ENERGY ? null : "LOW_ENERGY";
+    }
+    if (currentId === activity.characterId) {
+      return "ON_SCREEN";
+    }
+    if (companion.stats.energy < READY_ENERGY) {
+      return "LOW_ENERGY";
+    }
+    const otherExploration = store.activities
+      .listOpen()
+      .some(
+        (item) =>
+          item.kind === "exploration" && item.activityId !== activity.activityId,
+      );
+    return otherExploration ? "EXPLORATION_ACTIVE" : null;
+  }
+
+  function activityQuotaBlock(kind, nowMs, ignoreActivityId = null) {
+    if (kind === "daily") {
+      return store.activities.countStarted("daily", nowMs - DAILY_WINDOW_MS) >= 1
+        ? "DAILY_LIMIT"
+        : null;
+    }
+    if (kind !== "exploration") {
+      return "INVALID_KIND";
+    }
+    const otherOpen = store.activities
+      .listOpen()
+      .some(
+        (activity) =>
+          activity.kind === "exploration" && activity.activityId !== ignoreActivityId,
+      );
+    if (otherOpen) {
+      return "EXPLORATION_ACTIVE";
+    }
+    if (store.activities.countStarted("exploration", nowMs - EXPLORATION_4H_MS) >= 1) {
+      return "EXPLORATION_4H_LIMIT";
+    }
+    if (store.activities.countStarted("exploration", nowMs - EXPLORATION_24H_MS) >= 2) {
+      return "EXPLORATION_24H_LIMIT";
+    }
+    return null;
+  }
+
+  function selectSuccessor(characterId, roster, nowMs) {
+    return (
+      roster
+        .filter((entry) => entry.characterId !== characterId)
+        .map((entry) => store.getCompanion(entry.characterId))
+        .find((companion) => companion && isReadyForPresence(companion, nowMs)) ?? null
+    );
+  }
+
+  function cancelScheduledActivity(activity, nowMs, reason) {
+    return store.runInTransaction(() => {
+      const cancelled = store.activities.cancel(activity.activityId, nowMs);
+      touchActive(nowMs);
+      return { started: false, reason, activity: activityPublic(cancelled) };
+    });
+  }
+
+  /* 运行中的活动按真实时间推进；完成点先按零耗时模式结算，再切回真实模式，
+     使完成后的余下时间按真实模式恢复。 */
+  function advanceActivityLifecycle(nowMs) {
+    const running = store.activities.listRunning();
+    const completions = [];
+    for (const activity of running) {
+      const last = activity.lastProgressAt ?? activity.startedAt ?? nowMs;
+      if (nowMs <= last) {
+        continue;
+      }
+      const remaining = activity.durationMs - activity.activeElapsedMs;
+      const elapsed = nowMs - last;
+      if (elapsed < remaining) {
+        store.activities.advance(activity.activityId, elapsed, nowMs);
+        continue;
+      }
+      completions.push({ activity, completionAt: last + Math.max(0, remaining) });
+    }
+
+    completions.sort((left, right) => left.completionAt - right.completionAt);
+    for (const { activity, completionAt } of completions) {
+      store.runInTransaction(() => {
+        settleAllWork(completionAt);
+        store.activities.complete(activity.activityId, completionAt);
+        store.setMode(activity.characterId, realModeFor(activity.characterId));
+        store.setLastSettled(activity.characterId, completionAt);
+        if (activity.kind === "exploration") {
+          store.setExploring(activity.characterId, false);
+        }
+        touchActive(completionAt);
+      });
+    }
+  }
+
+  function pauseActivitiesOutsideRoster(roster, nowMs) {
+    const ids = new Set(roster.map((entry) => entry.characterId));
+    const running = store.activities
+      .listOpen()
+      .filter((activity) => activity.status === "running" && !ids.has(activity.characterId));
+    if (running.length === 0) {
+      return;
+    }
+    store.runInTransaction(() => {
+      for (const activity of running) {
+        store.activities.pause(activity.activityId, nowMs);
+        store.setMode(activity.characterId, "waiting");
+        if (activity.kind === "exploration") {
+          store.setExploring(activity.characterId, true);
+        }
+      }
+      touchActive(nowMs);
+    });
+  }
+
+  /* 调用方已在同一事务内结算到 now，这里只停住活动并保留有效进度。 */
+  function pauseRunningActivity(characterId, nowMs) {
+    const activity = store.activities.getOpenForCharacter(characterId);
+    if (activity?.status !== "running") {
+      return false;
+    }
+    store.activities.pause(activity.activityId, nowMs);
+    if (activity.kind === "exploration") {
+      store.setExploring(characterId, true);
+    }
+    return true;
+  }
+
+  function startScheduledActivity(activity, nowMs, roster) {
+    const blocked =
+      activityEligibility(activity.characterId, activity.kind, roster) ??
+      activityQuotaBlock(activity.kind, nowMs, activity.activityId);
+    if (blocked) {
+      return cancelScheduledActivity(activity, nowMs, blocked);
+    }
+
+    const currentId = getState("current_character_id");
+    let successor = null;
+    if (
+      activity.kind === "exploration" &&
+      currentId === activity.characterId
+    ) {
+      successor = selectSuccessor(activity.characterId, roster, nowMs);
+      if (!successor) {
+        return cancelScheduledActivity(activity, nowMs, "NO_SUCCESSOR");
+      }
+    }
+
+    return store.runInTransaction(() => {
+      settleAllWork(nowMs);
+      const companion = store.getCompanion(activity.characterId);
+      const change = activity.kind === "daily" ? -2 : -8;
+      const energy = clampEnergy(companion.stats.energy + change);
+      store.applySettlement(activity.characterId, { energy, lastSettledAt: nowMs });
+      store.setMode(activity.characterId, activityMode(activity.kind));
+      if (activity.kind === "exploration") {
+        store.setExploring(activity.characterId, true);
+        if (successor) {
+          store.setMode(successor.characterId, "companion");
+          setState("current_character_id", successor.characterId);
+          setState("current_mode", "companion");
+          setState("pending_rotation", "0");
+        }
+      } else {
+        store.setExploring(activity.characterId, false);
+      }
+      store.activities.start(activity.activityId, nowMs);
+      touchActive(nowMs);
+      return {
+        started: true,
+        activity: activityPublic(store.activities.get(activity.activityId)),
+        fromCharacterId: successor ? activity.characterId : null,
+        toCharacterId: successor ? successor.characterId : null,
+      };
+    });
+  }
+
   function prepare(nowDate) {
     const nowMs = nowDate.getTime();
     initState(nowMs);
+    advanceActivityLifecycle(nowMs);
     settleAll(nowMs);
     store.settleMoods(nowMs);
     const roster = ensureDailyRoster(nowDate);
+    pauseActivitiesOutsideRoster(roster, nowMs);
     touchActive(nowMs);
     return { day: localDay(nowDate), nowMs, roster };
   }
@@ -328,9 +634,15 @@ function createCompanionshipService({
     const interaction = store.getInteraction();
     const stableId = getState("current_character_id");
     const displayId = interaction ? interaction.characterId : stableId;
-    const mode = interaction ? "interacting" : currentMode();
+    const baseMode = interaction ? "interacting" : currentMode();
     const idsInRoster = rosterIds(roster);
     const display = companions.find((companion) => companion.characterId === displayId) ?? null;
+    const activityByCharacter = new Map(
+      store.activities.listOpen().map((activity) => [activity.characterId, activity]),
+    );
+    const mode = ["daily", "exploring"].includes(display?.runtime.mode)
+      ? display.runtime.mode
+      : baseMode;
 
     const rosterPublic = roster.map((entry) => {
       const companion = companions.find((item) => item.characterId === entry.characterId);
@@ -341,6 +653,7 @@ function createCompanionshipService({
         nickname: companion?.nickname ?? null,
         energy: companion?.stats.energy ?? null,
         exploring: companion?.runtime.exploring ?? false,
+        activity: activityPublic(activityByCharacter.get(entry.characterId)),
         isCurrent: entry.characterId === displayId,
         isFixed: entry.slot === "fixed",
       };
@@ -353,6 +666,7 @@ function createCompanionshipService({
       stats: { ...companion.stats },
       mode: companion.runtime.mode,
       exploring: companion.runtime.exploring,
+      activity: activityPublic(activityByCharacter.get(companion.characterId)),
       inRoster: idsInRoster.has(companion.characterId),
       isCurrent: companion.characterId === displayId,
       isFixed: companion.characterId === getState("fixed_character_id"),
@@ -379,6 +693,7 @@ function createCompanionshipService({
         inRoster: idsInRoster.has(display.characterId),
         temporary: Boolean(interaction?.temporary),
         exploring: display.runtime.exploring,
+        activity: activityPublic(activityByCharacter.get(display.characterId)),
       };
     }
 
@@ -493,16 +808,25 @@ function createCompanionshipService({
     }
     const nowDate = now();
     const { day, nowMs } = prepare(nowDate);
+    const target = store.getCompanion(characterId);
+    if (target.runtime.exploring) {
+      throw new AppError("CHARACTER_EXPLORING", "探索中的角色不能直接切换同屏，请先发起聊天。");
+    }
     const interaction = store.getInteraction();
     const previousId = getState("current_character_id");
 
     store.runInTransaction(() => {
+      // 新同屏者不能带着运行中的真实短活动进入同屏。
+      pauseRunningActivity(characterId, nowMs);
       if (interaction) {
         store.setMode(interaction.characterId, "waiting");
         store.clearInteraction();
       }
-      if (previousId && previousId !== characterId) {
-        store.setMode(previousId, "waiting");
+      if (previousId) {
+        pauseRunningActivity(previousId, nowMs);
+        if (previousId !== characterId) {
+          store.setMode(previousId, "waiting");
+        }
       }
       store.setMode(characterId, "companion");
       setState("current_character_id", characterId);
@@ -529,6 +853,7 @@ function createCompanionshipService({
         store.clearInteraction();
       }
       if (currentId) {
+        pauseRunningActivity(currentId, nowMs);
         store.setMode(currentId, "resting");
       }
       setState("current_mode", "resting");
@@ -552,7 +877,10 @@ function createCompanionshipService({
     const temporary = !roster.some((entry) => entry.characterId === characterId);
 
     store.runInTransaction(() => {
+      pauseRunningActivity(characterId, nowMs);
       if (stableId && stableId !== characterId) {
+        // 聊天会暂时让出同屏位置，原同屏者的真实短活动必须同时暂停。
+        pauseRunningActivity(stableId, nowMs);
         store.setMode(stableId, currentMode() === "resting" ? "resting" : "waiting");
       }
       store.setMode(characterId, "interacting");
@@ -649,6 +977,7 @@ function createCompanionshipService({
     if (current.stats.energy > LOW_ENERGY) {
       return { requested: false, pending: false, reason: "energy" };
     }
+    const runningActivity = store.activities.getOpenForCharacter(currentId);
     store.runInTransaction(() => {
       setState("pending_rotation", "low_energy");
       touchActive(nowMs);
@@ -657,7 +986,8 @@ function createCompanionshipService({
       requested: true,
       pending: true,
       pendingReason: "low_energy",
-      deferred: Boolean(store.getInteraction()),
+      deferred:
+        Boolean(store.getInteraction()) || runningActivity?.status === "running",
     };
   }
 
@@ -666,15 +996,180 @@ function createCompanionshipService({
     const nowDate = now();
     const { nowMs, roster } = prepare(nowDate);
     const pending = pendingReason();
-    if (!pending) {
+    if (pending) {
+      if (store.getInteraction()) {
+        return { switched: false, pending: true, deferred: true, pendingReason: pending };
+      }
+      const rotation = attemptHandoff(nowDate, nowMs, roster);
+      touchActive(nowMs);
+      return rotation;
+    }
+
+    const scheduled = store.activities.getScheduled();
+    if (!scheduled) {
       return { switched: false, pending: false, reason: "no-pending" };
     }
     if (store.getInteraction()) {
-      return { switched: false, pending: true, deferred: true, pendingReason: pending };
+      return {
+        started: false,
+        pending: false,
+        deferred: true,
+        reason: "INTERACTION",
+        activity: activityPublic(scheduled),
+      };
     }
-    const rotation = attemptHandoff(nowDate, nowMs, roster);
-    touchActive(nowMs);
-    return rotation;
+    return startScheduledActivity(scheduled, nowMs, roster);
+  }
+
+  function requestActivity({ activityId, characterId, kind } = {}) {
+    ensureStarted();
+    const id = activityText(activityId, "活动 ID");
+    const target = activityText(characterId, "角色 ID");
+    if (!["daily", "exploration"].includes(kind)) {
+      throw new AppError("INVALID_INPUT", "活动类型必须是 daily 或 exploration。");
+    }
+
+    const nowDate = now();
+    const { nowMs, roster } = prepare(nowDate);
+    const existing = store.activities.get(id);
+    if (existing) {
+      if (existing.characterId !== target || existing.kind !== kind) {
+        throw new AppError("ACTIVITY_CONFLICT", "同一活动 ID 不能更换角色或类型。");
+      }
+      return { requested: true, duplicate: true, activity: activityPublic(existing) };
+    }
+
+    const scheduled = store.activities.getScheduled();
+    if (scheduled) {
+      return {
+        requested: false,
+        reason: "BUSY",
+        activity: activityPublic(scheduled),
+      };
+    }
+    const open = store.activities.getOpenForCharacter(target);
+    if (open) {
+      return {
+        requested: false,
+        reason: "ACTIVITY_ACTIVE",
+        activity: activityPublic(open),
+      };
+    }
+    const blocked =
+      activityEligibility(target, kind, roster) ??
+      activityQuotaBlock(kind, nowMs);
+    if (blocked) {
+      return { requested: false, reason: blocked, activity: null };
+    }
+
+    const activity = store.activities.insertScheduled({
+      activityId: id,
+      characterId: target,
+      kind,
+      at: nowMs,
+      durationMs: store.activities.DURATIONS[kind],
+    });
+    return { requested: true, duplicate: false, activity: activityPublic(activity) };
+  }
+
+  function advanceActivities() {
+    ensureStarted();
+    const nowDate = now();
+    const { nowMs } = prepare(nowDate);
+    return {
+      settledAt: nowMs,
+      activities: store.activities.listOpen().map(activityPublic),
+    };
+  }
+
+  function getActivity(activityId) {
+    ensureStarted();
+    const id = activityText(activityId, "活动 ID");
+    prepare(now());
+    return store.activities.get(id);
+  }
+
+  function pauseActivity(activityId) {
+    ensureStarted();
+    const id = activityText(activityId, "活动 ID");
+    const nowDate = now();
+    const { nowMs } = prepare(nowDate);
+    const activity = store.activities.get(id);
+    if (!activity) {
+      throw new AppError("ACTIVITY_NOT_FOUND", "活动不存在。");
+    }
+    if (activity.status === "paused") {
+      return { paused: true, duplicate: true, activity: activityPublic(activity) };
+    }
+    if (activity.status !== "running") {
+      return { paused: false, reason: "NOT_RUNNING", activity: activityPublic(activity) };
+    }
+
+    return store.runInTransaction(() => {
+      settleAllWork(nowMs);
+      store.activities.pause(id, nowMs);
+      store.setMode(activity.characterId, realModeFor(activity.characterId));
+      if (activity.kind === "exploration") {
+        store.setExploring(activity.characterId, true);
+      }
+      touchActive(nowMs);
+      return { paused: true, duplicate: false, activity: activityPublic(store.activities.get(id)) };
+    });
+  }
+
+  function resumeActivity(activityId) {
+    ensureStarted();
+    const id = activityText(activityId, "活动 ID");
+    const nowDate = now();
+    const { nowMs, roster } = prepare(nowDate);
+    const activity = store.activities.get(id);
+    if (!activity) {
+      throw new AppError("ACTIVITY_NOT_FOUND", "活动不存在。");
+    }
+    if (activity.status === "running") {
+      return { resumed: true, duplicate: true, activity: activityPublic(activity) };
+    }
+    if (activity.status !== "paused") {
+      return { resumed: false, reason: "NOT_PAUSED", activity: activityPublic(activity) };
+    }
+    const blocked = activityResumeEligibility(activity, roster);
+    if (blocked) {
+      return { resumed: false, reason: blocked, activity: activityPublic(activity) };
+    }
+
+    return store.runInTransaction(() => {
+      settleAllWork(nowMs);
+      store.activities.resume(id, nowMs);
+      store.setMode(activity.characterId, activityMode(activity.kind));
+      if (activity.kind === "exploration") {
+        store.setExploring(activity.characterId, true);
+      }
+      touchActive(nowMs);
+      return { resumed: true, duplicate: false, activity: activityPublic(store.activities.get(id)) };
+    });
+  }
+
+  function cancelActivity(activityId) {
+    ensureStarted();
+    const id = activityText(activityId, "活动 ID");
+    const nowDate = now();
+    const { nowMs } = prepare(nowDate);
+    const activity = store.activities.get(id);
+    if (!activity) {
+      throw new AppError("ACTIVITY_NOT_FOUND", "活动不存在。");
+    }
+    if (["completed", "cancelled"].includes(activity.status)) {
+      return { cancelled: false, reason: "ALREADY_CLOSED", activity: activityPublic(activity) };
+    }
+
+    return store.runInTransaction(() => {
+      settleAllWork(nowMs);
+      store.activities.cancel(id, nowMs);
+      store.setMode(activity.characterId, realModeFor(activity.characterId));
+      store.setExploring(activity.characterId, false);
+      touchActive(nowMs);
+      return { cancelled: true, activity: activityPublic(store.activities.get(id)) };
+    });
   }
 
   function attemptHandoff(nowDate, nowMs, existingRoster) {
@@ -689,6 +1184,17 @@ function createCompanionshipService({
     if (!current) {
       clearPending(nowMs);
       return { switched: false, pending: false, reason: "no-character" };
+    }
+
+    const runningActivity = store.activities.getOpenForCharacter(currentId);
+    if (runningActivity?.status === "running") {
+      // 自然节点回调不能替代真实短活动；等 prepare 推进到真实完成点再交接。
+      return {
+        switched: false,
+        pending: true,
+        deferred: true,
+        pendingReason: pending,
+      };
     }
 
     const stillOnRoster = roster.some((entry) => entry.characterId === currentId);
@@ -748,7 +1254,16 @@ function createCompanionshipService({
     const nowDate = now();
     const nowMs = nowDate.getTime();
     initState(nowMs);
+    advanceActivityLifecycle(nowMs);
     settleAll(nowMs);
+    store.runInTransaction(() => {
+      store.activities.pauseAllRunning(nowMs);
+      for (const activity of store.activities.listOpen()) {
+        if (activity.status === "paused") {
+          store.setMode(activity.characterId, realModeFor(activity.characterId));
+        }
+      }
+    });
     store.settleMoods(nowMs);
     touchActive(nowMs);
   }
@@ -766,6 +1281,12 @@ function createCompanionshipService({
     endInteraction,
     requestAutoRotation,
     completeNaturalNode,
+    requestActivity,
+    advanceActivities,
+    getActivity,
+    pauseActivity,
+    resumeActivity,
+    cancelActivity,
   };
 }
 

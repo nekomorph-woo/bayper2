@@ -2,14 +2,17 @@
    迁移只做当前需要的结构：旧 S01 库保留模型密文、关系、数值和 fixed 名单，
    名单表扩展为 fixed + random_1..4，由 UNIQUE(day, character_id) 保证不重复。 */
 const { createRelationshipEffects } = require("./relationship-effects.cjs");
+const { createCharacterActivities } = require("./character-activities.cjs");
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const SLOTS = ["fixed", "random_1", "random_2", "random_3", "random_4"];
 
 const RUNTIME_SCHEMA = `
   CREATE TABLE IF NOT EXISTS character_runtime (
     character_id TEXT PRIMARY KEY REFERENCES relationships(character_id),
-    mode TEXT NOT NULL DEFAULT 'waiting' CHECK (mode IN ('companion', 'interacting', 'waiting', 'resting', 'offline')),
+    mode TEXT NOT NULL DEFAULT 'waiting' CHECK (
+      mode IN ('companion', 'interacting', 'waiting', 'resting', 'offline', 'daily', 'exploring')
+    ),
     last_settled_at INTEGER,
     last_participated_at INTEGER,
     last_auto_exit_at INTEGER,
@@ -38,6 +41,7 @@ const ROSTER_SCHEMA = `
 function createCompanionStore(db) {
   migrate(db);
   const relationshipEffects = createRelationshipEffects(db);
+  const activities = createCharacterActivities(db);
 
   const statements = {
     listCompanions: db.prepare(`
@@ -85,6 +89,9 @@ function createCompanionStore(db) {
       "UPDATE character_runtime SET last_auto_exit_at = ? WHERE character_id = ?",
     ),
     setEnergy: db.prepare("UPDATE character_stats SET energy = ? WHERE character_id = ?"),
+    setExploring: db.prepare(
+      "UPDATE character_runtime SET exploring = ? WHERE character_id = ?",
+    ),
     getInteraction: db.prepare("SELECT * FROM interactions WHERE id = 1"),
     saveInteraction: db.prepare(`
       INSERT INTO interactions (id, character_id, return_character_id, temporary, started_at)
@@ -200,6 +207,10 @@ function createCompanionStore(db) {
     statements.setAutoExit.run(at, characterId);
   }
 
+  function setExploring(characterId, exploring) {
+    statements.setExploring.run(exploring ? 1 : 0, characterId);
+  }
+
   function getInteraction() {
     const row = statements.getInteraction.get();
     if (!row) {
@@ -236,6 +247,8 @@ function createCompanionStore(db) {
     setLastSettled,
     setLastParticipated,
     setLastAutoExit,
+    setExploring,
+    activities,
     getInteraction,
     saveInteraction,
     clearInteraction,
@@ -255,13 +268,38 @@ function migrate(db) {
   try {
     ensureNicknameColumn(db);
     ensureRosterSchema(db);
-    db.exec(RUNTIME_SCHEMA);
+    ensureRuntimeSchema(db);
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;
   }
+}
+
+function ensureRuntimeSchema(db) {
+  const table = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'character_runtime'")
+    .get();
+  if (table?.sql?.includes("daily")) {
+    db.exec(RUNTIME_SCHEMA);
+    return;
+  }
+  if (!table) {
+    db.exec(RUNTIME_SCHEMA);
+    return;
+  }
+
+  db.exec("DROP TABLE IF EXISTS character_runtime_v2");
+  db.exec(RUNTIME_SCHEMA.replace("character_runtime", "character_runtime_v2"));
+  db.exec(`
+    INSERT INTO character_runtime_v2
+      (character_id, mode, last_settled_at, last_participated_at, last_auto_exit_at, exploring)
+    SELECT character_id, mode, last_settled_at, last_participated_at, last_auto_exit_at, exploring
+    FROM character_runtime
+  `);
+  db.exec("DROP TABLE character_runtime");
+  db.exec("ALTER TABLE character_runtime_v2 RENAME TO character_runtime");
 }
 
 function ensureNicknameColumn(db) {
