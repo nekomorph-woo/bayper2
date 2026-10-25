@@ -1,23 +1,18 @@
 # Bayper
 
-本仓库当前保留一个用于验证 Codex 调度、Claude Code 开发和独立验收流程的小工具。
+项目已完成本地 Git 初始化与协作流程验证，准备开始正式开发。当前尚未确定业务功能、技术栈或运行方式，验证用的示例代码与测试已清理。
 
-## 文本转 URL slug
+## 协作入口
 
-要求 Python 3，无第三方依赖。在项目根目录运行：
+- [AGENTS.md](AGENTS.md)：项目协作规范。Codex 负责需求分析、任务拆解、调度、决策与独立验收，所有项目代码及测试代码由 Claude Code CLI 实现。
+- [CLAUDE.md](CLAUDE.md)：Claude Code 的开发者入口，要求任务开始前读取 AGENTS.md，并按开发者职责执行任务。
+- [.agents/skills/polaris](.agents/skills/polaris)：北极星 polaris skill 的项目级软链，用于业务设计、场景验收和交付。Codex 按项目授权担任 master。
+- [VERSION](VERSION)：项目版本的唯一来源；每次非纯版本号的 snap 提交使 PATCH 加 1，MAJOR 与 MINOR 升级须由用户明确指定。
 
-```sh
-python3 tools/slugify.py 'Hello, World!'
-```
+polaris 软链指向同级仓库中的 `../hapilon/.hapilon/agents/skills/polaris`。在其他机器使用时，应保证该目录存在，或将软链重新指向实际的 skill 目录。
 
-输出为 `hello-world`。工具先转小写，仅保留 ASCII 字母和数字，将连续其他字符替换为一个连字符，并去掉首尾连字符。不做中文音译或重音折叠，例如 `你好 Café 123` 输出 `caf-123`。空字符串或纯标点输出空行；缺少参数或提供多个位置参数时，返回退出码 `2`，错误写入 stderr。
+## 开始开发
 
-## 场景验收
+提供业务目标与约束后，由 Codex 使用 polaris 形成任务范围、业务预期与验收标准，派发给 Claude Code 实现，再独立审查并运行验收。根据实际需求选择技术栈、组织代码及测试目录，并补充安装和运行说明。
 
-```sh
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/scenarios -p 'test_*.py' -v
-```
-
-七个独立场景通过真实 CLI 子进程检查正常文本、连续分隔符、Unicode、空字符串、纯标点、缺少参数和多余参数。Expected 使用固定字面量，同时核对退出码、stdout 和 stderr，不使用 Mock。
-
-协作职责见 [AGENTS.md](AGENTS.md)，Claude Code 的开发者入口见 [CLAUDE.md](CLAUDE.md)。
+本地分支为 `main`，尚未配置远程仓库。所有提交使用 snap 技能；提交不自动触发推送、发布或合并。
