@@ -84,3 +84,9 @@ POL-COMPANION-004/006同时验证事务失败不留下精力已改但结算时�
 - Oracle：manifest几何与真实Electron窗口/DOM图片尺寸独立核对，查看实际截图序列、资源URL及进程清理；只读常量或仅HTTP成功不算证明。
 - Execution Boundary：真实Electron和项目导出资源，无模型请求；GUI自动输入不等于原生鼠标、跨Spaces体验。全动作自然度及新版其他角色仍另验。
 - Runner：tests/acceptance/desktop.spec.cjs及tests/unit/desktop-assets.test.cjs；Codex独立执行11/11通过，见desktop-pixel-review.md。POL-DESKTOP-007本体/素材接线自动化子项PASS；原生鼠标与桌面合成另验，不能据此标整个桌面体验通过。
+
+## POL-SOURCE-001～005：外部来源权限基础
+
+完整Given/When/Expected/Oracle及真实执行边界见[s04a-plan.md](s04a-plan.md) Acceptance Contract，Codex受托确认。对应REQ-13的候选发现、默认关闭、目录明确授权、撤销后旧许可失效、重启与路径边界。Runner为tests/acceptance/external-sources.spec.cjs，权限基础已独立执行，结果见下文；不是完整会话分析、UI授权或预算验收。
+
+POL-SOURCE-006补充授权许可释放与事务失败保持，完整Contract见s04a-plan.md末段。Codex独立external-sources.spec.cjs共6/6通过（s04a-codex-r2.log），仅模块权限基础PASS；设置页、解析、实际模型在途撤销仍NOT_COVERED。
