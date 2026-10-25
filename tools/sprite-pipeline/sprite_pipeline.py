@@ -98,16 +98,31 @@ def analyze_cells(sheet: Image.Image, columns: int, rows: int,
                       "image": cleaned, "bbox": bbox, "foot_x": foot_x})
     return cells
 
-def common_scale(cells: list[dict], frame_size: tuple[int, int], padding: int) -> float:
-    """统一缩放：容纳各帧相对脚锚点的左右与上方最大扩展，避免尾巴被裁。"""
+def common_scale(cells: list[dict], frame_size: tuple[int, int], padding: int,
+                 neutral_height: int | None = None) -> float:
+    """所有帧共用一个 scale；指定 neutral_height 时按第0帧主体高度定 scale。"""
     anchor_x = frame_size[0] // 2
-    max_left = max(cell["foot_x"] - cell["bbox"][0] for cell in cells)
-    max_right = max(cell["bbox"][2] - cell["foot_x"] for cell in cells)
-    max_top = max(cell["bbox"][3] - cell["bbox"][1] for cell in cells)
     capacities = (anchor_x - padding, frame_size[0] - padding - anchor_x,
                   frame_size[1] - 2 * padding)
     if min(capacities) <= 0:
         raise SpritePipelineError("padding 过大或画布过小，无法保留安全边距")
+    if neutral_height is not None:
+        first_height = cells[0]["bbox"][3] - cells[0]["bbox"][1]
+        scale = neutral_height / first_height
+        for cell in cells:
+            left, top, right, bottom = cell["bbox"]
+            width = max(1, round((right - left) * scale))
+            height = max(1, round((bottom - top) * scale))
+            x = anchor_x - round((cell["foot_x"] - left) * scale)
+            y = frame_size[1] - padding - height
+            if x < padding or y < padding or x + width > frame_size[0] - padding:
+                raise SpritePipelineError(
+                    f"neutral-height={neutral_height} 时第 {cell['index']} 格超出安全留边；"
+                    "请增大 frame-size 或减小 padding/neutral-height")
+        return scale
+    max_left = max(cell["foot_x"] - cell["bbox"][0] for cell in cells)
+    max_right = max(cell["bbox"][2] - cell["foot_x"] for cell in cells)
+    max_top = max(cell["bbox"][3] - cell["bbox"][1] for cell in cells)
     return min(capacities[0] / max_left, capacities[1] / max_right, capacities[2] / max_top)
 
 def build_frame(cell: dict, scale: float, frame_size: tuple[int, int], padding: int):
@@ -158,7 +173,7 @@ def save_contact_sheet(images: list[Image.Image], durations: list[int], columns:
 
 def process_sprite_sheet(source: Path, output: Path, columns: int, rows: int,
                          frame_size: tuple[int, int], alpha_threshold: int = 16,
-                         padding: int = DEFAULT_PADDING,
+                         padding: int = DEFAULT_PADDING, neutral_height: int | None = None,
                          durations_ms: list[int] | None = None, loop: bool = True) -> dict:
     source, output = Path(source), Path(output)
     frame_width, frame_height = frame_size
@@ -169,6 +184,8 @@ def process_sprite_sheet(source: Path, output: Path, columns: int, rows: int,
         raise SpritePipelineError("alpha-threshold 必须在 0～255 之间")
     if padding < 0:
         raise SpritePipelineError("padding 必须是非负整数")
+    if neutral_height is not None and (not isinstance(neutral_height, int) or neutral_height <= 0):
+        raise SpritePipelineError("neutral-height 必须是正整数")
 
     durations = list(DEFAULT_DURATIONS_MS if durations_ms is None else durations_ms)
     if len(durations) != total:
@@ -184,7 +201,7 @@ def process_sprite_sheet(source: Path, output: Path, columns: int, rows: int,
             f"源图尺寸 {sheet_width}x{sheet_height} 不能被 {columns}x{rows} 网格整除")
     cell_size = (sheet_width // columns, sheet_height // rows)
     cells = analyze_cells(sheet, columns, rows, cell_size, alpha_threshold)
-    scale = common_scale(cells, frame_size, padding)
+    scale = common_scale(cells, frame_size, padding, neutral_height)
 
     digits = max(2, len(str(total - 1)))
     records, images = [], []
@@ -217,6 +234,7 @@ def process_sprite_sheet(source: Path, output: Path, columns: int, rows: int,
                  "cell_size": {"width": cell_size[0], "height": cell_size[1]},
                  "frame_size": {"width": frame_width, "height": frame_height},
                  "alpha_threshold": alpha_threshold, "scale": round(scale, 6),
+                 "neutral_height": neutral_height,
                  "resample": "nearest", "alignment": "foot-bottom-center",
                  "padding": padding, "foot_band_ratio": FOOT_BAND_RATIO,
                  "anchor_mode": "standing-foot-band",
@@ -257,6 +275,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--alpha-threshold", type=int, default=16, help="alpha 阈值，默认 16")
     parser.add_argument("--padding", type=non_negative_int, default=DEFAULT_PADDING,
                         help="画布安全边距，默认 8 像素")
+    parser.add_argument("--neutral-height", type=positive_int, default=None,
+                        help="按第0帧主体高度指定目标像素，全套共用同一 scale；越界报错")
     parser.add_argument("--durations-ms", type=parse_durations_ms, default=None,
                         help="逗号分隔的每帧毫秒；默认值为 8 帧呼吸试样时序")
     parser.add_argument("--no-loop", action="store_true", help="在 manifest 中标记 loop=false")
@@ -266,6 +286,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest = process_sprite_sheet(
             args.source, args.output, args.columns, args.rows, args.frame_size,
             alpha_threshold=args.alpha_threshold, padding=args.padding,
+            neutral_height=args.neutral_height,
             durations_ms=args.durations_ms, loop=not args.no_loop)
     except (OSError, SpritePipelineError) as exc:
         print(f"错误: {exc}", file=sys.stderr)

@@ -57,6 +57,7 @@ class SpritePipelineTest(unittest.TestCase):
         self.assertEqual(manifest["source"]["sha256"], hashlib.sha256(original).hexdigest())
         self.assertEqual(self.source.read_bytes(), original)
         self.assertAlmostEqual(manifest["spec"]["scale"], 16 / 36, places=5)
+        self.assertIsNone(manifest["spec"]["neutral_height"])
         self.assertEqual(manifest["frame_durations_ms"], DURATIONS)
         self.assertFalse(manifest["loop"])
         self.assertEqual([frame["scaled_size"] for frame in manifest["frames"]],
@@ -72,6 +73,26 @@ class SpritePipelineTest(unittest.TestCase):
         self.run_tool()
         second = {path.name: path.read_bytes() for path in self.output.iterdir()}
         self.assertEqual(first, second)
+
+    def test_neutral_height_shared_scale_and_bounds(self):
+        manifest = self.run_tool(neutral_height=12)
+        self.assertEqual(manifest["spec"]["neutral_height"], 12)
+        self.assertAlmostEqual(manifest["spec"]["scale"], 0.4, places=6)
+        self.assertEqual([frame["scaled_size"] for frame in manifest["frames"]],
+                         [{"width": 6, "height": 12}, {"width": 8, "height": 14},
+                          {"width": 5, "height": 10}, {"width": 7, "height": 13}])
+        self.assertEqual(manifest["frames"][0]["scaled_size"]["height"], 12)
+        for frame in manifest["frames"]:
+            ratio = frame["scaled_size"]["height"] / frame["source_bbox"]["height"]
+            self.assertAlmostEqual(ratio, 0.4, delta=0.03)
+        self.assertEqual({(f["source_foot_anchor"]["x"], f["source_foot_anchor"]["y"],
+                           f["output_foot_anchor"]["x"], f["output_foot_anchor"]["y"])
+                          for f in manifest["frames"]}, {(32, 50, 16, 24)})
+
+        with self.assertRaises(SpritePipelineError) as caught:
+            self.run_tool(neutral_height=20, output=self.root / "too-tall")
+        self.assertIn("neutral-height", str(caught.exception))
+        self.assertFalse((self.root / "too-tall").exists())
 
     def test_rejects_empty_cell(self):
         source = make_sheet(self.root / "empty.png", [BOXES[0], None, BOXES[2], BOXES[3]])

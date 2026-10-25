@@ -18,6 +18,18 @@ if (!manifestPath || !evidencePath) {
   console.error('用法: node verify-player.cjs --manifest <m.json> --evidence <e.json>');
   process.exit(2);
 }
+const manifest = JSON.parse(fs.readFileSync(path.resolve(manifestPath), 'utf8'));
+if (!Array.isArray(manifest.frames) || manifest.frames.length === 0) {
+  console.error('manifest 缺少 frames');
+  process.exit(2);
+}
+const durations = manifest.frames.map((frame) => frame.duration_ms);
+if (durations.some((duration) => !(duration > 0))) {
+  console.error('manifest 缺少有效 duration_ms');
+  process.exit(2);
+}
+const totalMs = durations.reduce((sum, duration) => sum + duration, 0);
+const MAX_WAIT_MS = 30000;
 const evidenceFile = path.resolve(evidencePath);
 const outputDir = path.dirname(evidenceFile);
 const prefix = path.basename(evidenceFile, '.json');
@@ -27,15 +39,38 @@ const frameOf = (text) => Number(text.match(/帧 (\d+)/)[1]);
 const checks = {};
 const failures = [];
 const logLines = [];
+let exitCode = 'not-closed';
+let cleanupError = null;
 const log = (message) => { logLines.push(message); console.log(`[verify] ${message}`); };
 const expect = (name, ok, detail) => {
   checks[name] = { ok, ...detail };
   if (!ok) failures.push(name);
   log(`${ok ? 'OK' : 'FAIL'} ${name} ${JSON.stringify(detail)}`);
 };
+const skip = (name, detail) => {
+  checks[name] = { ok: null, covered: false, ...detail };
+  log(`SKIP ${name} ${JSON.stringify(detail)}`);
+};
+function saveEvidence(errorMessage) {
+  if (errorMessage) {
+    failures.push('exception');
+    checks.exception = { ok: false, message: errorMessage };
+    log(`FAIL exception ${errorMessage}`);
+  }
+  const passed = failures.length === 0;
+  const evidence = {
+    manifest: path.resolve(manifestPath), capturedAt: new Date().toISOString(),
+    durationMs: totalMs, loop: Boolean(manifest.loop), passed, failures, exitCode,
+    note: '自动检查仅证明播放入口行为，不构成视觉或节奏验收；covered=false 表示未覆盖。',
+    checks,
+  };
+  fs.writeFileSync(evidenceFile, `${JSON.stringify(evidence, null, 2)}\n`);
+  fs.writeFileSync(path.join(outputDir, `${prefix}.log`), `${logLines.join('\n')}\n`);
+  console.log(`[verify] ${passed ? 'PASS' : 'FAIL'} evidence=${evidenceFile}`);
+  return passed;
+}
+
 (async () => {
-  let exitCode = 'not-closed';
-  let cleanupError = null;
   let app;
   try {
     app = await electron.launch({ executablePath: require('electron'),
@@ -56,19 +91,53 @@ const expect = (name, ok, detail) => {
       frames: window.reviewData.frameUrls.length }));
     expect('sandbox', secure.require === 'undefined' && secure.process === 'undefined'
       && secure.ipc === 'undefined', secure);
+    const pause = async () => {
+      if ((await page.textContent('#play')) === '暂停') {
+        await page.click('#play');
+        await page.waitForFunction(() => document.querySelector('#play').textContent === '播放');
+      }
+    };
 
-    const loopStart = Date.now();
-    await page.waitForFunction(() => /循环 [1-9]/.test(
-      document.querySelector('#status').textContent), null, { timeout: 8000 });
-    expect('normal', true, { firstLoopMs: Date.now() - loopStart,
-      status: await page.textContent('#status') });
+    if (manifest.loop) {
+      if (totalMs + 3000 > MAX_WAIT_MS) {
+        skip('normal', { reason: '循环时长超过验证上限', totalMs, limitMs: MAX_WAIT_MS });
+      } else {
+        const loopStart = Date.now();
+        await page.waitForFunction(() => /循环 [1-9]/.test(
+          document.querySelector('#status').textContent), null, { timeout: totalMs + 3000 });
+        expect('normal', true, { covered: true, mode: 'loop',
+          firstLoopMs: Date.now() - loopStart, status: await page.textContent('#status') });
+      }
+    } else if (totalMs + 3000 > MAX_WAIT_MS) {
+      skip('normal', { reason: '播放时长超过验证上限', totalMs, limitMs: MAX_WAIT_MS });
+      skip('replay', { reason: 'normal 未覆盖，未验证重新播放' });
+    } else {
+      await page.waitForFunction((count) => {
+        const text = document.querySelector('#status').textContent;
+        return Number(text.match(/帧 (\d+)/)[1]) === count
+          && document.querySelector('#play').textContent === '播放';
+      }, secure.frames, { timeout: totalMs + 3000 });
+      const stopped = await page.textContent('#status');
+      const playLabel = await page.textContent('#play');
+      expect('normal', frameOf(stopped) === secure.frames && playLabel === '播放',
+        { covered: true, mode: 'stop-at-end', status: stopped, playLabel });
+      await page.click('#play');
+      await page.waitForFunction(() => Number(
+        document.querySelector('#status').textContent.match(/帧 (\d+)/)[1]) === 1
+        && document.querySelector('#play').textContent === '暂停', null, { timeout: 3000 });
+      expect('replay', true, { status: await page.textContent('#status') });
+    }
 
+    if ((await page.textContent('#play')) === '播放') await page.click('#play');
+    await page.waitForFunction(() => document.querySelector('#play').textContent === '暂停');
+    const pauseBefore = await page.textContent('#status');
     await page.click('#play');
     await page.waitForFunction(() => document.querySelector('#play').textContent === '播放');
-    const pauseBefore = await page.textContent('#status');
+    const pausedAt = await page.textContent('#status');
     await page.waitForTimeout(600);
-    const pauseAfter = await page.textContent('#status');
-    expect('pause', pauseBefore === pauseAfter, { before: pauseBefore, after: pauseAfter });
+    const pausedLater = await page.textContent('#status');
+    expect('pause', pausedAt === pausedLater,
+      { before: pauseBefore, pausedAt, pausedLater });
 
     const before = frameOf(await page.textContent('#status'));
     await page.click('#next');
@@ -79,22 +148,30 @@ const expect = (name, ok, detail) => {
       { before, next, prev });
 
     await page.selectOption('#speed', '0.25');
-    for (let i = 0; i < secure.frames
-      && frameOf(await page.textContent('#status')) !== 1; i += 1) await page.click('#next');
-    const slowBefore = await page.textContent('#status');
-    const resumedAt = Date.now();
-    await page.click('#play');
-    await page.waitForTimeout(1000);
-    const atOneSecond = await page.textContent('#status');
-    await page.waitForFunction((previous) => document.querySelector('#status').textContent
-      !== previous, slowBefore, { timeout: 8000 });
-    expect('slow', atOneSecond === slowBefore && Date.now() - resumedAt >= 2000,
-      { speed: await page.inputValue('#speed'), sameAt1000ms: atOneSecond === slowBefore,
-        advancedMs: Date.now() - resumedAt, frameAfter: frameOf(await page.textContent('#status')) });
+    const slowFrame = frameOf(await page.textContent('#status'));
+    const frameDuration = durations[slowFrame - 1];
+    const expectedMs = frameDuration * 4;
+    if (expectedMs + 3000 > MAX_WAIT_MS) {
+      skip('slow', { reason: '单帧 0.25× 时长超过验证上限', frame: slowFrame,
+        frameDurationMs: frameDuration, expectedMs, limitMs: MAX_WAIT_MS });
+    } else {
+      const slowBefore = await page.textContent('#status');
+      const probeMs = Math.min(1000, Math.max(1, Math.floor(expectedMs / 2)));
+      const resumedAt = Date.now();
+      await page.click('#play');
+      await page.waitForTimeout(probeMs);
+      const atProbe = await page.textContent('#status');
+      await page.waitForFunction((previous) => document.querySelector('#status').textContent
+        !== previous, slowBefore, { timeout: expectedMs + 3000 });
+      expect('slow', atProbe === slowBefore && Date.now() - resumedAt >= frameDuration * 2,
+        { covered: true, speed: await page.inputValue('#speed'), frame: slowFrame,
+          frameDurationMs: frameDuration, expectedMs, probeMs,
+          sameAtProbe: atProbe === slowBefore, advancedMs: Date.now() - resumedAt,
+          frameAfter: frameOf(await page.textContent('#status')) });
+    }
 
-    await page.click('#play');
-    await page.waitForFunction(() => document.querySelector('#play').textContent === '播放');
-    for (let i = 0; i < 3; i += 1) await page.click('#next');
+    await pause();
+    for (let index = 0; index < 3; index += 1) await page.click('#next');
     await page.click('#background');
     const dark = await page.evaluate(() => document.body.className);
     await page.screenshot({ path: path.join(outputDir, `${prefix}-dark.png`) });
@@ -113,32 +190,34 @@ const expect = (name, ok, detail) => {
     const windows = (await app.windows()).length;
     expect('navigation-block', page.url() === urlBefore && windows === 1,
       { url: page.url(), windows });
+  } catch (error) {
+    log(`FAIL runtime ${error.message}`);
+    throw error;
   } finally {
-    if (app) {
-      const child = app.process();
-      await app.close();
-      exitCode = await Promise.race([
-        new Promise((resolve) => (child.exitCode !== null ? resolve(child.exitCode)
-          : child.once('exit', resolve))),
-        new Promise((resolve) => setTimeout(() => resolve('timeout'), 3000)),
-      ]);
-    }
     try {
-      fs.rmSync(dataDir, { recursive: true, force: true });
-    } catch (error) {
-      cleanupError = error.message;
-      log(`FAIL cleanup-rm ${error.message}`);
+      if (app) {
+        const child = app.process();
+        await app.close();
+        exitCode = await Promise.race([
+          new Promise((resolve) => (child.exitCode !== null ? resolve(child.exitCode)
+            : child.once('exit', resolve))),
+          new Promise((resolve) => setTimeout(() => resolve('timeout'), 3000)),
+        ]);
+      }
+    } finally {
+      try {
+        fs.rmSync(dataDir, { recursive: true, force: true });
+      } catch (error) {
+        cleanupError = error.message;
+        log(`FAIL cleanup-rm ${error.message}`);
+      }
     }
   }
   expect('cleanup', !cleanupError && !fs.existsSync(dataDir),
     { path: dataDir, error: cleanupError });
   expect('exit', exitCode === 0, { code: exitCode });
-  const passed = failures.length === 0;
-  const evidence = { manifest: path.resolve(manifestPath), capturedAt: new Date().toISOString(),
-    passed, failures, exitCode,
-    note: '自动检查仅证明播放入口行为，不构成视觉或节奏验收。', checks };
-  fs.writeFileSync(evidenceFile, `${JSON.stringify(evidence, null, 2)}\n`);
-  fs.writeFileSync(path.join(outputDir, `${prefix}.log`), `${logLines.join('\n')}\n`);
-  log(`${passed ? 'PASS' : 'FAIL'} evidence=${evidenceFile}`);
-  if (!passed) process.exitCode = 1;
-})().catch((error) => { console.error(error); process.exit(1); });
+  if (!saveEvidence()) process.exitCode = 1;
+})().catch((error) => {
+  console.error(error);
+  if (!saveEvidence(error.message)) process.exitCode = 1;
+});

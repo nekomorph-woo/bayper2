@@ -27,6 +27,7 @@ python3 tools/sprite-pipeline/sprite_pipeline.py \
 - `--padding 8`，脚底到画布底边、主体到其他边的最小安全边距；
 - `--durations-ms 650,180,250,80,110,80,180,350`，这是 8 帧呼吸试样的元数据初值，不代表已验证自然；
 - `loop=true`，传 `--no-loop` 可改为 `false`。
+- `--neutral-height 298`：可选，以第0帧主体高度计算整套唯一缩放，用于与已确认动作对齐中性身高；所有帧仍共用比例。超出任一格安全留边时报错，不自动裁切。未指定仍自动fit。第0帧必须是适合比较的中性站姿，不能用跳跃/弯腰帧盲目匹配。
 
 帧数不是 8 时必须显式传 `--durations-ms`，数量需等于 `columns × rows`。
 
@@ -70,7 +71,7 @@ node tools/sprite-pipeline/verify-player.cjs \
   --evidence tools/sprite-pipeline/evidence/player-evidence.json
 ```
 
-脚本自行创建临时目录并传给播放器，在 `finally` 关闭 Electron 后同步删除并断言目录消失；同时检查正常推进、暂停、逐帧、0.25×速、背景切换、外部导航拦截和退出码，截图与状态日志写到 evidence 同目录。当前证据为 `evidence/player-evidence.json`、`.log`、`-light.png`、`-dark.png`。这些只证明播放入口行为，不代替 Codex 实际观看播放。
+脚本自行创建临时目录并传给播放器，在 `finally` 关闭 Electron 后同步删除并断言目录消失；同时按manifest时长检查循环推进或非循环末帧停止/重新播放，以及暂停、逐帧、0.25×速、背景切换、外部导航拦截和退出码，截图与状态日志写到 evidence 同目录。当前证据为 `evidence/player-evidence.json`、`.log`、`-light.png`、`-dark.png`。单项时长超过30秒验证上限会标记`covered:false`，不得把该项称为通过。这些只证明播放入口行为，不代替 Codex 实际观看播放。
 
 ## 测试
 

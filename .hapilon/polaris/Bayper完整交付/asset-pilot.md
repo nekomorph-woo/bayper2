@@ -34,5 +34,13 @@ Codex受托批准 v1，2026-10-25；在S01实现期间独立推进。业务依�
 - Claude实现自包含Electron播放器；Codex退回了脱离父进程的清理轮询，改为launcher持有临时目录、转发信号并在子进程退出后清理。
 - Codex独立执行`node tools/sprite-pipeline/verify-player.cjs --manifest assets/characters/rin/animations/idle-v3/manifest.json --evidence tools/sprite-pipeline/evidence/codex-idle-v3.json`：正常推进、暂停、前后帧、0.25倍速、深浅背景、隔离renderer、导航拦截及退出清理均通过。证据归工具内部。
 - Codex通过原生UI实际打开播放器，查看1倍播放、暂停比较第7/8/1帧接缝与第4/5帧眨眼，切换深底和0.25倍播放。角色耳尾、服装、脸型保持可辨认的同一身份，双脚位置稳定，无矩形白底或尾巴截断；发梢、裙边有少量生成细节变化。
-- 观察方式是运行窗口的截图序列和逐帧操作，并非人类连续视频体验。播放能力与可读性接受；默认1.88秒循环的长期自然度仍待桌面集成后调整，不据此声称全部动态质量通过。POL-ASSET-002保留PARTIAL，下一步桌面实际尺寸和连续播放节奏复验。
+- 观察方式是运行窗口的截图序列和逐帧操作，并非人类连续视频体验。播放能力与可读性接受；默认1.88秒循环的长期自然度仍待桌面集成后调整，不据此声称全部动态质量通过。POL-ASSET-002保留INCONCLUSIVE，下一步桌面实际尺寸和连续播放节奏复验。
 - 关闭本轮窗口后launcher退出0，进程核对无该播放器残留；自动检查已确认其临时目录删除。
+
+## 跨动作尺寸与非循环播放
+
+凛wave-v1因左右手中途切换被拒绝；v2修复同手挥动并留边，源图与完整提示词保留在assets/characters/rin/source/README.md。自动fit曾产生315像素身高，较idle-v3的298像素偏大；Claude新增显式第0帧中性高度，整套共享scale，不逐帧拉伸。
+
+Codex独立5项Python测试通过；实际wave-v2指定neutral-height=298、256×384、脚锚(128,376)，输出scale0.728606。8帧时长[180,160,180,180,180,180,180,260]共1500ms，非循环。中性帧并排静态核对身高和落脚点，衣装身份一致，仍有细节差异，不以尺寸相同冒称像素完全相同。
+
+Codex串行运行真实Electron的wave-v2非循环停止/重播及idle-v3循环回归，均通过暂停、逐帧、按实际帧时长0.25倍速、深浅合成、导航阻断、临时目录清理。证据为tools/sprite-pipeline/evidence/codex-wave-v2.json和codex-idle-v3-duration-aware.json。播放器检查逐项covered=true，无跳过。工具增量接受；wave实际动态衔接与整个角色动作库仍未接受，留待正式画布播放审查。

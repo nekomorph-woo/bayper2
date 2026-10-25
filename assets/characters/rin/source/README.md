@@ -51,3 +51,21 @@ v1和v2被实际切帧命令拒绝：第0格尾巴触到右边界，不能作为
 ```text
 Edit this exact eight-frame sprite sheet for production grid safety. Preserve Rin's identity, pixel-art rendering, outfit, and all eight animation poses in reading order. Keep canvas 4 equal columns by 2 equal rows. CRITICAL: every sprite including tail MUST fit completely inside its own equal grid cell with at least 12% fully TRANSPARENT padding left AND right and 8% padding above AND below. Uniformly reduce the same scale of ALL eight sprites to approximately 75 percent of their current scale around each cell center; do not distort proportions. The first tail currently crosses its equal cell boundary; fix this with more space, NOT clipping tail. All feet share the same local baseline with visible transparent space beneath. Genuine clear alpha background, no painted gradient, no checkerboard, no text/gridlines. Keep crisp small pixel clusters, detailed face and dithered skirt from original, not smooth painting. Do not change poses or expressions. Eight separate equally spaced complete characters, 4x2.
 ```
+
+## wave-v1.png / wave-v2.png
+
+2026-10-25，Codex Desktop内置imagegen，参考master-v1，制作8帧4×2轻挥手。原件分别为同上生成目录的`exec-2688959d-b30f-41f4-8dcc-12814cf91a41.png`、`exec-2cfbf978-9ea1-4439-a5ab-1b455333c974.png`。
+
+v1拒绝：第2/7帧抬起了画面左手，中间却挥右手，不是连续动作。v2定向修复同手挥动并缩小留边，静态审查8帧均为右侧手动作；实际CLI切帧成功，但自动fit后首帧高315像素，相对idle-v3的298像素约放大6%，跨动作尺寸尚未通过。Claude已补显式中性高度约束，Codex独立运行5项测试通过，并使用`--neutral-height 298`重新导出：整套scale0.728606、首帧高298、统一脚锚(128,376)。静态比较身高与落脚点已对齐；跨动作动态衔接仍待运行时复验。
+
+v1实际提示词：
+
+```text
+Use case identity-preserve. Production sprite sheet for the EXACT Rin catgirl maid shown in reference. Make 8 sequential frames of a gentle greeting wave, 4 equal columns x 2 equal rows, reading order. Genuine transparent background, no text, borders, shadow, props or extra characters. Every frame full body same scale, same 3-head compact proportions, gold eyes, plum-black bob, ivory maid headband, burgundy bow, black dress ivory apron, dark tights, gold buckle shoes, single tail curled to viewer right. Preserve detailed crisp pixel clusters and dithering from reference, no smooth painting. Fixed feet and unchanged camera, front three-quarter view. Character must fit inside each grid cell with at least 12% transparent side margins including tail and hand, 8% top/bottom margins. This is one continuous action, not different designs: frame1 exact relaxed reference pose; frame2 raises viewer-left forearm slightly; frame3 hand reaches shoulder level palm outward; frame4 hand gently tilts outward; frame5 tilts inward; frame6 small outward wave again; frame7 forearm lowers; frame8 returns to original relaxed pose. Hand stays below ear, no giant sweeping arm. Same face/outfit/head/body proportions and foot positions in every frame. Tiny natural smile, warm restrained greeting. Frame1 and8 should connect to neutral idle. Match reference silhouette and outfit details exactly. Uniform body scale across all eight sprites, generous transparent gaps.
+```
+
+v2实际提示词（参考wave-v1）：
+
+```text
+Identity-preserve correction of this 8 frame sprite sheet, 4 equal columns x 2 equal rows. Fix TWO concrete errors only. 1) Wave must use the SAME arm throughout: the arm on the RIGHT SIDE OF THE IMAGE in each cell (beside tail). The LEFT SIDE arm hangs down exactly as frame1 in ALL eight frames. In frame2 and frame7 currently the wrong left-side hand raises; instead keep left arm down and make right arm intermediate lifting/lowering. Frames3-6 wave right-side hand as now. 2) Uniformly shrink ALL characters to 75% current size, center in each equal cell, retaining same common feet baseline, so ALL ears feet hand and tail have clear transparent margins at least 12% cell width on both sides. Preserve exact character face, clothing, body proportions, pixel art and frame sequence. Genuine fully transparent alpha background. No glow, gradients, checkerboard, labels, borders. Frame1 neutral right arm down; frame2 right forearm halfway raised; frame3 right hand near shoulder; frame4 right hand tilted outward; frame5 inward; frame6 outward; frame7 right forearm halfway lowered; frame8 neutral same as1. Left hand remains lowered at left skirt edge in every frame. Tiny gentle wave, no camera movement.
+```
