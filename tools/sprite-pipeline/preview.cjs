@@ -6,6 +6,7 @@ const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { parseDisplayScale } = require('./display-scale.cjs');
 
 function readOption(name) {
   const inlinePrefix = `${name}=`;
@@ -17,7 +18,15 @@ function readOption(name) {
 
 const manifestPath = readOption('--manifest');
 if (!manifestPath) {
-  console.error('用法: node tools/sprite-pipeline/preview.cjs --manifest <manifest.json>');
+  console.error('用法: node tools/sprite-pipeline/preview.cjs --manifest <manifest.json> [--display-scale <scale>]');
+  process.exit(2);
+}
+
+let displayScale;
+try {
+  displayScale = parseDisplayScale(readOption('--display-scale'));
+} catch (error) {
+  console.error(error.message);
   process.exit(2);
 }
 
@@ -42,6 +51,7 @@ try {
     [
       path.join(__dirname, 'player.cjs'),
       '--manifest', path.resolve(manifestPath),
+      '--display-scale', String(displayScale),
       '--data-dir', dataDir,
     ],
     { stdio: 'inherit' },

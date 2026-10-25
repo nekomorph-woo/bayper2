@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { _electron: electron } = require('playwright');
+const { parseDisplayScale } = require('./display-scale.cjs');
 const option = (name) => {
   const index = process.argv.indexOf(name);
   if (index !== -1 && process.argv[index + 1]) return process.argv[index + 1];
@@ -15,12 +16,23 @@ const option = (name) => {
 const manifestPath = option('--manifest');
 const evidencePath = option('--evidence');
 if (!manifestPath || !evidencePath) {
-  console.error('用法: node verify-player.cjs --manifest <m.json> --evidence <e.json>');
+  console.error('用法: node verify-player.cjs --manifest <m.json> --evidence <e.json> [--display-scale <scale>]');
+  process.exit(2);
+}
+let displayScale;
+try {
+  displayScale = parseDisplayScale(option('--display-scale'));
+} catch (error) {
+  console.error(error.message);
   process.exit(2);
 }
 const manifest = JSON.parse(fs.readFileSync(path.resolve(manifestPath), 'utf8'));
 if (!Array.isArray(manifest.frames) || manifest.frames.length === 0) {
   console.error('manifest 缺少 frames');
+  process.exit(2);
+}
+if (!manifest.spec?.frame_size) {
+  console.error('manifest 缺少 spec.frame_size');
   process.exit(2);
 }
 const durations = manifest.frames.map((frame) => frame.duration_ms);
@@ -61,6 +73,7 @@ function saveEvidence(errorMessage) {
   const evidence = {
     manifest: path.resolve(manifestPath), capturedAt: new Date().toISOString(),
     durationMs: totalMs, loop: Boolean(manifest.loop), passed, failures, exitCode,
+    displayScale,
     note: '自动检查仅证明播放入口行为，不构成视觉或节奏验收；covered=false 表示未覆盖。',
     checks,
   };
@@ -75,7 +88,7 @@ function saveEvidence(errorMessage) {
   try {
     app = await electron.launch({ executablePath: require('electron'),
       args: [path.join(__dirname, 'player.cjs'), '--manifest', path.resolve(manifestPath),
-        '--data-dir', dataDir] });
+        '--display-scale', String(displayScale), '--data-dir', dataDir] });
     const page = await app.firstWindow();
     await page.waitForSelector('#frame');
     await page.waitForFunction(() => Boolean(window.reviewData));
@@ -91,6 +104,27 @@ function saveEvidence(errorMessage) {
       frames: window.reviewData.frameUrls.length }));
     expect('sandbox', secure.require === 'undefined' && secure.process === 'undefined'
       && secure.ipc === 'undefined', secure);
+    await page.waitForFunction(() => {
+      const image = document.querySelector('#frame');
+      return image.complete && image.naturalWidth > 0 && image.style.width !== '';
+    });
+    const rendered = await page.evaluate(() => {
+      const image = document.querySelector('#frame');
+      const rect = image.getBoundingClientRect();
+      return { width: rect.width, height: rect.height,
+        naturalWidth: image.naturalWidth, naturalHeight: image.naturalHeight,
+        imageRendering: getComputedStyle(image).imageRendering };
+    });
+    const frameSize = manifest.spec.frame_size;
+    const targetSize = { width: frameSize.width * displayScale,
+      height: frameSize.height * displayScale };
+    const near = (actual, expected) => Math.abs(actual - expected) < 0.01;
+    expect('display-size', near(rendered.width, targetSize.width)
+      && near(rendered.height, targetSize.height)
+      && rendered.naturalWidth === frameSize.width
+      && rendered.naturalHeight === frameSize.height
+      && rendered.imageRendering === 'pixelated',
+      { scale: displayScale, target: targetSize, rendered });
     const pause = async () => {
       if ((await page.textContent('#play')) === '暂停') {
         await page.click('#play');

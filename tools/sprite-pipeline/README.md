@@ -84,3 +84,9 @@ python3 tools/sprite-pipeline/test_sprite_pipeline.py -v
 ## 当前状态
 
 已对 `assets/characters/rin/source/idle-v3.png` 实际导出并完成静态检查；此前 v1/v2 因格边触尾被拒绝。审查播放器已自动验证帧号推进、暂停、逐帧、0.25×速、深浅背景切换、单窗口与退出清理。Codex已通过真实窗口截图序列和逐帧操作审查身份、接缝及深浅背景，并操作0.25×播放；未冒称人类连续观看。默认时序的长期自然度仍待桌面集成复验。独立自动证据见`evidence/codex-idle-v3.json`。
+
+## 按桌面实际尺寸审查
+
+播放器及验证器支持 `--display-scale 0.5`（默认1，允许0.1～4），仅设置CSS尺寸，源帧和manifest保持不变。256×384源帧在0.5时为128×192 CSS点，仍为pixelated。验证器新增display-size证据，记录实际getBoundingClientRect、源尺寸及计算样式。
+
+2026-10-26 Codex独立运行参数构造检查，并对rin/idle-pixel-v2运行0.5验证：实际128×192，循环、暂停、逐帧、慢放、背景切换及清理通过。证据`evidence/codex-rin-pixel-idle-v2-half.json`。这是工具能力与候选导入证据，不能代替连续视觉、跨动作和正式桌面合成验收。

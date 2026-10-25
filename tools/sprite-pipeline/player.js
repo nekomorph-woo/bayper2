@@ -1,12 +1,12 @@
-const { manifest, frameUrls } = window.reviewData;
+const { manifest, frameUrls, displaySize } = window.reviewData;
 const frame = document.querySelector('#frame');
 const status = document.querySelector('#status');
 const playButton = document.querySelector('#play');
 const speedSelect = document.querySelector('#speed');
 const durations = manifest.frames.map((item) => item.duration_ms);
-const frameSize = manifest.spec.frame_size;
-frame.width = frameSize.width;
-frame.height = frameSize.height;
+// 只按 scale 设置 CSS 显示尺寸，源帧和 manifest 均不改动。
+frame.style.width = `${displaySize.width}px`;
+frame.style.height = `${displaySize.height}px`;
 
 let frameIndex = 0;
 let elapsed = 0;

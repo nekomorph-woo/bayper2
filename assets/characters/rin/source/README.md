@@ -81,3 +81,30 @@ Use case: style-transfer / identity-preserve. Redraw the provided Rin character 
 2026-10-26，用户认为真实桌面测试角色过大且像素感不足。内置imagegen以master-v1为身份参考重绘，原件exec-cbcf075c-679d-48b0-b09c-be2822949d49.png。保留金瞳、短发、耳尾、服饰及紧凑比例，改成明显阶梯轮廓与较大色块，去除密集纹理。1024×1536 RGBA，抽样角色外alpha=0，角色内253～254；预览中的背景RGB光晕不能据此认为实际不透明。仍需小尺寸合成与动画，未替换运行资源。
 
 用户随后明确认可此版并要求同步设计约束，现为assets/characters/STYLE.md有效视觉基准。认可范围是静态画风，不是动画或其他角色自动通过。
+
+## idle-pixel-v1 / idle-pixel-v2
+
+2026-10-26，按新版母版生成8帧4×2待机候选。v1原件exec-3328388b-40a2-421a-a81e-4ac3b34e5c55.png，切帧因第0格触右边界拒绝，不导入。v2原件exec-bb683f16-53ff-47e2-80cd-d6d75fb447de.png，修正留白后由既有工具导出8帧256×384、统一scale0.735802、中性高298、脚锚128,376。Codex检查浅色接触图，身份与像素表达延续；仍待实际小尺寸播放及运行接线，不冒称用户接受动画。
+
+v1提示词：
+
+```text
+Create an eight-frame breathing/blink idle sprite sheet for EXACT Rin in reference. The reference is the approved-direction stronger pixel master candidate: KEEP its chunky hand-placed square pixel clusters, stepped outlines, simplified 32-color-style palette, identity, face, costume, 3-head compact proportions. Do not smooth or increase fine-detail rendering. Transparent background. Exactly FOUR columns TWO rows equal cells, reading order. Virtual logical sheet 512x384, each cell128x192 with same100x150 logical-pixel-tall Rin, shown as crisp nearest-neighbor enlargement. Uniform logical pixel size across all eight frames. Each sprite centered identical scale, feet same local baseline, all ears/tail/feet fully contained with generous margins. Arms relaxed at sides throughout, tail curled viewer-right throughout, same frontal three-quarter viewpoint, no pose swapping. Frame1 relaxed neutral eyes open; frame2 chest/apron rises just one logical pixel; frame3 breathe apex; frame4 half blink; frame5 closed eyes; frame6 half open; frame7 eyes open settling; frame8 exactly matches frame1 for seamless loop. Feet fixed, no scaling, no changing head/body ratio or hands. Tiny breathing only, avoid jitter. Cat ears black/pink, plum-black bob, gold eyes, ivory headband/apron, burgundy bow, plum-black maid dress/tights, gold buckle shoes, single cat tail. NO text, frame borders, numbering, ground, shadow, glow, gradients, antialiasing, dense dithering, props, or extra limbs. Must be a coherent continuous animation in consistent bold pixel-art style, not eight independent illustrations.
+```
+
+v2参考v1修留白，提示词：
+
+```text
+Repair this 8-frame Rin pixel idle sheet layout ONLY. Retain same character pixels, design, chunky pixel style, expression sequence, 4 columns x2 rows, genuine transparency. CRITICAL: existing tails touch/cross cell edges and bottom feet are clipped, so redraw complete sprites SMALLER inside each equal cell. Each sprite including tail/ears/feet occupies at most 65% of its cell width and 75% of cell height. At least 15% clear transparent margins left/right and 12% top/bottom in EVERY cell. Equal scale across ALL frames, feet same local baseline, no cropping anywhere, no overlap between cells. Entire canvas shows exactly4x2 cells with no drawn borders, text or numbering. Do not enlarge sprites to fill space. Keep uniform crisp square pixel clusters, no smoothing. Preserve black bob, gold eyes, black/pink cat ears, ivory headband/apron, burgundy bow, dark maid dress/tights/shoes, single tail viewer-right. Keep frame1/8 neutral near-identical; frames4/5/6 blink progression; barely breathing with fixed feet. No background glow, cast shadow or extraneous pixels.
+```
+
+
+## wave-pixel-v1：新版挥手候选
+
+来源：Codex内置imagegen，2026-10-26；原件exec-ac4cc145-3218-495d-923a-8bbba5d54076.png。参考master-pixel-v2及idle-pixel-v2，8帧4×2透明网格。切帧采用256×384、neutral-height298、时长180/120/140/120/120/140/140/300ms、非循环，统一缩放0.681922。Codex已查看浅背景接触表，耳尾/鞋完整、动作身份连续；尚未通过实际128×192播放和跨动作衔接验收，不替换正式运行。
+
+生成提示词：
+
+Create a production candidate sprite sheet for Bayper Rin waving hello. Reference 1 is the user-approved character/style master; reference 2 is the existing idle animation for identity/pose continuity. Exactly EIGHT full-body animation frames in a regular 4 columns x 2 rows equal-cell grid, reading left to right then top to bottom. TRANSPARENT background, no labels/grid lines/shadows/glow. CRITICAL leave generous blank margins in EVERY cell on all four sides; ears/tail/hands/shoes entirely contained, at least 12% cell width margin. Entire sheet may use a landscape 3:2 aspect. Same character scale and feet baseline within each cell; feet planted throughout. Rin: short dark plum-black bob, golden amber eyes, black cat ears pink inside, ivory ruffled maid headband, burgundy neck bow, dark plum maid dress and ivory apron, dark tights, small black shoes golden buckles, single curling tail to viewer right. Compact roughly 3-head tall anime proportions. Strong coherent chunky square-pixel clusters, stepped hard outlines, limited shade blocks, no smooth painterly gradients, no texture noise. Preserve face/skirt/ear size across all 8 frames. Action: 1 relaxed idle arms down (matching reference2), 2 viewer-left arm rises chest high, 3 raised open palm beside cheek, 4 palm tilts outward, 5 palm tilts inward, 6 outward gentle small wave, 7 arm lowers chest high, 8 returns exactly to initial idle pose. Right arm relaxed unchanged, no props/hearts. Friendly subtle smile, no character redesign or extra fingers. The output is actual separated frame art, not a contact collage with background.
+
+补充实测：idle-pixel-v2与wave-pixel-v1均由Codex独立运行verify-player `--display-scale 0.5`，实际尺寸128×192 CSS点、源256×384、pixelated保持。待机循环与挥手末帧停止/重新播放、暂停逐帧、慢放、深浅背景、导航限制和临时目录/进程清理通过；Codex查看小尺寸截图及挥手接触表。证据在tools/sprite-pipeline/evidence/codex-rin-pixel-{idle-v2,wave-v1}-half.json。此为候选导出与播放入口检查，连续视觉和跨动作衔接尚未完成，生产仍使用旧资源。

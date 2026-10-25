@@ -1,0 +1,104 @@
+{
+  "manifest": "/Volumes/Under_M2/morphiiouo/bayper/assets/characters/rin/animations/wave-pixel-v1/manifest.json",
+  "capturedAt": "2026-10-25T16:52:52.141Z",
+  "durationMs": 1260,
+  "loop": false,
+  "passed": true,
+  "failures": [],
+  "exitCode": 0,
+  "displayScale": 0.5,
+  "note": "自动检查仅证明播放入口行为，不构成视觉或节奏验收；covered=false 表示未覆盖。",
+  "checks": {
+    "window": {
+      "ok": true,
+      "count": 1,
+      "bounds": {
+        "x": 920,
+        "y": 410,
+        "width": 720,
+        "height": 620
+      },
+      "userData": "/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-sprite-verify-b8aQUG"
+    },
+    "sandbox": {
+      "ok": true,
+      "require": "undefined",
+      "process": "undefined",
+      "ipc": "undefined",
+      "frames": 8
+    },
+    "display-size": {
+      "ok": true,
+      "scale": 0.5,
+      "target": {
+        "width": 128,
+        "height": 192
+      },
+      "rendered": {
+        "width": 128,
+        "height": 192,
+        "naturalWidth": 256,
+        "naturalHeight": 384,
+        "imageRendering": "pixelated"
+      }
+    },
+    "normal": {
+      "ok": true,
+      "covered": true,
+      "mode": "stop-at-end",
+      "status": "帧 8 / 8　循环 0",
+      "playLabel": "播放"
+    },
+    "replay": {
+      "ok": true,
+      "status": "帧 1 / 8　循环 0"
+    },
+    "pause": {
+      "ok": true,
+      "before": "帧 1 / 8　循环 0",
+      "pausedAt": "帧 1 / 8　循环 0",
+      "pausedLater": "帧 1 / 8　循环 0"
+    },
+    "step": {
+      "ok": true,
+      "before": 1,
+      "next": 2,
+      "prev": 1
+    },
+    "slow": {
+      "ok": true,
+      "covered": true,
+      "speed": "0.25",
+      "frame": 1,
+      "frameDurationMs": 180,
+      "expectedMs": 720,
+      "probeMs": 360,
+      "sameAtProbe": true,
+      "advancedMs": 741,
+      "frameAfter": 2
+    },
+    "background": {
+      "ok": true,
+      "dark": "dark",
+      "light": "",
+      "screenshots": [
+        "codex-rin-pixel-wave-v1-half-dark.png",
+        "codex-rin-pixel-wave-v1-half-light.png"
+      ]
+    },
+    "navigation-block": {
+      "ok": true,
+      "url": "file:///Volumes/Under_M2/morphiiouo/bayper/tools/sprite-pipeline/player.html",
+      "windows": 1
+    },
+    "cleanup": {
+      "ok": true,
+      "path": "/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-sprite-verify-b8aQUG",
+      "error": null
+    },
+    "exit": {
+      "ok": true,
+      "code": 0
+    }
+  }
+}

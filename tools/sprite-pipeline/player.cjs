@@ -2,6 +2,7 @@ const { app, BrowserWindow, Menu } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { parseDisplayScale, displaySize } = require('./display-scale.cjs');
 
 const playerFile = path.join(__dirname, 'player.html');
 const playerUrl = pathToFileURL(playerFile).href;
@@ -66,7 +67,10 @@ app.whenReady().then(() => {
   }
   try {
     Menu.setApplicationMenu(null);
-    createWindow(readReview(manifestPath));
+    const review = readReview(manifestPath);
+    const displayScale = parseDisplayScale(readOption('--display-scale'));
+    const scaledSize = displaySize(review.manifest.spec.frame_size, displayScale);
+    createWindow({ ...review, displaySize: scaledSize });
   } catch (error) {
     console.error(`播放器启动失败: ${error.message}`);
     app.exit(1);

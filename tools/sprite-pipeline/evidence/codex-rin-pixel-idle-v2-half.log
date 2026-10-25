@@ -1,0 +1,11 @@
+OK window {"count":1,"bounds":{"x":920,"y":410,"width":720,"height":620},"userData":"/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-sprite-verify-xsoK7O"}
+OK sandbox {"require":"undefined","process":"undefined","ipc":"undefined","frames":8}
+OK display-size {"scale":0.5,"target":{"width":128,"height":192},"rendered":{"width":128,"height":192,"naturalWidth":256,"naturalHeight":384,"imageRendering":"pixelated"}}
+OK normal {"covered":true,"mode":"loop","firstLoopMs":1784,"status":"帧 1 / 8　循环 1"}
+OK pause {"before":"帧 1 / 8　循环 1","pausedAt":"帧 1 / 8　循环 1","pausedLater":"帧 1 / 8　循环 1"}
+OK step {"before":1,"next":2,"prev":1}
+OK slow {"covered":true,"speed":"0.25","frame":1,"frameDurationMs":650,"expectedMs":2600,"probeMs":1000,"sameAtProbe":true,"advancedMs":2624,"frameAfter":2}
+OK background {"dark":"dark","light":"","screenshots":["codex-rin-pixel-idle-v2-half-dark.png","codex-rin-pixel-idle-v2-half-light.png"]}
+OK navigation-block {"url":"file:///Volumes/Under_M2/morphiiouo/bayper/tools/sprite-pipeline/player.html","windows":1}
+OK cleanup {"path":"/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-sprite-verify-xsoK7O","error":null}
+OK exit {"code":0}
