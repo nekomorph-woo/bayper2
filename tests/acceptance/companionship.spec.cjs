@@ -1001,6 +1001,43 @@ test("POL-COMPANION-004 重复 start 先结算旧模式，不吞掉已运行区�
   }
 });
 
+test("POL-DESKTOP-006 系统暂停与恢复：按离线区间补算且不重复", () => {
+  const dataDir = makeDataDir();
+  const clock = makeClock(new Date(2026, 9, 25, 9, 0, 0));
+  seedModern(dataDir, {
+    ids: ["c1"],
+    fixedId: "c1",
+    currentId: "c1",
+    energies: { c1: 40 },
+  });
+  const harness = startHarness(dataDir, clock, [0]);
+  try {
+    harness.service.markClosed();
+    clock.advanceHours(2);
+    harness.service.resumeAfterPause();
+    assert.equal(harness.service.getSnapshot().characters[0].stats.energy, 60);
+    assert.equal(harness.service.getSnapshot().characters[0].stats.intimacy, 10);
+
+    harness.service.resumeAfterPause();
+    assert.equal(
+      harness.service.getSnapshot().characters[0].stats.energy,
+      60,
+      "同一恢复锚点不得重复补算",
+    );
+
+    harness.service.markClosed();
+    clock.advanceHours(24);
+    harness.service.resumeAfterPause();
+    const afterDay = harness.service.getSnapshot();
+    assert.equal(afterDay.current.characterId, "c1");
+    assert.equal(afterDay.day, localDay(clock.now()));
+    assert.equal(afterDay.characters[0].stats.energy, 100);
+    assert.equal(afterDay.characters[0].stats.intimacy, 10);
+  } finally {
+    cleanup(dataDir, harness.store);
+  }
+});
+
 test("POL-COMPANION-006 旧 S01 schema 迁移：保留密文/关系/数值并可重复启动", () => {
   const dataDir = makeDataDir();
   const clock = makeClock(new Date(2026, 9, 25, 9, 0, 0));

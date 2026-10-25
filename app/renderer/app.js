@@ -7,6 +7,7 @@ const state = {
   snapshot: null,
   candidates: [],
   candidateIndex: 0,
+  fixedSelection: null,
 };
 
 const sections = Array.from(document.querySelectorAll("[data-step]"));
@@ -265,7 +266,11 @@ function renderCompanionControls(companion) {
 
   const previousNicknameId =
     nicknameSelect.value || companion?.current?.characterId || characters[0]?.characterId || "";
-  replaceOptions(fixedSelect, characters, companion?.fixedCharacterId ?? "");
+  const fixedSelection =
+    state.fixedSelection && characters.some((character) => character.characterId === state.fixedSelection)
+      ? state.fixedSelection
+      : companion?.fixedCharacterId ?? "";
+  replaceOptions(fixedSelect, characters, fixedSelection);
   replaceOptions(nicknameSelect, characters, previousNicknameId);
 
   const selected = characters.find((character) => character.characterId === nicknameSelect.value);
@@ -282,6 +287,28 @@ function renderCompanionControls(companion) {
     restButton.dataset.action = "rest";
     restButton.disabled = !companion?.current;
   }
+}
+
+function desktopStatusText(desktop) {
+  if (!desktop || desktop.state === "stopped") {
+    return "桌面角色：未启动";
+  }
+  if (desktop.state === "starting" || desktop.state === "restarting") {
+    return desktop.state === "restarting" ? "桌面角色：正在恢复" : "桌面角色：正在启动";
+  }
+  if (desktop.state === "failed") {
+    return "桌面角色：暂不可用（可从托盘重启）";
+  }
+  if (desktop.state !== "running") {
+    return "桌面角色：状态未知";
+  }
+  if (desktop.assetState === "pending") {
+    return "桌面角色：当前角色素材制作中";
+  }
+  if (desktop.assetState === "error" || desktop.assetState === "none") {
+    return "桌面角色：素材加载失败";
+  }
+  return `桌面角色：运行中（${desktop.assetLabel || "素材已接入"}）`;
 }
 
 function renderHome() {
@@ -332,6 +359,7 @@ function renderHome() {
   byId("home-model").textContent = snapshot.model.configured
     ? `模型：${snapshot.model.modelName} · Key 仅保存在系统安全存储`
     : "模型尚未配置";
+  byId("desktop-status").textContent = desktopStatusText(snapshot.desktop);
 
   renderRoster(companion);
   renderCompanionControls(companion);
@@ -465,6 +493,9 @@ byId("rest-companion").addEventListener("click", () => {
   restCompanion();
 });
 byId("fixed-save").addEventListener("click", saveFixed);
+byId("fixed-select").addEventListener("change", () => {
+  state.fixedSelection = byId("fixed-select").value;
+});
 byId("nickname-save").addEventListener("click", saveNickname);
 byId("roster-list").addEventListener("click", (event) => {
   const button = event.target.closest('button[data-action="switch"]');
@@ -478,4 +509,17 @@ byId("nickname-character").addEventListener("change", () => {
   const selected = characters.find((item) => item.characterId === byId("nickname-character").value);
   byId("nickname-input").value = selected?.nickname ?? "";
 });
+
+if (api && typeof api.onSnapshotUpdated === "function") {
+  api.onSnapshotUpdated((snapshot) => {
+    if (!snapshot || snapshot.state !== "accepted") {
+      return;
+    }
+    state.snapshot = snapshot;
+    renderHome();
+    if (byId("rest-companion").closest('[data-step="home"]').hidden) {
+      showStep("home");
+    }
+  });
+}
 init();

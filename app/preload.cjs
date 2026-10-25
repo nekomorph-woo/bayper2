@@ -14,5 +14,9 @@ contextBridge.exposeInMainWorld(
     setFixedCompanion: (characterId) => ipcRenderer.invoke("bayper:companion:fixed", characterId),
     switchCompanion: (characterId) => ipcRenderer.invoke("bayper:companion:switch", characterId),
     restCompanion: () => ipcRenderer.invoke("bayper:companion:rest"),
+    onSnapshotUpdated: (callback) => {
+      ipcRenderer.on("bayper:snapshot-updated", (_event, snapshot) => callback(snapshot));
+    },
+    getSystemStatus: () => ipcRenderer.invoke("bayper:system-status"),
   }),
 );

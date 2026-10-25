@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+  <title>S02b 验收底板（测试支架）</title>
+  <style>
+    body { margin: 0; min-height: 100vh; font: 14px/1.5 system-ui, sans-serif; color: #1c2430; background: #f5f5f5 repeating-conic-gradient(#e2e2e2 0% 25%, #fafafa 0% 50%) 0 0 / 32px 32px; }
+    main { padding: 18px; }
+    h1 { margin: 0 0 6px; font-size: 18px; }
+    .note { margin: 0 0 14px; max-width: 430px; }
+    label { display: block; margin: 14px 0 6px; font-weight: 600; }
+    input { width: 100%; max-width: 420px; padding: 8px; font: inherit; }
+    pre { margin-top: 14px; padding: 10px; border: 1px solid #b8c0c8; background: #ffffffcc; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>S02b 验收底板</h1>
+    <p class="note">测试支架，不是产品界面。请用真实鼠标/键盘操作；只记录 pointerdown、键盘与
+      focus/blur 次数，不模拟输入、Spaces 或锁屏。</p>
+    <label for="probe">焦点/输入探针</label>
+    <input id="probe" autocomplete="off" placeholder="点击输入，记录焦点和按键次数">
+    <pre id="counts"></pre>
+  </main>
+  <script>
+    const state = { pointerdown: 0, keydown: 0 };
+    const counts = document.querySelector("#counts");
+    function render() { counts.textContent = `pointerdown: ${state.pointerdown}\nkeydown: ${state.keydown}`; }
+    function bump(key) {
+      state[key] += 1;
+      render();
+    }
+    window.addEventListener("pointerdown", () => bump("pointerdown"));
+    window.addEventListener("keydown", () => bump("keydown"));
+    window.__desktopReviewDom = state;
+    render();
+  </script>
+</body>
+</html>

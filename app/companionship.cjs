@@ -165,6 +165,22 @@ function createCompanionshipService({
     });
   }
 
+  function applyOfflineRecovery(nowMs) {
+    const lastActive = Number(getState("last_active_at") ?? 0);
+    if (!(lastActive > 0 && nowMs > lastActive)) {
+      return false;
+    }
+    const hours = (nowMs - lastActive) / HOUR_MS;
+    store.runInTransaction(() => {
+      for (const companion of store.listCompanions()) {
+        const energy = clampEnergy(companion.stats.energy + 10 * hours);
+        store.applySettlement(companion.characterId, { energy, lastSettledAt: nowMs });
+      }
+      touchActive(nowMs);
+    });
+    return true;
+  }
+
   /* 应用关闭后按离线规则补算，再重置各角色模式并更新锚点。
      时钟回拨时不补算，也不把持久化时间改回过去。 */
   function start() {
@@ -172,17 +188,7 @@ function createCompanionshipService({
     const nowMs = nowDate.getTime();
 
     if (!started) {
-      const lastActive = Number(getState("last_active_at") ?? 0);
-      if (lastActive > 0 && nowMs > lastActive) {
-        const hours = (nowMs - lastActive) / HOUR_MS;
-        store.runInTransaction(() => {
-          for (const companion of store.listCompanions()) {
-            const energy = clampEnergy(companion.stats.energy + 10 * hours);
-            store.applySettlement(companion.characterId, { energy, lastSettledAt: nowMs });
-          }
-          touchActive(nowMs);
-        });
-      }
+      applyOfflineRecovery(nowMs);
 
       initState(nowMs);
       if (store.listCompanions().length > 0) {
@@ -228,6 +234,24 @@ function createCompanionshipService({
         }
       }
     });
+  }
+
+  /* 锁屏/休眠恢复：只补离线区间，随后恢复当前模式，不推进离线活动。 */
+  function resumeAfterPause() {
+    if (!started) {
+      start();
+      return;
+    }
+    const nowDate = now();
+    const nowMs = nowDate.getTime();
+    applyOfflineRecovery(nowMs);
+    initState(nowMs);
+    settleAll(nowMs);
+    if (store.listCompanions().length > 0) {
+      ensureDailyRoster(nowDate);
+      applyStoredModes(nowMs);
+    }
+    touchActive(nowMs);
   }
 
   function ensureDailyRoster(nowDate) {
@@ -726,6 +750,7 @@ function createCompanionshipService({
 
   return {
     start,
+    resumeAfterPause,
     markClosed,
     getSnapshot,
     setNickname,

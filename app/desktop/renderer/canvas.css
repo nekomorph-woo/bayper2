@@ -1,0 +1,80 @@
+/* 角色画布保持整窗透明；角色图片之外不绘制纸面或阴影。 */
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --fg: #2f2d27;
+  --muted: #6c675b;
+  --surface: rgba(255, 253, 246, 0.94);
+  --border: rgba(201, 190, 167, 0.9);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+body {
+  font-family: var(--font-ui);
+  color: var(--fg);
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+#stage {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100vw;
+  height: 100vh;
+  cursor: grab;
+}
+
+#stage.dragging {
+  cursor: grabbing;
+}
+
+#sprite {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+#status {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 18px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  text-align: center;
+  pointer-events: none;
+}
+
+#status-name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+#status-note {
+  margin: 3px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}

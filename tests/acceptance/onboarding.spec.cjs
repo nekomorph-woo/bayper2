@@ -12,6 +12,7 @@ const { startModelServer, startRedirectServer } = require("./fixture-server.cjs"
 const electronPath = require("electron");
 const repoRoot = path.resolve(__dirname, "..", "..");
 const evidenceDir = path.join(repoRoot, ".hapilon", "polaris", "Bayper完整交付", "evidence");
+const SCREENSHOT_PREFIX = process.env.BAYPER_SCREENSHOT_PREFIX || "s02b-r2";
 const DB_FILE = "bayper.sqlite3";
 const OK_KEY = "sk-fixture-ok";
 
@@ -443,6 +444,8 @@ test("POL-ONBOARD-005 配置与隔离边界：拒绝不安全配置与重定向�
       "acceptCharacter",
       "checkStoredModel",
       "getSnapshot",
+      "getSystemStatus",
+      "onSnapshotUpdated",
       "recommendCharacters",
       "restCompanion",
       "setFixedCompanion",
@@ -508,8 +511,15 @@ test("S01 视觉证据：三个步骤在 1200×800 与 960×680 下截图", asyn
     await page.locator("#config-submit").click();
     await waitForAlert(page, "#config-alert", "AUTH_FAILED");
 
-    await capture(app, page, "s02-r2-s01-01-config-error-1200x800.png");
-    await capture(app, page, "s02-r2-s01-01-config-error-960x680.png", 960, 680);
+    const configErrorLarge = `${SCREENSHOT_PREFIX}-s01-01-config-error-1200x800.png`;
+    const configErrorSmall = `${SCREENSHOT_PREFIX}-s01-01-config-error-960x680.png`;
+    const wishSmall = `${SCREENSHOT_PREFIX}-s01-02-wish-960x680.png`;
+    const wishLarge = `${SCREENSHOT_PREFIX}-s01-02-wish-1200x800.png`;
+    const homeSmall = `${SCREENSHOT_PREFIX}-s01-03-home-960x680.png`;
+    const homeLarge = `${SCREENSHOT_PREFIX}-s01-03-home-1200x800.png`;
+
+    await capture(app, page, configErrorLarge);
+    await capture(app, page, configErrorSmall, 960, 680);
 
     await page.locator("#api-key").fill(OK_KEY);
     await page.locator("#config-submit").click();
@@ -518,21 +528,21 @@ test("S01 视觉证据：三个步骤在 1200×800 与 960×680 下截图", asyn
     await page.locator("#wish-submit").click();
     await page.locator("#candidate-card").waitFor({ state: "visible" });
 
-    await capture(app, page, "s02-r2-s01-02-wish-960x680.png", 960, 680);
-    await capture(app, page, "s02-r2-s01-02-wish-1200x800.png");
+    await capture(app, page, wishSmall, 960, 680);
+    await capture(app, page, wishLarge);
 
     await page.locator("#accept-button").click();
     await waitForStep(page, "home");
-    await capture(app, page, "s02-r2-s01-03-home-960x680.png", 960, 680);
-    await capture(app, page, "s02-r2-s01-03-home-1200x800.png");
+    await capture(app, page, homeSmall, 960, 680);
+    await capture(app, page, homeLarge);
 
     for (const name of [
-      "s02-r2-s01-01-config-error-1200x800.png",
-      "s02-r2-s01-01-config-error-960x680.png",
-      "s02-r2-s01-02-wish-960x680.png",
-      "s02-r2-s01-02-wish-1200x800.png",
-      "s02-r2-s01-03-home-960x680.png",
-      "s02-r2-s01-03-home-1200x800.png",
+      configErrorLarge,
+      configErrorSmall,
+      wishSmall,
+      wishLarge,
+      homeSmall,
+      homeLarge,
     ]) {
       const stat = fs.statSync(path.join(evidenceDir, name));
       assert.ok(stat.size > 10000, `${name} 应为有效截图`);
