@@ -1,0 +1,170 @@
+{
+  "tool": "sprite-pipeline",
+  "source": {
+    "path": "assets/characters/hu/source/wave-pixel-v3.png",
+    "sha256": "ac02ed9d3461f5e97d69890c2767744e837772ab9c710d6c8ababde68a760fe2",
+    "size": {
+      "width": 1254,
+      "height": 1254
+    }
+  },
+  "spec": {
+    "columns": 2,
+    "rows": 2,
+    "cell_size": {
+      "width": 627,
+      "height": 627
+    },
+    "frame_size": {
+      "width": 320,
+      "height": 384
+    },
+    "alpha_threshold": 16,
+    "scale": 0.505942,
+    "neutral_height": 298,
+    "resample": "nearest",
+    "alignment": "foot-bottom-center",
+    "padding": 8,
+    "foot_band_ratio": 0.12,
+    "anchor_mode": "standing-foot-band",
+    "anchor_note": "站立素材底部12%区域alpha范围的中点；尾巴低垂、趴卧或道具低于脚不适用"
+  },
+  "loop": false,
+  "frame_durations_ms": [
+    180,
+    220,
+    200,
+    260
+  ],
+  "atlas": {
+    "file": "atlas.png",
+    "columns": 2,
+    "rows": 2,
+    "frame_size": {
+      "width": 320,
+      "height": 384
+    }
+  },
+  "contact_sheets": {
+    "light": "contact-sheet-light.png",
+    "dark": "contact-sheet-dark.png"
+  },
+  "frames": [
+    {
+      "index": 0,
+      "row": 0,
+      "column": 0,
+      "file": "frame-00.png",
+      "duration_ms": 180,
+      "source_bbox": {
+        "x": 143,
+        "y": 29,
+        "width": 449,
+        "height": 589
+      },
+      "source_foot_anchor": {
+        "x": 352.5,
+        "y": 618
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 227,
+        "height": 298
+      },
+      "paste": {
+        "x": 54,
+        "y": 78
+      }
+    },
+    {
+      "index": 1,
+      "row": 0,
+      "column": 1,
+      "file": "frame-01.png",
+      "duration_ms": 220,
+      "source_bbox": {
+        "x": 96,
+        "y": 29,
+        "width": 448,
+        "height": 589
+      },
+      "source_foot_anchor": {
+        "x": 314.5,
+        "y": 618
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 227,
+        "height": 298
+      },
+      "paste": {
+        "x": 49,
+        "y": 78
+      }
+    },
+    {
+      "index": 2,
+      "row": 1,
+      "column": 0,
+      "file": "frame-02.png",
+      "duration_ms": 200,
+      "source_bbox": {
+        "x": 143,
+        "y": 19,
+        "width": 451,
+        "height": 591
+      },
+      "source_foot_anchor": {
+        "x": 355.5,
+        "y": 610
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 228,
+        "height": 299
+      },
+      "paste": {
+        "x": 52,
+        "y": 77
+      }
+    },
+    {
+      "index": 3,
+      "row": 1,
+      "column": 1,
+      "file": "frame-03.png",
+      "duration_ms": 260,
+      "source_bbox": {
+        "x": 94,
+        "y": 20,
+        "width": 452,
+        "height": 590
+      },
+      "source_foot_anchor": {
+        "x": 313.0,
+        "y": 610
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 229,
+        "height": 299
+      },
+      "paste": {
+        "x": 49,
+        "y": 77
+      }
+    }
+  ]
+}
