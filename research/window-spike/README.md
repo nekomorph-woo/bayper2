@@ -6,7 +6,7 @@
 
 创建 /tmp/bayper-window-spike-<随机后缀> 目录，以 BAYPER_WINDOW_ROOT 注入。将本目录复制到该根目录的 source/，所有构建在复制件进行。不要直接在仓库构建：Tauri 的 build.rs 会生成所需的 1×1 RGBA 图标。
 
-- Electron：用 npm 在隔离 deps/ 安装 electron@45.0.0，npm cache 也指向隔离目录；Electron 45 需要再执行其 install.js 下载 runtime，ELECTRON_CACHE 指向隔离目录。通过 runtime 的 Electron.app/Contents/MacOS/Electron 启动 source/electron/，不启动 dev server 或 DevTools。
+- Electron：用 npm 在隔离 deps/ 安装 electron@45.0.0，npm cache 也指向隔离目录；Electron 45 需要再执行其 install.js 下载 runtime，使用 electron_config_cache 指向隔离目录（该安装脚本不读取 ELECTRON_CACHE）。通过 runtime 的 Electron.app/Contents/MacOS/Electron 启动 source/electron/，不启动 dev server 或 DevTools。
 - Tauri：CARGO_HOME、CARGO_TARGET_DIR 指向隔离目录，使用 cargo build --release --locked --manifest-path source/tauri/Cargo.toml。使用生成的 release 可执行文件；不要将 cargo/编译器纳入运行资源数据。测试窗口使用 incognito，避免持久 WebView 数据。
 - oracle.swift：swiftc -O -framework AppKit -framework CoreGraphics 编译。其 GUI 只是点击底板；--observe 后接显式 PID 时，只读这些进程的窗口元数据与前台 PID。可将可执行文件包装为临时 .app 供桌面工具定位。
 
