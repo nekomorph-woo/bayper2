@@ -1,0 +1,9 @@
+# 凛像素专注短反应候选
+
+2026-10-26，Codex内置imagegen，以master-pixel-v2为角色/服装参考。源exec-fec710c9-d6b3-4a89-9922-67e462191e3a.png保存focus-pixel-v1.png。源1536×1024、4×2八帧；既有Claude的sprite-pipeline导出320×384/neutral298/scale0.622129，no-loop，时序160/100/120/220/260/140/120/180ms。源哈希和脚锚见animations/focus-pixel-v1/manifest.json，实际执行exit0日志完整交付evidence/rin-focus-pixel-v1-export.log。
+
+Codex检查源与浅棋盘：同一IMAGE LEFT手托近下巴再收回；耳、右侧卷尾、鞋完整，服装身份稳定。第2至6帧姿势差异很小，首帧到抬手跳幅偏大，不能把8帧数量当自然度通过。尚未128pt播放器、慢放或idle衔接验收，仍为候选，不接生产、不延长工作状态或通知频率。后续播放若明显跳姿，需补真实过渡关键姿势，不以平移/插值掩盖。
+
+## 完整提示词
+
+Create a small PIXEL ART short thoughtful focus animation of EXACT reference Rin, same compact3-head proportion, charcoal-purple bob, amber eyes, black cat ears coral inside, cream maidheadband, burgundy neckbow, blackpurple dress creamapron, darktights, darkMaryJane goldbuckles, ONE curled darkcat tail on IMAGE RIGHT. Preserve coarse readable square pixel clusters and crisp stepped outlines, no smoothing/dither/gradient. Eight complete frames, FOUR columns TWO rows, full1536x1024 transparent canvas. Equal384x512cells, each figure about260px tall, centered with broad gutters abovebelowandbothsides. No cropping anyear tail shoe. Fixed front threequartercamera, sameheadbodycostume baseline in everycell. SHORT FOCUS reaction rowmajor:1 neutral armsdown softsmile;2 only IMAGE LEFT hand rises towardchest;3 fingertips approach chin;4 fingertips gently rest belowchin, eyes softly focused, closedmouth;5 identical thinkinghold;6 hand lowerschest;7 towardwaist;8 same neutralas1. Other arm stays down. Eyes remain open, tiny brow concentration no anger, no exaggeratedexpressions. Torso feet ears tail static, noturn/mirror. Actual transparent RGBA alpha-zero background, no glow/shadow/text/grid/labels/props. This is one continuous same character motion with subtle modest gesture, not eight independent designs. Keep large transparent margins and output complete1536x1024canvas.
