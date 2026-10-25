@@ -267,6 +267,27 @@ function createExternalSources({ db, candidates = [], now = () => Date.now() } =
     return statements.listGrants.all().map(mapGrant);
   }
 
+  /* 只读状态展示：分别保留“授权记录存在/当前根可用/分析开关”三个事实。
+     校验根身份立即完成，不签发许可、不改变开关，也不读取会话内容。 */
+  function listGrantsWithValidity() {
+    return statements.listGrants.all().map((row) => {
+      const grant = mapGrant(row);
+      if (!grant.active) {
+        return { ...grant, valid: false, reason: "REVOKED" };
+      }
+      try {
+        verifyGrantRoot(row);
+        return { ...grant, valid: true, reason: null };
+      } catch (error) {
+        return {
+          ...grant,
+          valid: false,
+          reason: error instanceof AppError ? error.code : "GRANT_PATH_CHANGED",
+        };
+      }
+    });
+  }
+
   /* 授权目录当前仍须指向授权时的真实目录。目录消失属于明确失败，
      不能当作空日志继续分析。 */
   function verifyGrantRoot(row) {
@@ -410,6 +431,7 @@ function createExternalSources({ db, candidates = [], now = () => Date.now() } =
     grantDirectory,
     revokeDirectory,
     listGrants,
+    listGrantsWithValidity,
     issueReadPermit,
     releaseReadPermit,
     validateReadPermit,

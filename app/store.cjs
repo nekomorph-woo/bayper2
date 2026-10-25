@@ -6,6 +6,7 @@ const path = require("node:path");
 const { createCompanionStore } = require("./companion-store.cjs");
 const { createMemoryService } = require("./memory.cjs");
 const { createChatService } = require("./chat.cjs");
+const { createExternalSources } = require("./external-sources.cjs");
 
 const DB_FILE_NAME = "bayper.sqlite3";
 
@@ -70,6 +71,12 @@ function createStore(dataDir, options = {}) {
     fetchImpl: options.chat?.fetchImpl,
     timeoutMs: options.chat?.timeoutMs,
     recoverInterrupted: options.chat?.recoverInterrupted,
+  });
+  // 来源授权与记忆/聊天共用同一 SQLite 连接；候选路径由主进程按已核实约定传入。
+  const externalSources = createExternalSources({
+    db,
+    candidates: options.sources?.candidates ?? [],
+    now,
   });
 
   const statements = {
@@ -193,6 +200,7 @@ function createStore(dataDir, options = {}) {
     ...companion,
     memory,
     chat,
+    externalSources,
     getModelConfig,
     saveModelConfig,
     getRelationship,

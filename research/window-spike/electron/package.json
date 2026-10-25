@@ -2,7 +2,7 @@
   "name": "bayper-electron-window-probe",
   "productName": "Bayper Electron Probe",
   "private": true,
-  "version": "0.1.107",
+  "version": "0.1.108",
   "main": "main.cjs",
   "devDependencies": {
     "electron": "45.0.0"

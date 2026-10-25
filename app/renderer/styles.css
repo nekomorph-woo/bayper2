@@ -1038,14 +1038,65 @@ select:focus {
 /* ---------- 设置 ---------- */
 
 .settings-page {
-  padding: 16px 18px;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 18px 14px;
+  overflow: hidden;
 }
 
-.settings-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 560px);
-  gap: 12px;
+.settings-tabs {
+  display: flex;
+  flex: none;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.settings-tabs button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.settings-tabs button[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--fg);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(47, 45, 39, 0.08);
+}
+
+.settings-panels {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.settings-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-panel .settings-block {
+  width: min(620px, 100%);
+}
+
+.settings-panel[data-settings-panel="sources"] .settings-block {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
 .settings-block {
@@ -1088,6 +1139,133 @@ select:focus {
   align-items: center;
   gap: 8px;
   margin-top: 10px;
+}
+
+/* ---------- 会话来源 ---------- */
+
+.source-toggle {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.source-toggle input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--accent);
+}
+
+.source-toggle input:focus {
+  box-shadow: none;
+}
+
+#source-summary[data-state="ok"] {
+  color: var(--accent);
+}
+
+#source-status {
+  min-height: 17px;
+  margin-top: 6px;
+}
+
+#source-error {
+  margin-top: 8px;
+}
+
+.source-scroll {
+  flex: 1;
+  min-height: 0;
+  margin-top: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.source-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.source-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+
+.source-main {
+  flex: 1;
+  min-width: 220px;
+}
+
+.source-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.source-name {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.source-state {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.source-state[data-state="granted"] {
+  color: var(--accent);
+}
+
+.source-state[data-state="invalid"],
+.source-state[data-state="unavailable"] {
+  color: var(--danger);
+}
+
+.source-path {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.source-hint {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.source-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.source-custom {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.source-custom .section-hint {
+  display: block;
+  margin-bottom: 2px;
 }
 
 /* ---------- 聊天面板 ---------- */
@@ -1551,6 +1729,14 @@ select:focus {
 
   .candidate-figure {
     height: 128px;
+  }
+
+  .settings-page {
+    padding: 10px 14px 12px;
+  }
+
+  .settings-tabs button {
+    min-height: 28px;
   }
 }
 

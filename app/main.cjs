@@ -1,5 +1,6 @@
 /* Bayper 主进程：业务数据、普通管理窗口、托盘、角色画布宿主与低频生命周期。 */
 const path = require("node:path");
+const os = require("node:os");
 const { pathToFileURL } = require("node:url");
 const {
   app,
@@ -16,6 +17,7 @@ const { createStore } = require("./store.cjs");
 const { createOnboardingService, readStoredModelCredentials } = require("./onboarding.cjs");
 const { createCompanionshipService } = require("./companionship.cjs");
 const { createDesktopHost } = require("./desktop-host.cjs");
+const { createSourceSettings, buildDefaultSourceCandidates } = require("./source-settings.cjs");
 const { buildDesktopPresentation } = require("./desktop-assets.cjs");
 const { createAppTray } = require("./app-tray.cjs");
 const { createSystemLifecycle } = require("./system-lifecycle.cjs");
@@ -44,6 +46,7 @@ let mainWindow = null;
 let store = null;
 let onboardingService = null;
 let companionship = null;
+let sourceSettings = null;
 let desktopHost = null;
 let tray = null;
 let heartbeatTimer = null;
@@ -89,7 +92,12 @@ function startApplication() {
     callback(false);
   });
 
+  const sourceCandidates = buildDefaultSourceCandidates({
+    homeDir: os.homedir(),
+    env: process.env,
+  });
   store = createStore(app.getPath("userData"), {
+    sources: { candidates: sourceCandidates },
     chat: {
       // 只在应用启动边界恢复崩溃遗留请求；凭据按请求从安全存储解密。
       recoverInterrupted: true,
@@ -98,6 +106,17 @@ function startApplication() {
   });
   desktopVisible = store.getAppState("desktop_visible") !== "0";
   desktopPassthrough = store.getAppState("desktop_passthrough") === "1";
+  sourceSettings = createSourceSettings({
+    permissions: store.externalSources,
+    candidates: sourceCandidates,
+    dialog,
+    getWindow: () => mainWindow,
+    isRequestActive: () =>
+      !quitting &&
+      Boolean(mainWindow) &&
+      !mainWindow.isDestroyed() &&
+      mainWindow.isVisible(),
+  });
 
   onboardingService = createOnboardingService({
     store,
@@ -742,6 +761,51 @@ function registerIpcHandlers() {
     }
   });
 
+  ipcMain.handle("bayper:source:state", (event) => {
+    try {
+      assertTrustedSender(event);
+      return { ok: true, state: sourceSettings.getState() };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:source:set-enabled", (event, enabled) => {
+    try {
+      assertTrustedSender(event);
+      return { ok: true, state: sourceSettings.setEnabled(enabled) };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:source:authorize-candidate", async (event, provider) => {
+    try {
+      assertTrustedSender(event);
+      return { ok: true, ...(await sourceSettings.authorizeCandidate(provider)) };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:source:choose-directory", async (event, provider) => {
+    try {
+      assertTrustedSender(event);
+      return { ok: true, ...(await sourceSettings.chooseDirectory(provider)) };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:source:revoke", (event, grantId) => {
+    try {
+      assertTrustedSender(event);
+      return { ok: true, state: sourceSettings.revokeDirectory(grantId) };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
   ipcMain.handle("bayper:system-status", (event) => {
     try {
       assertTrustedSender(event);
@@ -973,6 +1037,9 @@ async function cleanup() {
     await desktopHost.stop();
     desktopHost = null;
   }
+  // 进行中的对话框由 source-settings 的请求存活校验阻止退出后落库；
+  // 置空只拒绝新的调用，不声称已主动取消已持有的异步调用。
+  sourceSettings = null;
   if (store) {
     try {
       await store.chat.dispose();

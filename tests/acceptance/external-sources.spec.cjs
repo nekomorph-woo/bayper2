@@ -340,3 +340,41 @@ test("POL-SOURCE-006 许可显式释放，事务失败不清有效许可", (t) =
   throwsCode("PERMIT_INVALID", () => fx.service.validateReadPermit(third));
   throwsCode("GRANT_NOT_ACTIVE", () => fx.service.issueReadPermit(grant.id));
 });
+
+test("POL-SOURCE-014 授权有效性只读查询不改变开关或许可", (t) => {
+  const fx = makeFixture(t);
+  const grant = fx.service.grantDirectory("claude-code", fx.dirA);
+  assert.equal(fx.service.isEnabled(), false);
+
+  const active = fx.service.listGrantsWithValidity();
+  assert.equal(active.length, 1);
+  assert.equal(active[0].id, grant.id);
+  assert.equal(active[0].active, true);
+  assert.equal(active[0].valid, true);
+  assert.equal(active[0].reason, null);
+  assert.equal(fx.service.isEnabled(), false, "状态查询不得自动打开分析");
+
+  // 同一展示路径换指向其他真实目录：授权记录仍在，但当前根不可用。
+  fs.rmSync(fx.dirA, { recursive: true, force: true });
+  fs.symlinkSync(fx.dirB, fx.dirA);
+  const changed = fx.service.listGrantsWithValidity()[0];
+  assert.equal(changed.active, true);
+  assert.equal(changed.valid, false);
+  assert.equal(changed.reason, "GRANT_PATH_CHANGED");
+  assert.equal(fx.service.isEnabled(), false);
+
+  // 目录消失：授权仍存在，但不可用。
+  fs.unlinkSync(fx.dirA);
+  const missing = fx.service.listGrantsWithValidity()[0];
+  assert.equal(missing.active, true);
+  assert.equal(missing.valid, false);
+  assert.equal(missing.reason, "PATH_UNAVAILABLE");
+  assert.equal(fx.service.isEnabled(), false);
+
+  fx.service.revokeDirectory(grant.id);
+  const revoked = fx.service.listGrantsWithValidity()[0];
+  assert.equal(revoked.active, false);
+  assert.equal(revoked.valid, false);
+  assert.equal(revoked.reason, "REVOKED");
+  assert.equal(fx.service.isEnabled(), false);
+});

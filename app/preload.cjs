@@ -49,3 +49,15 @@ contextBridge.exposeInMainWorld(
     },
   }),
 );
+
+contextBridge.exposeInMainWorld(
+  "bayperSources",
+  Object.freeze({
+    getState: () => ipcRenderer.invoke("bayper:source:state"),
+    setEnabled: (enabled) => ipcRenderer.invoke("bayper:source:set-enabled", enabled),
+    authorizeCandidate: (provider) =>
+      ipcRenderer.invoke("bayper:source:authorize-candidate", provider),
+    chooseDirectory: (provider) => ipcRenderer.invoke("bayper:source:choose-directory", provider),
+    revoke: (grantId) => ipcRenderer.invoke("bayper:source:revoke", grantId),
+  }),
+);

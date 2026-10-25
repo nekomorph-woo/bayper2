@@ -3,6 +3,7 @@
 const api = window.bayper;
 const chatApi = window.bayperChat;
 const memoryApi = window.bayperMemory;
+const sourceApi = window.bayperSources;
 const byId = (id) => document.getElementById(id);
 
 const state = {
@@ -12,6 +13,7 @@ const state = {
   fixedSelection: null,
   selectedCharacterId: null,
   characterTab: "overview",
+  settingsTab: "model",
 };
 
 const navigation = window.createWindowNavigation({
@@ -66,6 +68,8 @@ const memoryPanel = window.createMemoryPanel({
   showAlert,
   getSnapshot: () => state.snapshot,
 });
+
+const sourcePanel = window.createSourceSettings({ api: sourceApi });
 
 if (memoryApi && typeof memoryApi.onMemoryChanged === "function") {
   memoryApi.onMemoryChanged((payload) => {
@@ -579,6 +583,27 @@ async function checkStoredModelConnection() {
   status.textContent = "模型连接正常";
 }
 
+function showSettingsTab(tab) {
+  if (!["model", "sources", "desktop"].includes(tab)) {
+    return;
+  }
+  state.settingsTab = tab;
+  for (const button of document.querySelectorAll("[data-settings-tab]")) {
+    button.setAttribute(
+      "aria-selected",
+      button.dataset.settingsTab === tab ? "true" : "false",
+    );
+  }
+  for (const panel of document.querySelectorAll("[data-settings-panel]")) {
+    panel.hidden = panel.dataset.settingsPanel !== tab;
+  }
+  if (tab === "sources") {
+    sourcePanel.activate();
+  } else {
+    sourcePanel.deactivate();
+  }
+}
+
 /* ---------- 页面切换与陪伴动作 ---------- */
 
 function updateSubtitle() {
@@ -602,11 +627,14 @@ function renderPage(page) {
     return;
   }
   if (page === "home") {
+    sourcePanel.deactivate();
     renderHome();
   } else if (page === "characters") {
+    sourcePanel.deactivate();
     renderCharacters();
   } else if (page === "settings") {
     renderSettings();
+    showSettingsTab(state.settingsTab);
   }
   updateSubtitle();
 }
@@ -757,6 +785,16 @@ document.querySelectorAll("[data-character-tab]").forEach((button) => {
     }
     state.characterTab = button.dataset.characterTab;
     renderCharacterTabs();
+    button.focus();
+  });
+});
+document.querySelectorAll("[data-settings-tab]").forEach((button) => {
+  button.addEventListener("click", () => {
+    if (state.settingsTab === button.dataset.settingsTab) {
+      button.focus();
+      return;
+    }
+    showSettingsTab(button.dataset.settingsTab);
     button.focus();
   });
 });
