@@ -1,0 +1,25 @@
+# 系统和本地 IDE 文件
+.DS_Store
+.idea/
+*.swp
+*.swo
+
+# 本地凭据；保留不含真实凭据的配置示例
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# 依赖、虚拟环境和编译缓存
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+target/
+/dist/
+/build/
+
+# Polaris 本地接续状态和原始运行证据；PRD、Case、skill 及 archived 正常入库
+/.hapilon/polaris/*/state.md
+/.hapilon/polaris/*/evidence/
