@@ -94,3 +94,5 @@ POL-SOURCE-006补充授权许可释放与事务失败保持，完整Contract见s
 ## 后续契约：记忆管理与会话读取
 
 POL-MEMUI-001～004的完整Contract见[s03c-memory-ui-plan.md](s03c-memory-ui-plan.md)，POL-SOURCE-007～011见[s04b-reader-plan.md](s04b-reader-plan.md)。Codex受托确认；尚未独立执行，均NOT_COVERED。各规格明确真实业务入口、构造数据边界及独立Oracle，不用读取适配器替代完整来源分析。
+
+POL-SOURCE-007～012读取适配：完整Contract见s04b-reader-plan.md与s04b-review.md的012补充。Codex独立权限+读取12/12通过（evidence/s04b-codex-r2.log），当前模块边界PASS；设置、自动分析预算与实际记忆发布仍NOT_COVERED。旧初版结果不能替代r2。
