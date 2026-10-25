@@ -62,4 +62,14 @@ herdr --session b server stop
 
 中途失败时先保存原始证据，再用已知 PID 和显式 session 完成清理。若失败发生在插件 unlink 之前，应在测试服务器仍可用时执行 `herdr --session a plugin unlink bayper.research.lifecycle`。配置命名空间与脱离进程是两回事，不能只删目录了事。
 
-本探针通过持续前台 sleep 承载自定义状态报告，不测试真实 AI 的工作质量。真实 Claude 的启动阻塞实验是 Codex 另行执行的补充检查，没有自动代答信任或审批界面的实现。
+probe.py 通过持续前台 sleep 承载自定义状态报告，不测试真实 AI 的工作质量。真实 Claude 的启动阻塞实验和获准后的只读任务由 Codex 另行执行，没有自动代答信任或审批界面的实现。
+
+## 真实 CLI 状态监听
+
+`observe_real.py` 仅监听指定 pane 的真实事件和查询结果，要求两条记录都出现 working→done→idle。CLI 启动、目录信任、任务提交及 focus 由已获授权的操作者显式完成。不能把上次授权推广到新目录或其他审批。
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 research/herdr/observe_real.py --root "$BAYPER_RESEARCH_ROOT" --pane "$BAYPER_REAL_PANE_ID" --seconds 120
+```
+
+BAYPER_REAL_PANE_ID 必须来自实际创建结果。出现 READY 后才进行操作；默认 120 秒内完成任务并 focus。原始数据追加到 real-cli-followup-trace.jsonl，结果写入 real-cli-followup-result.json；同一根目录重跑前应先归档上一批结果。实测样本与清理记录见 [HDR-11 补测](../../.hapilon/polaris/Bayper前期调研/real-cli-followup.md)。

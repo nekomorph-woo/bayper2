@@ -30,3 +30,11 @@
 补充实验 HDR-11：完成自定义报告与进程清理后，在同一隔离 a 会话中启动一个真实 Claude Code CLI，执行一次不修改文件的短回复任务。观察 Herdr 的检测、prompt/wait 和结束状态；不安装集成、不改用户配置，结束后停止自己创建的会话。只有实际观察到的状态才记录为已验证；这不是准确率或所有提示类型的覆盖测试。
 
 实现计划：Claude Code 仅编写独立研究脚本与受控 fixture；Codex 审查后启动服务器、运行脚本、核对原始结果。每条操作保存真实 request/response/event 和阶段观察。探针错误先修探针并保留原始失败，不改变 Expected 迎合实现。
+
+## HDR-11 继续验证（用户已授权目录信任）
+
+用户明确允许信任上次创建的 `/tmp/bayper-herdr-spike-P85k3g` 隔离目录；继续使用同一套 XDG 隔离配置，只在 a 会话中启动真实 Claude Code。此次授权不泛化到其他目录或其他审批。
+
+Given：真实 CLI 停在该目录信任确认；为该 pane 建立状态订阅并收到 ack。When：Codex 确认已授权的目录信任，等待 idle 后提交一个仅读取测试输入、计算加法并回复的任务。Expected：记录真实 working→done 事件与查询状态；重复查询不清除 done；focus 后观察 idle，并检查实际回复正确。Oracle：固定输入 37 与 58，期待输出 `BAYPER_SUM=95`；任务提示不提供答案。Execution Boundary：真实 Claude Code 及其已配置模型、真实 Read 工具、真实 Herdr screen detection，无手工 report-agent 或 Mock。所有状态和事件保存为本地原始证据。
+
+监听探针不提交提示、不确认信任、不 focus、不 stop server，这些操作由 Codex 显式执行。每次运行有独立证据文件；结束后停止监听与测试 server，核实无残留。没有观察到的状态不能补造为已通过。

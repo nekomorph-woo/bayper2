@@ -2,6 +2,8 @@
 
 日期：2026-10-25，Asia/Shanghai。定位：PRD 前期技术预研，不包含 Bayper 产品设计。
 
+本文记录首批实测；用户随后授权目录信任后的真实 Claude Code 完整闭环见 [HDR-11 补测](real-cli-followup.md)。本文中的“未覆盖”是首批实验边界，后续覆盖以补测记录为准。
+
 ## 环境与证据
 
 - 本机 macOS，Herdr `0.9.5`；安装二进制导出的 schema 为 `schema_version=1`、`protocol=22`。schema 的 SHA-256 为 `9e2af207e9aa8183d4aeca5fde9cc48e7909bb40cdbd7cf21608a6d3ea78075b`。schema 来自二进制，不等于任意其他版本的运行服务必然具备同样能力。
