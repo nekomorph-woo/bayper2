@@ -1,0 +1,23 @@
+batch: codex-20261027-r1
+created: 2026-10-26T21:43:52.787Z
+requested-batch: codex-20261027-r1
+exclusive-directory: true
+source: tests/acceptance/s07c-transparent-input.spec.cjs
+input: real macOS CGEvent（tools/desktop-input/system-input.py）
+direct-dom-click-is-not-passthrough-evidence: true
+
+## source sha256
+305ffd6c4e2887631bbf8c7e2df9056ade25fd7f3722c0dcc0338c2c40bfc873  app/desktop/main.cjs
+50089fa88ad5a4efe9af82b33bddae746a5c557a9ed3028abf803bdb57eeefaa  app/desktop/preload.cjs
+8bf39508a1d56c8da0657a52004075e293c5df6a46561846d7c509c167d1bf21  app/desktop/canvas-ipc.cjs
+baa02d64715ba69014e0277cedf70b83bc6ecc127adaf2c561a08746f4e56b07  app/desktop/hit-test.cjs
+afcb7d2a39bca054601161a3259a7ebc57d4e4e4ff75f9c87c12064b1860455d  app/desktop/renderer/canvas-app.js
+e11f40db1dac21744771fe26a89dbe855c5c5cad29be4261e4e0f0c98b34a767  tests/acceptance/s07c-transparent-input.spec.cjs
+a2d54e872103b6cd9b63a1154821e38c53abcdefffba981ca783661179bec222  tests/acceptance/desktop.spec.cjs
+baec12245c0c7343f490df60645ff07efb7aae429ace86763804b6de9554848c  tests/unit/desktop-hit-test.test.cjs
+52187f43fc32c307ac0cfe0311be97f6573794f09c37efee6806adab5e7ce63c  tests/unit/desktop-canvas-ipc.test.cjs
+59e72e5bf945639568096971e7ee384673047cf7ca24fa6ce109d94ef00ddbea  tools/desktop-input/README.md
+5d1e44eb82c626901d758910d0d32b58101de2ba38f7d4c95bceb1381c1fdbc6  tools/desktop-input/alpha-probe.py
+15930abcebe764e1a939019aaef0ed4752490f302e7c68e09b7cc1bf0253b50f  tools/desktop-input/plate.cjs
+60d0d971627b40c79f8f2822c8b8a1e1f8aa555fd0a6fe49471529e94abacdf6  tools/desktop-input/plate.html
+41ae8124e4dc9c0d0b627423936b70231267d06df204b5bae6631bdf15e292e9  tools/desktop-input/system-input.py

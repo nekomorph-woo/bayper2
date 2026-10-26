@@ -1,0 +1,477 @@
+{
+  "request": {
+    "threshold": 16,
+    "jobs": [
+      {
+        "id": "hu-stable",
+        "kind": "stable",
+        "frames": [
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-00.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-01.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-02.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-03.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-04.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-05.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-06.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-07.png"
+        ],
+        "display": {
+          "scale": 0.41025641025641024,
+          "targetPt": 128,
+          "windowWidth": 96,
+          "windowHeight": 128,
+          "canvasWidth": 131.28205128205127,
+          "canvasHeight": 157.53846153846155,
+          "offsetX": 20.102564102564102,
+          "offsetY": 26.256410256410255,
+          "visibleBox": {
+            "x": 49,
+            "y": 64,
+            "width": 232,
+            "height": 312
+          },
+          "footAnchor": {
+            "x": 45.53846153846153,
+            "y": 128
+          }
+        },
+        "window": {
+          "width": 96,
+          "height": 128
+        }
+      },
+      {
+        "id": "cheng-stable",
+        "kind": "stable",
+        "frames": [
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-00.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-01.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-02.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-03.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-04.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-05.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-06.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-07.png"
+        ],
+        "display": {
+          "scale": 0.41830065359477125,
+          "targetPt": 128,
+          "windowWidth": 100,
+          "windowHeight": 128,
+          "canvasWidth": 133.8562091503268,
+          "canvasHeight": 160.62745098039215,
+          "offsetX": 15.895424836601308,
+          "offsetY": 29.28104575163399,
+          "visibleBox": {
+            "x": 38,
+            "y": 70,
+            "width": 239,
+            "height": 306
+          },
+          "footAnchor": {
+            "x": 51.032679738562095,
+            "y": 128
+          }
+        },
+        "window": {
+          "width": 100,
+          "height": 128
+        }
+      },
+      {
+        "id": "rin-stable",
+        "kind": "stable",
+        "frames": [
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/rin/animations/idle-pixel-v2/frame-00.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/rin/animations/idle-pixel-v2/frame-01.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/rin/animations/idle-pixel-v2/frame-02.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/rin/animations/idle-pixel-v2/frame-03.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/rin/animations/idle-pixel-v2/frame-04.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/rin/animations/idle-pixel-v2/frame-05.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/rin/animations/idle-pixel-v2/frame-06.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/rin/animations/idle-pixel-v2/frame-07.png"
+        ],
+        "display": {
+          "scale": 0.4155844155844156,
+          "targetPt": 128,
+          "windowWidth": 88,
+          "windowHeight": 128,
+          "canvasWidth": 106.3896103896104,
+          "canvasHeight": 159.58441558441558,
+          "offsetX": 13.2987012987013,
+          "offsetY": 28.259740259740262,
+          "visibleBox": {
+            "x": 32,
+            "y": 68,
+            "width": 210,
+            "height": 308
+          },
+          "footAnchor": {
+            "x": 39.896103896103895,
+            "y": 128.00000000000003
+          }
+        },
+        "window": {
+          "width": 88,
+          "height": 128
+        }
+      },
+      {
+        "id": "hu-toggle",
+        "kind": "toggle",
+        "frames": [
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-00.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-01.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-02.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-03.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-04.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-05.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-06.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-07.png"
+        ],
+        "display": {
+          "scale": 0.41025641025641024,
+          "targetPt": 128,
+          "windowWidth": 96,
+          "windowHeight": 128,
+          "canvasWidth": 131.28205128205127,
+          "canvasHeight": 157.53846153846155,
+          "offsetX": 20.102564102564102,
+          "offsetY": 26.256410256410255,
+          "visibleBox": {
+            "x": 49,
+            "y": 64,
+            "width": 232,
+            "height": 312
+          },
+          "footAnchor": {
+            "x": 45.53846153846153,
+            "y": 128
+          }
+        },
+        "window": {
+          "width": 96,
+          "height": 128
+        },
+        "from": 0,
+        "to": 7
+      },
+      {
+        "id": "idle0-wave1",
+        "kind": "toggle",
+        "frames": [
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-00.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/wave-pixel-v3/frame-01.png"
+        ],
+        "display": {
+          "scale": 0.41025641025641024,
+          "targetPt": 128,
+          "windowWidth": 96,
+          "windowHeight": 128,
+          "canvasWidth": 131.28205128205127,
+          "canvasHeight": 157.53846153846155,
+          "offsetX": 20.102564102564102,
+          "offsetY": 26.256410256410255,
+          "visibleBox": {
+            "x": 49,
+            "y": 64,
+            "width": 232,
+            "height": 312
+          },
+          "footAnchor": {
+            "x": 45.53846153846153,
+            "y": 128
+          }
+        },
+        "window": {
+          "width": 96,
+          "height": 128
+        },
+        "from": 0,
+        "to": 1
+      },
+      {
+        "id": "idle0-stretch0",
+        "kind": "toggle",
+        "frames": [
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-00.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/stretch-pixel-v2-canvas320/frame-00.png"
+        ],
+        "display": {
+          "scale": 0.41025641025641024,
+          "targetPt": 128,
+          "windowWidth": 96,
+          "windowHeight": 128,
+          "canvasWidth": 131.28205128205127,
+          "canvasHeight": 157.53846153846155,
+          "offsetX": 20.102564102564102,
+          "offsetY": 26.256410256410255,
+          "visibleBox": {
+            "x": 49,
+            "y": 64,
+            "width": 232,
+            "height": 312
+          },
+          "footAnchor": {
+            "x": 45.53846153846153,
+            "y": 128
+          }
+        },
+        "window": {
+          "width": 96,
+          "height": 128
+        },
+        "from": 0,
+        "to": 1
+      },
+      {
+        "id": "hu-cheng",
+        "kind": "switch",
+        "fromFrames": [
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-00.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-01.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-02.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-03.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-04.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-05.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-06.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-07.png"
+        ],
+        "fromDisplay": {
+          "scale": 0.41025641025641024,
+          "targetPt": 128,
+          "windowWidth": 96,
+          "windowHeight": 128,
+          "canvasWidth": 131.28205128205127,
+          "canvasHeight": 157.53846153846155,
+          "offsetX": 20.102564102564102,
+          "offsetY": 26.256410256410255,
+          "visibleBox": {
+            "x": 49,
+            "y": 64,
+            "width": 232,
+            "height": 312
+          },
+          "footAnchor": {
+            "x": 45.53846153846153,
+            "y": 128
+          }
+        },
+        "toFrames": [
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-00.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-01.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-02.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-03.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-04.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-05.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-06.png",
+          "/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-07.png"
+        ],
+        "toDisplay": {
+          "scale": 0.41830065359477125,
+          "targetPt": 128,
+          "windowWidth": 100,
+          "windowHeight": 128,
+          "canvasWidth": 133.8562091503268,
+          "canvasHeight": 160.62745098039215,
+          "offsetX": 15.895424836601308,
+          "offsetY": 29.28104575163399,
+          "visibleBox": {
+            "x": 38,
+            "y": 70,
+            "width": 239,
+            "height": 306
+          },
+          "footAnchor": {
+            "x": 51.032679738562095,
+            "y": 128
+          }
+        },
+        "window": {
+          "width": 96,
+          "height": 128
+        }
+      }
+    ]
+  },
+  "response": {
+    "ok": true,
+    "threshold": 16,
+    "results": {
+      "hu-stable": {
+        "margin": 2,
+        "body": {
+          "x": 43,
+          "y": 64,
+          "alphas": [
+            253,
+            253,
+            253,
+            253,
+            253,
+            253,
+            253,
+            253
+          ]
+        },
+        "transparent": {
+          "x": 94,
+          "y": 126,
+          "alphas": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "cheng-stable": {
+        "margin": 2,
+        "body": {
+          "x": 50,
+          "y": 59,
+          "alphas": [
+            253,
+            254,
+            253,
+            253,
+            253,
+            254,
+            253,
+            254
+          ]
+        },
+        "transparent": {
+          "x": 98,
+          "y": 126,
+          "alphas": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "rin-stable": {
+        "margin": 2,
+        "body": {
+          "x": 40,
+          "y": 64,
+          "alphas": [
+            254,
+            254,
+            253,
+            253,
+            254,
+            254,
+            254,
+            254
+          ]
+        },
+        "transparent": {
+          "x": 86,
+          "y": 126,
+          "alphas": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "hu-toggle": {
+        "margin": 2,
+        "x": 73,
+        "y": 80,
+        "from": 0,
+        "to": 7,
+        "fromAlpha": 20,
+        "toAlpha": 0,
+        "candidates": 3
+      },
+      "idle0-wave1": {
+        "margin": 2,
+        "x": 73,
+        "y": 76,
+        "from": 0,
+        "to": 1,
+        "fromAlpha": 251,
+        "toAlpha": 0,
+        "candidates": 99
+      },
+      "idle0-stretch0": {
+        "margin": 2,
+        "x": 70,
+        "y": 73,
+        "from": 0,
+        "to": 1,
+        "fromAlpha": 246,
+        "toAlpha": 0,
+        "candidates": 169
+      },
+      "hu-cheng": {
+        "margin": 2,
+        "transToBody": {
+          "x": 80,
+          "y": 46,
+          "fromAlphas": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "toAlphas": [
+            253,
+            254,
+            253,
+            253,
+            253,
+            253,
+            253,
+            253
+          ]
+        },
+        "bodyToTrans": {
+          "x": 29,
+          "y": 62,
+          "fromAlphas": [
+            253,
+            252,
+            253,
+            253,
+            253,
+            253,
+            253,
+            253
+          ],
+          "toAlphas": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    }
+  }
+}

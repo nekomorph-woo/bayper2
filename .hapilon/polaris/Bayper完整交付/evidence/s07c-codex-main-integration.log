@@ -1,0 +1,27 @@
+(node:30513) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ POL-ACTIVITY-RUNTIME-001 凛日常真实伸展：scheduled 不扣费、节点一次 -2、动作与时长后收束 (10254.931125ms)
+✔ POL-ACTIVITY-RUNTIME-002 探索：有接替者才出发并换人，只扣 8；无接替者不开始 (11126.23925ms)
+✔ POL-ACTIVITY-RUNTIME-003 探索聊天/锁屏与多原因恢复，沿持久活动事实恢复同 ID (16867.839666ms)
+✔ POL-ACTIVITY-RUNTIME-003 daily 聊天/切人/锁屏/重开沿同 ID 恢复，动作完成后收束 (15669.6235ms)
+✔ POL-ACTIVITY-RUNTIME-003 daily 连续两次中断与退出重开按已完成帧续播 (9516.589667ms)
+✔ POL-ACTIVITY-RUNTIME-004 单一用途不双发；预算耗尽仍可本地探索；琥珀日常用自身素材；缺帧/不可见 daily 不启动 (16745.400125ms)
+(node:31103) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ POL-NOTIFY-001 三普通位、固定deadline与独立P0；4秒从回执算 (17.95875ms)
+✔ POL-NOTIFY-002 blocked恢复保留原P0 deadline、加急追加与每条6秒 (19.632291ms)
+✔ POL-NOTIFY-003 重放/重复tick/回执、重建窗口、presented后关库重开 (13.510292ms)
+✔ POL-NOTIFY-004 多页积压、多实例同名Agent、不可见窗口与超期记录 (242.526541ms)
+✔ POL-NOTIFY-005 呈现写入失败可重试、无角色/模型依赖与dispose代次 (12.187667ms)
+✔ POL-NOTIFY-006 呈现写入失败后关库重开，账本与ack原子恢复并反向验证 (12.121417ms)
+✔ POL-NOTIFY-007 跨tick分页下全局deadline选择、旧pending恢复与3+1 (26.659542ms)
+✔ POL-NOTIFY-008 全队列deadline、P0独立与有限队列排空 (22.132166ms)
+✔ POL-NOTIFY-009 1105个活跃P0超过旧排除上限、SQL关联排除与普通推进 (1033.657791ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 81787.792459

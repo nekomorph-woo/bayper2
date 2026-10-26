@@ -1,0 +1,129 @@
+case: 005
+batch: 20261026214923672-d2e402
+at: 2026-10-26T21:50:15.299Z
+status: pass
+failure: none
+cleanup: ok
+screenshots: ["/Volumes/Under_M2/morphiiouo/bayper/.hapilon/polaris/Bayper完整交付/evidence/s05j-desktop-notifications/run-20261026214923672-d2e402/005-auto-page-1.png","/Volumes/Under_M2/morphiiouo/bayper/.hapilon/polaris/Bayper完整交付/evidence/s05j-desktop-notifications/run-20261026214923672-d2e402/005-auto-page-2.png"]
+
+## facts
+{
+  "registration": {
+    "schemaVersion": 2,
+    "pluginId": "bayper.herdr",
+    "instanceId": "inst-12923dbb8e14785c5bc814fe205c3f09",
+    "runId": "run-bf7d4e0fb34e35af4a47e962a16e650d",
+    "namespaceId": "772e0394-c517-4617-91e2-d08ff728bb0c",
+    "socket": {
+      "path": "/private/tmp/bayper-s05j-005-RwFHny/xdg/herdr/sessions/s05j-54a4cc/herdr.sock",
+      "dev": "16777234",
+      "ino": "38994926",
+      "birthtimeMs": "1793051398302"
+    },
+    "observedServerPid": 31351,
+    "firstRegisteredAt": "2026-10-26T21:49:58.602Z",
+    "lastRegisteredAt": "2026-10-26T21:49:58.602Z"
+  },
+  "chat": {
+    "opened": true,
+    "mode": "interacting"
+  },
+  "geometry": {
+    "activationPolicy": "prohibited",
+    "workArea": {
+      "x": 0,
+      "y": 30,
+      "width": 2560,
+      "height": 1319
+    },
+    "window": {
+      "x": 2142,
+      "y": 1067,
+      "width": 320,
+      "height": 282
+    },
+    "character": {
+      "x": 2472,
+      "y": 1221,
+      "width": 88,
+      "height": 128
+    },
+    "notificationFocusable": false
+  },
+  "detail": {
+    "ackedOpacity": "1",
+    "firstPageIds": [
+      "16",
+      "17",
+      "18"
+    ],
+    "secondPageIds": [
+      "19",
+      "20",
+      "21"
+    ],
+    "moreText": "查看全部明细 · 后续 3 条将自动显示",
+    "hiddenPending": 3,
+    "firstHoldMax": 1793051406019,
+    "secondAckMin": 1793051406557,
+    "detailFacts": {
+      "innerHeight": 186,
+      "cards": [
+        {
+          "channel": "urgent",
+          "rect": {
+            "x": 6,
+            "y": 6,
+            "width": 308,
+            "height": 174,
+            "top": 6,
+            "right": 314,
+            "bottom": 180,
+            "left": 6
+          },
+          "meanings": [
+            {
+              "top": 60.78125,
+              "bottom": 78.96875,
+              "clipped": false
+            },
+            {
+              "top": 105.359375,
+              "bottom": 123.546875,
+              "clipped": false
+            },
+            {
+              "top": 149.9375,
+              "bottom": 168.125,
+              "clipped": false
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "activeClose": {
+    "presentationId": "acc1f2a7-f2b7-46fa-bdb2-1a0f2bf8e86d",
+    "closeReason": "USER_CLOSED",
+    "rendered": 3,
+    "hiddenPending": 3
+  },
+  "recovery": {
+    "presentationId": "c15721cf-4aca-4f55-8c7d-2c31ecf1e7dd",
+    "events": [
+      31,
+      32,
+      33
+    ],
+    "chatMode": "interacting",
+    "characterBounds": {
+      "x": 2472,
+      "y": 1221,
+      "width": 88,
+      "height": 128
+    }
+  }
+}
+
+## boundary
+真实 herdr 0.9.5、真实管理窗口与通知 panel；小屏以实际工作区约束和滚动列表验证。

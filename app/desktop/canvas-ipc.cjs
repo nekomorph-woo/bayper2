@@ -7,4 +7,13 @@ function acceptsCanvasIpc({ sender, window }) {
   return sender === window.webContents;
 }
 
-module.exports = { acceptsCanvasIpc };
+/* 命中消息还必须带当前状态代次与展示身份；旧 renderer 即使仍连着同一
+   webContents，也不能用过期帧或别的角色改变鼠标穿透。 */
+function acceptsCanvasHit({ sender, window, payload, epoch, displayKey }) {
+  if (!acceptsCanvasIpc({ sender, window })) return false;
+  if (!payload || !Number.isInteger(payload.epoch) || payload.epoch !== epoch) return false;
+  if (typeof displayKey !== "string" || payload.displayKey !== displayKey) return false;
+  return true;
+}
+
+module.exports = { acceptsCanvasIpc, acceptsCanvasHit };

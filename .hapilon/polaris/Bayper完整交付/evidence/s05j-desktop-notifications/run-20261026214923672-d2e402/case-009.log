@@ -1,0 +1,56 @@
+case: 009
+batch: 20261026214923672-d2e402
+at: 2026-10-26T21:50:17.555Z
+status: pass
+failure: none
+cleanup: ok
+screenshots: ["/Volumes/Under_M2/morphiiouo/bayper/.hapilon/polaris/Bayper完整交付/evidence/s05j-desktop-notifications/run-20261026214923672-d2e402/009-no-character.png"]
+
+## facts
+{
+  "registration": {
+    "schemaVersion": 2,
+    "pluginId": "bayper.herdr",
+    "instanceId": "inst-3a507a08bfa5348bbbc5fd85b7ddc8c3",
+    "runId": "run-cb6cc95a219dcb1e63ab0b879424cd29",
+    "namespaceId": "3f064bfb-dee5-4fb8-b304-bf6b8dcba39e",
+    "socket": {
+      "path": "/private/tmp/bayper-s05j-009-WmGtJ6/xdg/herdr/sessions/s05j-b4a034/herdr.sock",
+      "dev": "16777234",
+      "ino": "38995670",
+      "birthtimeMs": "1793051415314"
+    },
+    "observedServerPid": 31514,
+    "firstRegisteredAt": "2026-10-26T21:50:15.428Z",
+    "lastRegisteredAt": "2026-10-26T21:50:15.428Z"
+  },
+  "noCharacter": {
+    "onboarding": "configured",
+    "desktopState": "running",
+    "characterId": null,
+    "assetState": "none",
+    "window": {
+      "visible": true,
+      "shownAt": 1793051416296,
+      "bounds": {
+        "x": 2224,
+        "y": 1140,
+        "width": 320,
+        "height": 193
+      },
+      "windowId": 2,
+      "focusable": false,
+      "captureId": "window:111106:0"
+    },
+    "text": "需要确认\n收起\n来源 b7ddc8c3 · fixture-no-character\n需要确认\n状态变化\n收起\n来源 b7ddc8c3\n已连接",
+    "ack": {
+      "presentation_id": "5db90e32-5f60-4a52-aa7f-b01227828a6c",
+      "event_id": 3,
+      "acknowledged_at": 1793051416900,
+      "hold_until": 1793051422900
+    }
+  }
+}
+
+## boundary
+真实 herdr 0.9.5；数据目录无已接纳角色。

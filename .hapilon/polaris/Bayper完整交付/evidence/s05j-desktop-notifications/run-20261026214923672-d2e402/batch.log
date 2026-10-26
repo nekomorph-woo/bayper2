@@ -1,0 +1,4 @@
+batch: 20261026214923672-d2e402
+created: 2026-10-26T21:49:23.673Z
+source: tests/acceptance/desktop-notifications.spec.cjs
+boundary: 真实 Herdr 0.9.5 负责 working/blocked 与连接；done/events_lost 由同形 Unix fixture 提供。

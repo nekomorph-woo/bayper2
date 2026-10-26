@@ -1,0 +1,223 @@
+# S07c summary
+batch: 20261027-054128-claude-interrupt4
+time: 2026-10-26T21:42:55.661Z
+overall: PASS
+cases: {
+  "POL-HIT-001": "PASS",
+  "POL-HIT-002": "PASS",
+  "POL-HIT-003": "PASS"
+}
+failure: none
+cleanup: {
+  "canvasPid": 28190,
+  "canvasExited": true,
+  "plateExited": true,
+  "cursorRestored": true,
+  "directoriesRemoved": true,
+  "canvasProfileRemoved": true,
+  "plateProfileRemoved": true
+}
+screenshots: ["/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/.hapilon/polaris/Bayper完整交付/evidence/s07c-transparent-input/run-20261027-054128-claude-interrupt4/canvas-final.png","/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/.hapilon/polaris/Bayper完整交付/evidence/s07c-transparent-input/run-20261027-054128-claude-interrupt4/plate-final.png"]
+source sha256: source.sha256
+cursor: {"x":1172,"y":332}
+
+## facts
+{
+  "placement": {
+    "bounds": {
+      "x": 2110,
+      "y": 939,
+      "width": 360,
+      "height": 300
+    },
+    "workArea": {
+      "x": 0,
+      "y": 30,
+      "width": 2560,
+      "height": 1319
+    },
+    "scaleFactor": 1
+  },
+  "focusReady": true,
+  "probe": {
+    "hu-stable": {
+      "margin": 2,
+      "body": {
+        "x": 43,
+        "y": 64,
+        "alphas": [
+          253,
+          253,
+          253,
+          253,
+          253,
+          253,
+          253,
+          253
+        ]
+      },
+      "transparent": {
+        "x": 94,
+        "y": 126,
+        "alphas": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "cheng-stable": {
+      "margin": 2,
+      "body": {
+        "x": 50,
+        "y": 59,
+        "alphas": [
+          253,
+          254,
+          253,
+          253,
+          253,
+          254,
+          253,
+          254
+        ]
+      },
+      "transparent": {
+        "x": 98,
+        "y": 126,
+        "alphas": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "rin-stable": {
+      "margin": 2,
+      "body": {
+        "x": 40,
+        "y": 64,
+        "alphas": [
+          254,
+          254,
+          253,
+          253,
+          254,
+          254,
+          254,
+          254
+        ]
+      },
+      "transparent": {
+        "x": 86,
+        "y": 126,
+        "alphas": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "hu-toggle": {
+      "margin": 2,
+      "x": 73,
+      "y": 80,
+      "from": 0,
+      "to": 7,
+      "fromAlpha": 20,
+      "toAlpha": 0,
+      "candidates": 3
+    },
+    "idle0-wave1": {
+      "margin": 2,
+      "x": 73,
+      "y": 76,
+      "from": 0,
+      "to": 1,
+      "fromAlpha": 251,
+      "toAlpha": 0,
+      "candidates": 99
+    },
+    "idle0-stretch0": {
+      "margin": 2,
+      "x": 70,
+      "y": 73,
+      "from": 0,
+      "to": 1,
+      "fromAlpha": 246,
+      "toAlpha": 0,
+      "candidates": 169
+    },
+    "hu-cheng": {
+      "margin": 2,
+      "transToBody": {
+        "x": 80,
+        "y": 46,
+        "fromAlphas": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "toAlphas": [
+          253,
+          254,
+          253,
+          253,
+          253,
+          253,
+          253,
+          253
+        ]
+      },
+      "bodyToTrans": {
+        "x": 29,
+        "y": 62,
+        "fromAlphas": [
+          253,
+          252,
+          253,
+          253,
+          253,
+          253,
+          253,
+          253
+        ],
+        "toAlphas": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    }
+  }
+}
+
+## coverage boundaries
+- 真实系统路由只覆盖本轮自建底板与角色窗口；不点击用户应用。
+- 未重跑通知窗口/日常暂停恢复的完整验收；由受影响回归与 IPC 单测负责。
+- 本机显示屏缩放与实际逻辑点映射见 environment.log；未在第二块 Retina 屏重复测量。

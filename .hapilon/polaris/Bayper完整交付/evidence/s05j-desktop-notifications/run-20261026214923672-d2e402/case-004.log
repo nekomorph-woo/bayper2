@@ -1,0 +1,86 @@
+case: 004
+batch: 20261026214923672-d2e402
+at: 2026-10-26T21:49:58.284Z
+status: pass
+failure: none
+cleanup: ok
+screenshots: ["/Volumes/Under_M2/morphiiouo/bayper/.hapilon/polaris/Bayper完整交付/evidence/s05j-desktop-notifications/run-20261026214923672-d2e402/004-restored-after-crash.png","/Volumes/Under_M2/morphiiouo/bayper/.hapilon/polaris/Bayper完整交付/evidence/s05j-desktop-notifications/run-20261026214923672-d2e402/004-resumed-after-lock.png"]
+
+## facts
+{
+  "registration": {
+    "schemaVersion": 2,
+    "pluginId": "bayper.herdr",
+    "instanceId": "inst-3be2ce5ed8b145a9281396622b0deff7",
+    "runId": "run-24212dcf4d3afaffb7c52734e510e635",
+    "namespaceId": "d67c75b4-49f5-4291-996f-5184cb5a7efd",
+    "socket": {
+      "path": "/private/tmp/bayper-s05j-004-RZqq2T/xdg/herdr/sessions/s05j-b04c04/herdr.sock",
+      "dev": "16777234",
+      "ino": "38994376",
+      "birthtimeMs": "1793051376311"
+    },
+    "observedServerPid": 31233,
+    "firstRegisteredAt": "2026-10-26T21:49:36.436Z",
+    "lastRegisteredAt": "2026-10-26T21:49:36.436Z"
+  },
+  "notReady": {
+    "eventId": 3,
+    "pendingBeforeWindow": true,
+    "ackWhileDown": null,
+    "windowVisible": null
+  },
+  "restoredAfterCrash": {
+    "pid": 31277,
+    "shownAt": 1793051378319,
+    "acknowledgedAt": 1793051378916,
+    "delayAfterShownMs": 597
+  },
+  "rebuild": {
+    "pid": 31306,
+    "presentationId": "bbb8731b-dacc-40f2-b3fd-bb9824967156",
+    "acknowledgedAt": 1793051378916,
+    "ackRowsUnchanged": true
+  },
+  "paused": {
+    "eventId": 5,
+    "ackBeforeUnlock": null,
+    "windowVisible": false,
+    "unlockedAt": 1793051385233,
+    "shownAt": 1793051385240,
+    "acknowledgedAt": 1793051385759,
+    "holdMs": 4000
+  },
+  "readingHold": {
+    "acknowledgedAt": 1793051385759,
+    "holdBefore": 1793051389759,
+    "lockedAgainAt": 1793051386901,
+    "unlockedAgainAt": 1793051393943,
+    "holdAfter": 1793051396791,
+    "closedAt": 1793051396863,
+    "extensionMs": 7032,
+    "readingMs": 4000,
+    "visibleMs": 4062
+  },
+  "lateAck": {
+    "oldToken": false,
+    "oldGeneration": false,
+    "wrongPresentation": false,
+    "outsideEvent": false,
+    "duplicateIds": false,
+    "valid": true,
+    "closeOldToken": false,
+    "closeValid": true
+  },
+  "exit": {
+    "status": "exited",
+    "leftovers": [],
+    "openPresentations": 0,
+    "integrity": "ok",
+    "totalPresentationRows": 3,
+    "totalItemRows": 3
+  }
+}
+
+## boundary
+真实 herdr 0.9.5 + 真实 Electron；旧回执拒绝用生产校验函数验证。

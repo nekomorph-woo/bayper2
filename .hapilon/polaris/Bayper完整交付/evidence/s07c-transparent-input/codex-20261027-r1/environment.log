@@ -1,0 +1,11 @@
+{
+  "trusted": true,
+  "cursor": {
+    "x": 1172,
+    "y": 332
+  },
+  "electron": "45.0.0",
+  "platform": "darwin",
+  "release": "27.0.0",
+  "display": null
+}

@@ -28,6 +28,8 @@ let activeDailyRun = null;
 let assetReady = false;
 let loadToken = 0;
 let drag = null;
+let canvasEpoch = 0;
+let reportedHitFrame = null;
 
 function stopAnimation() {
   if (animationTimer) {
@@ -44,8 +46,25 @@ function showStatus(name, note) {
   statusNote.textContent = note || "";
   statusCard.hidden = false;
   sprite.hidden = true;
+  clearHitFrame();
   if (desktopApi) {
     desktopApi.displayState("status", displayKey, displayGeneration, "");
+  }
+}
+
+/* 只把当前实际显示的帧告诉主进程；status/加载中先报空帧恢复穿透。 */
+function reportHitFrame(frame) {
+  if (!desktopApi || sprite.hidden) return;
+  const next = typeof frame === "string" ? frame : "";
+  if (!next || next === reportedHitFrame) return;
+  reportedHitFrame = next;
+  desktopApi.hitFrame(next, displayKey, displayGeneration, canvasEpoch);
+}
+
+function clearHitFrame() {
+  reportedHitFrame = null;
+  if (desktopApi) {
+    desktopApi.hitFrame("", displayKey, displayGeneration, canvasEpoch);
   }
 }
 
@@ -297,6 +316,8 @@ function playFrames(animation, loop, nodeName, onEnd, generation, dailyRun = nul
   }
 
   sprite.src = frames[frameIndex];
+  // 主进程按这帧的实际 alpha 决定接收还是穿透，换帧后指针静止也要重判。
+  reportHitFrame(sprite.src);
   // 日常动作逐帧上报实际文件与闭包身份；待机仍按圈上报。
   if (desktopApi && dailyRun) {
     desktopApi.displayState("character", displayKey, generation, sprite.src);
@@ -333,6 +354,7 @@ function playFrames(animation, loop, nodeName, onEnd, generation, dailyRun = nul
 }
 
 function invalidateDisplay(nextKey) {
+  cancelDrag();
   displayGeneration += 1;
   displayKey = nextKey || "";
   loadToken += 1;
@@ -340,11 +362,18 @@ function invalidateDisplay(nextKey) {
   clearDailyAction();
   stopAnimation();
   assetReady = false;
+  reportedHitFrame = null;
   sprite.hidden = true;
   return displayGeneration;
 }
 
 async function applyState(state) {
+  if (state && Number.isInteger(state.epoch)) {
+    canvasEpoch = state.epoch;
+  }
+  if (state?.visible === false) {
+    cancelDrag();
+  }
   if (!state || !state.character) {
     invalidateDisplay("");
     currentKey = "";
@@ -430,7 +459,21 @@ async function applyState(state) {
 }
 
 function beginDrag(event) {
-  if (!event.isPrimary || event.button !== 0) {
+  if (!event.isPrimary || event.button !== 0 || !desktopApi) {
+    return;
+  }
+  // 主进程以当前显示帧 alpha 同步判定；透明像素不启动拖拽或招呼。
+  const token = desktopApi.dragStart(
+    event.screenX,
+    event.screenY,
+    event.clientX,
+    event.clientY,
+    displayKey,
+    displayGeneration,
+    canvasEpoch,
+  );
+  if (!Number.isInteger(token) || token <= 0) {
+    reportPointerMove();
     return;
   }
   drag = {
@@ -438,11 +481,9 @@ function beginDrag(event) {
     startX: event.screenX,
     startY: event.screenY,
     moved: false,
+    token,
   };
   stage.classList.add("dragging");
-  if (desktopApi) {
-    desktopApi.dragStart(event.screenX, event.screenY);
-  }
   stage.setPointerCapture(event.pointerId);
   event.preventDefault();
 }
@@ -458,19 +499,20 @@ function moveDrag(event) {
     drag.moved = true;
   }
   if (desktopApi && drag.moved) {
-    desktopApi.dragMove(event.screenX, event.screenY);
+    desktopApi.dragMove(event.screenX, event.screenY, drag.token);
   }
 }
 
-function endDrag(event) {
+function endDrag(event, cancelled = false) {
   if (!drag || event.pointerId !== drag.pointerId) {
     return;
   }
-  const wasClick = !drag.moved;
+  const wasClick = !drag.moved && !cancelled;
+  const token = drag.token;
   drag = null;
   stage.classList.remove("dragging");
   if (desktopApi) {
-    desktopApi.dragEnd();
+    desktopApi.dragEnd(token);
   }
   if (stage.hasPointerCapture(event.pointerId)) {
     stage.releasePointerCapture(event.pointerId);
@@ -480,12 +522,40 @@ function endDrag(event) {
   }
 }
 
+/* 状态失效/隐藏时取消本地捕获，不把取消当点击；主进程已清理时不再回发。 */
+function cancelDrag(notifyMain = true) {
+  if (!drag) return;
+  const { pointerId, token } = drag;
+  drag = null;
+  stage.classList.remove("dragging");
+  if (stage.hasPointerCapture(pointerId)) {
+    stage.releasePointerCapture(pointerId);
+  }
+  if (notifyMain && desktopApi) {
+    desktopApi.dragEnd(token);
+  }
+}
+
+/* 穿透时 Electron 会继续转发 mousemove；合并到每帧最多一次，让主进程按
+   系统指针重新判定，不把坐标当作命中依据。 */
+let pointerReportQueued = false;
+function reportPointerMove() {
+  if (!desktopApi || pointerReportQueued) return;
+  pointerReportQueued = true;
+  requestAnimationFrame(() => {
+    pointerReportQueued = false;
+    desktopApi.pointerMove(displayKey, displayGeneration, canvasEpoch);
+  });
+}
+
 stage.addEventListener("pointerdown", beginDrag);
 stage.addEventListener("pointermove", moveDrag);
-stage.addEventListener("pointerup", endDrag);
-stage.addEventListener("pointercancel", endDrag);
+stage.addEventListener("pointerup", (event) => endDrag(event));
+stage.addEventListener("pointercancel", (event) => endDrag(event, true));
 stage.addEventListener("contextmenu", (event) => event.preventDefault());
+window.addEventListener("mousemove", reportPointerMove, { passive: true });
 
 if (desktopApi) {
   desktopApi.onState(applyState);
+  desktopApi.onCancelDrag(() => cancelDrag(false));
 }

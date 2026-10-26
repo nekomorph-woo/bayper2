@@ -1108,7 +1108,8 @@ test("POL-DESKTOP-007 真实画布 DOM 按共同包围裁切，点击招呼回�
     assert.ok(Math.abs(rinPlan.footAnchor.y - rinPlan.windowHeight) < 1);
     await captureDirectChild(page, `${SCREENSHOT_PREFIX}-dom-rin.png`);
 
-    await page.locator("#stage").click({ position: { x: 10, y: 10 } });
+    // S07c：透明像素不再触发招呼，这里点击凛确认有 alpha 的身体位置。
+    await page.locator("#stage").click({ position: { x: 20, y: 20 } });
     await page.waitForFunction(
       () => document.getElementById("sprite")?.src.includes("wave-pixel-v1"),
       null,

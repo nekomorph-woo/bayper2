@@ -1,0 +1,361 @@
+# case-POL-HIT-003
+batch: 20261027-052259-claude
+time: 2026-10-26T21:23:48.532Z
+result: FAIL
+failure: page.waitForFunction: Timeout 6000ms exceeded.
+    at waitForSprite (/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/tests/acceptance/s07c-transparent-input.spec.cjs:347:14)
+    at TestContext.<anonymous> (/Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/tests/acceptance/s07c-transparent-input.spec.cjs:1076:17)
+
+## facts
+{
+  "drag": {
+    "from": {
+      "x": 2293,
+      "y": 1107
+    },
+    "to": {
+      "x": 2363,
+      "y": 1061
+    },
+    "boundsBefore": {
+      "x": 2250,
+      "y": 1043,
+      "width": 96,
+      "height": 128
+    },
+    "boundsAfter": {
+      "x": 2320,
+      "y": 997,
+      "width": 96,
+      "height": 128
+    },
+    "platePointerdown": 0,
+    "waveNode": false,
+    "postDragTransparentClick": {
+      "screen": {
+        "x": 2414,
+        "y": 1123
+      },
+      "before": {
+        "pointerdown": 0,
+        "pointerup": 0
+      },
+      "after": {
+        "pointerdown": 1,
+        "pointerup": 1,
+        "mousedown": 1,
+        "mouseup": 1,
+        "click": 1,
+        "focus": 0,
+        "blur": 0,
+        "hasFocus": true,
+        "active": "probe"
+      },
+      "delta": 1
+    },
+    "postDragBodyWave": 1,
+    "transparentStart": {
+      "start": {
+        "x": 2414,
+        "y": 1123
+      },
+      "platePointerdown": 1,
+      "characterBounds": {
+        "x": 2320,
+        "y": 997,
+        "width": 96,
+        "height": 128
+      }
+    }
+  },
+  "globalIgnore": {},
+  "errorState": {},
+  "diagnostics": {
+    "bounds": {
+      "x": 2320,
+      "y": 997,
+      "width": 96,
+      "height": 128
+    },
+    "messages": [
+      {
+        "type": "notification-shown",
+        "visible": false,
+        "shownAt": null,
+        "bounds": {
+          "x": 2224,
+          "y": 1193,
+          "width": 320,
+          "height": 140
+        },
+        "windowId": 2,
+        "focusable": false,
+        "captureId": "window:110416:0"
+      },
+      {
+        "type": "bounds",
+        "bounds": {
+          "x": 2250,
+          "y": 1043,
+          "width": 96,
+          "height": 128
+        }
+      },
+      {
+        "type": "display-state",
+        "kind": "status",
+        "displayKey": "s07c-appear-body",
+        "generation": 11,
+        "frame": ""
+      },
+      {
+        "type": "display-state",
+        "kind": "character",
+        "displayKey": "s07c-appear-body",
+        "generation": 11,
+        "frame": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-00.png"
+      },
+      {
+        "type": "notification-shown",
+        "visible": false,
+        "shownAt": null,
+        "bounds": {
+          "x": 1920,
+          "y": 1043,
+          "width": 320,
+          "height": 140
+        },
+        "windowId": 2,
+        "focusable": false,
+        "captureId": "window:110416:0"
+      },
+      {
+        "type": "position-changed",
+        "x": 2250,
+        "y": 1043
+      },
+      {
+        "type": "node-complete",
+        "node": "wave",
+        "displayKey": "s07c-appear-body",
+        "generation": 11,
+        "activityId": "",
+        "characterId": ""
+      },
+      {
+        "type": "display-state",
+        "kind": "character",
+        "displayKey": "s07c-appear-body",
+        "generation": 11,
+        "frame": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-00.png"
+      },
+      {
+        "type": "notification-shown",
+        "visible": false,
+        "shownAt": null,
+        "bounds": {
+          "x": 1869,
+          "y": 981,
+          "width": 320,
+          "height": 140
+        },
+        "windowId": 2,
+        "focusable": false,
+        "captureId": "window:110416:0"
+      },
+      {
+        "type": "bounds",
+        "bounds": {
+          "x": 2199,
+          "y": 981,
+          "width": 96,
+          "height": 128
+        }
+      },
+      {
+        "type": "display-state",
+        "kind": "character",
+        "displayKey": "s07c-move-transparent",
+        "generation": 12,
+        "frame": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-00.png"
+      },
+      {
+        "type": "node-complete",
+        "node": "idle-loop",
+        "displayKey": "s07c-move-transparent",
+        "generation": 12,
+        "activityId": "",
+        "characterId": ""
+      },
+      {
+        "type": "notification-shown",
+        "visible": false,
+        "shownAt": null,
+        "bounds": {
+          "x": 1920,
+          "y": 1043,
+          "width": 320,
+          "height": 140
+        },
+        "windowId": 2,
+        "focusable": false,
+        "captureId": "window:110416:0"
+      },
+      {
+        "type": "bounds",
+        "bounds": {
+          "x": 2250,
+          "y": 1043,
+          "width": 96,
+          "height": 128
+        }
+      },
+      {
+        "type": "display-state",
+        "kind": "character",
+        "displayKey": "s07c-restore",
+        "generation": 13,
+        "frame": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-00.png"
+      },
+      {
+        "type": "display-state",
+        "kind": "character",
+        "displayKey": "s07c-drag-body",
+        "generation": 14,
+        "frame": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-00.png"
+      },
+      {
+        "type": "position-changed",
+        "x": 2320,
+        "y": 997
+      },
+      {
+        "type": "notification-shown",
+        "visible": false,
+        "shownAt": null,
+        "bounds": {
+          "x": 1990,
+          "y": 997,
+          "width": 320,
+          "height": 140
+        },
+        "windowId": 2,
+        "focusable": false,
+        "captureId": "window:110416:0"
+      },
+      {
+        "type": "node-complete",
+        "node": "idle-loop",
+        "displayKey": "s07c-drag-body",
+        "generation": 14,
+        "activityId": "",
+        "characterId": ""
+      },
+      {
+        "type": "node-complete",
+        "node": "idle-loop",
+        "displayKey": "s07c-drag-body",
+        "generation": 14,
+        "activityId": "",
+        "characterId": ""
+      },
+      {
+        "type": "position-changed",
+        "x": 2320,
+        "y": 997
+      },
+      {
+        "type": "node-complete",
+        "node": "wave",
+        "displayKey": "s07c-drag-body",
+        "generation": 14,
+        "activityId": "",
+        "characterId": ""
+      },
+      {
+        "type": "display-state",
+        "kind": "character",
+        "displayKey": "s07c-drag-body",
+        "generation": 14,
+        "frame": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-00.png"
+      },
+      {
+        "type": "notification-shown",
+        "visible": false,
+        "shownAt": null,
+        "bounds": {
+          "x": 1920,
+          "y": 1043,
+          "width": 320,
+          "height": 140
+        },
+        "windowId": 2,
+        "focusable": false,
+        "captureId": "window:110416:0"
+      },
+      {
+        "type": "display-state",
+        "kind": "character",
+        "displayKey": "s07c-global-ignore",
+        "generation": 15,
+        "frame": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-00.png"
+      },
+      {
+        "type": "node-complete",
+        "node": "idle-loop",
+        "displayKey": "s07c-global-ignore",
+        "generation": 15,
+        "activityId": "",
+        "characterId": ""
+      },
+      {
+        "type": "display-state",
+        "kind": "character",
+        "displayKey": "s07c-global-restore",
+        "generation": 16,
+        "frame": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-00.png"
+      },
+      {
+        "type": "node-complete",
+        "node": "idle-loop",
+        "displayKey": "s07c-global-restore",
+        "generation": 16,
+        "activityId": "",
+        "characterId": ""
+      },
+      {
+        "type": "node-complete",
+        "node": "idle-loop",
+        "displayKey": "s07c-global-restore",
+        "generation": 16,
+        "activityId": "",
+        "characterId": ""
+      },
+      {
+        "type": "node-complete",
+        "node": "idle-loop",
+        "displayKey": "s07c-global-restore",
+        "generation": 16,
+        "activityId": "",
+        "characterId": ""
+      }
+    ],
+    "renderer": {
+      "src": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-03.png",
+      "hidden": false,
+      "statusHidden": true,
+      "statusText": "正在加载桌面素材…"
+    },
+    "plate": {
+      "pointerdown": 1,
+      "pointerup": 1,
+      "mousedown": 1,
+      "mouseup": 1,
+      "click": 1,
+      "focus": 0,
+      "blur": 0,
+      "hasFocus": true,
+      "active": "probe"
+    }
+  }
+}

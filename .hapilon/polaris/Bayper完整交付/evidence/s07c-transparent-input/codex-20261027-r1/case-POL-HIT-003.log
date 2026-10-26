@@ -1,0 +1,281 @@
+# case-POL-HIT-003
+batch: codex-20261027-r1
+time: 2026-10-26T21:45:19.238Z
+result: PASS
+failure: none
+coverage:
+{
+  "drag": "PASS（真实系统拖拽，捕获期底板 0 次，释放后恢复）",
+  "transparentStart": "PASS（透明处起拖由底板接收）",
+  "interruptions": "PASS（隐藏/同 displayKey 全局 ignore/素材 error/换角色 4 项真实按住中断；恢复无残留 capture）",
+  "staleToken": "PASS（每项中断后旧 token 不影响当前拖拽）",
+  "globalIgnore": "PASS（全局忽略优先，关闭后恢复）",
+  "errorState": "PASS（错误状态不吞点击）",
+  "notificationWindow": "未在本轮重跑；canvas IPC 的 sender/generation 校验由单测覆盖，通知窗口不能控制命中",
+  "naturalNodes": "本用例只检查一次点击一个 wave 节点；既有日常暂停/恢复由受影响回归另行复验"
+}
+
+## facts
+{
+  "drag": {
+    "from": {
+      "x": 2293,
+      "y": 1107
+    },
+    "to": {
+      "x": 2363,
+      "y": 1061
+    },
+    "boundsBefore": {
+      "x": 2250,
+      "y": 1043,
+      "width": 96,
+      "height": 128
+    },
+    "boundsAfter": {
+      "x": 2320,
+      "y": 997,
+      "width": 96,
+      "height": 128
+    },
+    "platePointerdown": 0,
+    "waveNode": false,
+    "postDragTransparentClick": {
+      "screen": {
+        "x": 2414,
+        "y": 1123
+      },
+      "before": {
+        "pointerdown": 0,
+        "pointerup": 0
+      },
+      "after": {
+        "pointerdown": 1,
+        "pointerup": 1,
+        "mousedown": 1,
+        "mouseup": 1,
+        "click": 1,
+        "focus": 0,
+        "blur": 0,
+        "hasFocus": true,
+        "active": "probe"
+      },
+      "delta": 1
+    },
+    "postDragBodyWave": 1,
+    "transparentStart": {
+      "start": {
+        "x": 2414,
+        "y": 1123
+      },
+      "platePointerdown": 1,
+      "characterBounds": {
+        "x": 2320,
+        "y": 997,
+        "width": 96,
+        "height": 128
+      }
+    },
+    "interruptions": {
+      "hidden": {
+        "cancelWave": false,
+        "cancelPlatePointerdown": 0,
+        "recoveredStageDragging": false,
+        "recoveredTransparentClick": {
+          "screen": {
+            "x": 2344,
+            "y": 1169
+          },
+          "before": {
+            "pointerdown": 0,
+            "pointerup": 0
+          },
+          "after": {
+            "pointerdown": 1,
+            "pointerup": 1,
+            "mousedown": 1,
+            "mouseup": 1,
+            "click": 1,
+            "focus": 0,
+            "blur": 0,
+            "hasFocus": true,
+            "active": "probe"
+          },
+          "delta": 1
+        },
+        "recoveredBodyWave": 1,
+        "staleToken": {
+          "from": {
+            "x": 2250,
+            "y": 1043,
+            "width": 96,
+            "height": 128
+          },
+          "after": {
+            "x": 2278,
+            "y": 1025,
+            "width": 96,
+            "height": 128
+          },
+          "expected": {
+            "x": 2278,
+            "y": 1025
+          },
+          "rejected": true
+        }
+      },
+      "ignore": {
+        "cancelWave": false,
+        "cancelPlatePointerdown": 0,
+        "recoveredStageDragging": false,
+        "recoveredTransparentClick": {
+          "screen": {
+            "x": 2344,
+            "y": 1169
+          },
+          "before": {
+            "pointerdown": 0,
+            "pointerup": 0
+          },
+          "after": {
+            "pointerdown": 1,
+            "pointerup": 1,
+            "mousedown": 1,
+            "mouseup": 1,
+            "click": 1,
+            "focus": 0,
+            "blur": 0,
+            "hasFocus": true,
+            "active": "probe"
+          },
+          "delta": 1
+        },
+        "recoveredBodyWave": 1,
+        "staleToken": {
+          "from": {
+            "x": 2250,
+            "y": 1043,
+            "width": 96,
+            "height": 128
+          },
+          "after": {
+            "x": 2278,
+            "y": 1025,
+            "width": 96,
+            "height": 128
+          },
+          "expected": {
+            "x": 2278,
+            "y": 1025
+          },
+          "rejected": true
+        }
+      },
+      "error": {
+        "cancelWave": false,
+        "cancelPlatePointerdown": 0,
+        "recoveredStageDragging": false,
+        "recoveredTransparentClick": {
+          "screen": {
+            "x": 2344,
+            "y": 1169
+          },
+          "before": {
+            "pointerdown": 0,
+            "pointerup": 0
+          },
+          "after": {
+            "pointerdown": 1,
+            "pointerup": 1,
+            "mousedown": 1,
+            "mouseup": 1,
+            "click": 1,
+            "focus": 0,
+            "blur": 0,
+            "hasFocus": true,
+            "active": "probe"
+          },
+          "delta": 1
+        },
+        "recoveredBodyWave": 1,
+        "staleToken": {
+          "from": {
+            "x": 2250,
+            "y": 1043,
+            "width": 96,
+            "height": 128
+          },
+          "after": {
+            "x": 2278,
+            "y": 1025,
+            "width": 96,
+            "height": 128
+          },
+          "expected": {
+            "x": 2278,
+            "y": 1025
+          },
+          "rejected": true
+        }
+      },
+      "switch": {
+        "cancelWave": false,
+        "cancelPlatePointerdown": 0,
+        "recoveredStageDragging": false,
+        "recoveredTransparentClick": {
+          "screen": {
+            "x": 2344,
+            "y": 1169
+          },
+          "before": {
+            "pointerdown": 0,
+            "pointerup": 0
+          },
+          "after": {
+            "pointerdown": 1,
+            "pointerup": 1,
+            "mousedown": 1,
+            "mouseup": 1,
+            "click": 1,
+            "focus": 0,
+            "blur": 0,
+            "hasFocus": true,
+            "active": "probe"
+          },
+          "delta": 1
+        },
+        "recoveredBodyWave": 1,
+        "staleToken": {
+          "from": {
+            "x": 2250,
+            "y": 1043,
+            "width": 96,
+            "height": 128
+          },
+          "after": {
+            "x": 2278,
+            "y": 1025,
+            "width": 96,
+            "height": 128
+          },
+          "expected": {
+            "x": 2278,
+            "y": 1025
+          },
+          "rejected": true
+        }
+      }
+    }
+  },
+  "globalIgnore": {
+    "clickWhileIgnored": 1,
+    "waveWhileIgnored": false,
+    "waveAfterRestore": 1
+  },
+  "errorState": {
+    "click": 1,
+    "waveNode": false,
+    "statusText": "角色素材加载失败",
+    "statusCardVisible": true
+  }
+}

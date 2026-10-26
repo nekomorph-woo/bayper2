@@ -1,0 +1,292 @@
+# case-POL-HIT-001
+batch: 20261027-052207-claude
+time: 2026-10-26T21:22:22.095Z
+result: PASS
+failure: none
+coverage:
+{
+  "routing": "PASS（真实系统 CGEvent，底板/角色双侧计数）",
+  "focus": "PASS（自建底板输入框保持 key）",
+  "retries": 0
+}
+
+## facts
+{
+  "characters": {
+    "hu": {
+      "displayKey": "s07c-hu-body",
+      "windowBounds": {
+        "x": 2250,
+        "y": 1043,
+        "width": 96,
+        "height": 128
+      },
+      "bodyLocal": {
+        "x": 43,
+        "y": 64,
+        "alphas": [
+          253,
+          253,
+          253,
+          253,
+          253,
+          253,
+          253,
+          253
+        ]
+      },
+      "bodyAlpha": [
+        253,
+        253,
+        253,
+        253,
+        253,
+        253,
+        253,
+        253
+      ],
+      "transparentLocal": {
+        "x": 94,
+        "y": 126,
+        "alphas": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "transparentAlpha": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "frameAtTransparentClick": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-01.png",
+      "frameAtBodyClick": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-01.png",
+      "transparentClick": {
+        "screen": {
+          "x": 2344,
+          "y": 1169
+        },
+        "before": {
+          "pointerdown": 0,
+          "pointerup": 0
+        },
+        "after": {
+          "pointerdown": 1,
+          "pointerup": 1,
+          "mousedown": 1,
+          "mouseup": 1,
+          "click": 1,
+          "focus": 0,
+          "blur": 0,
+          "hasFocus": true,
+          "active": "probe"
+        },
+        "delta": 1
+      },
+      "bodyPlatePointerdown": 0,
+      "waveNodeCount": 1,
+      "focusAfterTransparent": {
+        "hasFocus": true,
+        "active": "probe"
+      },
+      "focusAfterBody": {
+        "hasFocus": true,
+        "active": "probe"
+      }
+    },
+    "cheng": {
+      "displayKey": "s07c-cheng-body",
+      "windowBounds": {
+        "x": 2250,
+        "y": 1043,
+        "width": 100,
+        "height": 128
+      },
+      "bodyLocal": {
+        "x": 50,
+        "y": 59,
+        "alphas": [
+          253,
+          254,
+          253,
+          253,
+          253,
+          254,
+          253,
+          254
+        ]
+      },
+      "bodyAlpha": [
+        253,
+        254,
+        253,
+        253,
+        253,
+        254,
+        253,
+        254
+      ],
+      "transparentLocal": {
+        "x": 98,
+        "y": 126,
+        "alphas": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "transparentAlpha": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "frameAtTransparentClick": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-01.png",
+      "frameAtBodyClick": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-01.png",
+      "transparentClick": {
+        "screen": {
+          "x": 2348,
+          "y": 1169
+        },
+        "before": {
+          "pointerdown": 0,
+          "pointerup": 0
+        },
+        "after": {
+          "pointerdown": 1,
+          "pointerup": 1,
+          "mousedown": 1,
+          "mouseup": 1,
+          "click": 1,
+          "focus": 0,
+          "blur": 0,
+          "hasFocus": true,
+          "active": "probe"
+        },
+        "delta": 1
+      },
+      "bodyPlatePointerdown": 0,
+      "waveNodeCount": 1,
+      "focusAfterTransparent": {
+        "hasFocus": true,
+        "active": "probe"
+      },
+      "focusAfterBody": {
+        "hasFocus": true,
+        "active": "probe"
+      }
+    },
+    "rin": {
+      "displayKey": "s07c-rin-body",
+      "windowBounds": {
+        "x": 2250,
+        "y": 1043,
+        "width": 88,
+        "height": 128
+      },
+      "bodyLocal": {
+        "x": 40,
+        "y": 64,
+        "alphas": [
+          254,
+          254,
+          253,
+          253,
+          254,
+          254,
+          254,
+          254
+        ]
+      },
+      "bodyAlpha": [
+        254,
+        254,
+        253,
+        253,
+        254,
+        254,
+        254,
+        254
+      ],
+      "transparentLocal": {
+        "x": 86,
+        "y": 126,
+        "alphas": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "transparentAlpha": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "frameAtTransparentClick": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/rin/animations/idle-pixel-v2/frame-01.png",
+      "frameAtBodyClick": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/rin/animations/idle-pixel-v2/frame-01.png",
+      "transparentClick": {
+        "screen": {
+          "x": 2336,
+          "y": 1169
+        },
+        "before": {
+          "pointerdown": 0,
+          "pointerup": 0
+        },
+        "after": {
+          "pointerdown": 1,
+          "pointerup": 1,
+          "mousedown": 1,
+          "mouseup": 1,
+          "click": 1,
+          "focus": 0,
+          "blur": 0,
+          "hasFocus": true,
+          "active": "probe"
+        },
+        "delta": 1
+      },
+      "bodyPlatePointerdown": 0,
+      "waveNodeCount": 1,
+      "focusAfterTransparent": {
+        "hasFocus": true,
+        "active": "probe"
+      },
+      "focusAfterBody": {
+        "hasFocus": true,
+        "active": "probe"
+      }
+    }
+  },
+  "focus": {},
+  "routing": "system-cgevent"
+}

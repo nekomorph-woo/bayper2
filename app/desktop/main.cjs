@@ -2,9 +2,11 @@
    不访问数据库、模型 Key 或记忆。父进程 stdin 关闭时自行退出。 */
 const path = require("node:path");
 const readline = require("node:readline");
-const { app, BrowserWindow, ipcMain, screen, session } = require("electron");
+const { fileURLToPath } = require("node:url");
+const { app, BrowserWindow, ipcMain, nativeImage, screen, session } = require("electron");
 const { acceptsNotificationIpc } = require("./notification-ipc.cjs");
-const { acceptsCanvasIpc } = require("./canvas-ipc.cjs");
+const { acceptsCanvasIpc, acceptsCanvasHit } = require("./canvas-ipc.cjs");
+const { createAlphaCache, isBodyHit, readAlpha } = require("./hit-test.cjs");
 
 const profileDir = process.env.BAYPER_DESKTOP_PROFILE;
 const DEFAULT_WINDOW_SIZE = Object.freeze({ width: 128, height: 128 });
@@ -20,8 +22,20 @@ let window = null;
 let characterWindowReady = false;
 let latestState = null;
 let dragState = null;
+let dragToken = 0;
 let activationPolicy = "unconfirmed";
 let lastReportedBoundsKey = "";
+
+/* 透明窗不会自动穿透透明像素。只在主进程维护当前帧 alpha、显示代次和
+   显示身份；renderer 的命中消息必须同时匹配这三项，通知窗口无法冒充。 */
+let canvasEpoch = 0;
+let currentDisplayKey = "";
+let currentDisplaySignature = null;
+let currentDisplay = null;
+let currentFrames = new Set();
+let globalIgnoreMouse = false;
+let windowIgnoring = null;
+const frameAlpha = createAlphaCache(decodeFrameAlpha);
 
 /* 通知气泡由同一个子进程承载但使用独立非激活 panel；最多 3 普通 + 1 加急
    卡片共用一个窗口，窗口只在出现/隐藏/尺寸变化时更新，不随 tick 重建。 */
@@ -92,6 +106,110 @@ function applyPosition(position) {
     : defaultPosition(width, height);
   window.setPosition(target.x, target.y, false);
   layoutNotificationWindow();
+  refreshHit();
+}
+
+function decodeFrameAlpha(frameUrl) {
+  try {
+    const image = nativeImage.createFromPath(fileURLToPath(frameUrl));
+    return image.isEmpty() ? null : readAlpha(image);
+  } catch {
+    return null;
+  }
+}
+
+function setIgnoreMouse(ignore) {
+  if (!window || window.isDestroyed() || windowIgnoring === ignore) {
+    return;
+  }
+  windowIgnoring = ignore;
+  if (ignore) {
+    // forward 让 renderer 在穿透时仍收到 mousemove，指针进入身体后能恢复命中。
+    window.setIgnoreMouseEvents(true, { forward: true });
+  } else {
+    window.setIgnoreMouseEvents(false);
+  }
+}
+
+/* 全局忽略优先；拖拽一旦开始就保持接收直到结束/取消；其余按当前显示帧
+   在系统指针位置的实际 alpha 判定。无帧、加载/错误和隐藏时默认穿透，
+   避免大块透明区域吞掉下方点击。 */
+function refreshHit() {
+  const win = window;
+  if (!win || win.isDestroyed() || !characterWindowReady) {
+    return;
+  }
+  let ignore = true;
+  const alpha = frameAlpha.get();
+  if (globalIgnoreMouse) {
+    ignore = true;
+  } else if (dragState) {
+    ignore = false;
+  } else if (win.isVisible() && currentDisplay && alpha) {
+    const bounds = win.getBounds();
+    const cursor = screen.getCursorScreenPoint();
+    ignore = !isBodyHit(
+      alpha,
+      currentDisplay,
+      cursor.x - bounds.x,
+      cursor.y - bounds.y,
+    );
+  }
+  setIgnoreMouse(ignore);
+}
+
+/* 帧、显示和全局开关来自同一条 state；只有显示/角色/几何签名变化时才让
+   当前 alpha 失效，避免同角色重复 state 把可交互身体误判成透明。 */
+function syncHitFrame(state) {
+  const animations = state.assetState === "ready" ? state.animations : null;
+  const frames = animations
+    ? [
+        ...animations.idle.frames,
+        ...(animations.wave?.frames ?? []),
+        ...(animations.stretch?.frames ?? []),
+      ]
+    : [];
+  const display = animations?.display ?? null;
+  const signature = display
+    ? [
+        state.displayKey ?? "",
+        display.scale,
+        display.canvasWidth,
+        display.canvasHeight,
+        display.offsetX,
+        display.offsetY,
+        ...frames,
+      ].join("|")
+    : "";
+  currentDisplayKey = typeof state.displayKey === "string" ? state.displayKey : "";
+  currentDisplay = display;
+  currentFrames = new Set(frames);
+  globalIgnoreMouse = state.ignoreMouse === true;
+  const displayChanged = signature !== currentDisplaySignature;
+  if (displayChanged) {
+    currentDisplaySignature = signature;
+    frameAlpha.clear();
+  }
+  return displayChanged;
+}
+
+/* 角色隐藏、换代或素材失效时同步取消两侧拖拽；普通心跳保持拖拽不变。 */
+function cancelDragState(notifyRenderer = true) {
+  if (!dragState) return;
+  dragState = null;
+  if (notifyRenderer && window && !window.isDestroyed()) {
+    window.webContents.send("canvas:cancel-drag");
+  }
+}
+
+function acceptsCurrentHit(event, payload) {
+  return acceptsCanvasHit({
+    sender: event.sender,
+    window,
+    payload,
+    epoch: canvasEpoch,
+    displayKey: currentDisplayKey,
+  });
 }
 
 function displayForNotification() {
@@ -309,6 +427,14 @@ function applyState(state) {
     return;
   }
 
+  canvasEpoch += 1;
+  const displayChanged = syncHitFrame(state);
+  if (
+    dragState
+    && (state.visible === false || state.ignoreMouse === true || !currentDisplay || displayChanged)
+  ) {
+    cancelDragState();
+  }
   const display = state.animations?.display;
   const size = displaySize(display);
   window.setContentSize(size.width, size.height);
@@ -321,13 +447,8 @@ function applyState(state) {
     mode: state.mode,
     activity: state.activity ?? null,
     displayKey: state.displayKey,
+    epoch: canvasEpoch,
   });
-
-  if (state.ignoreMouse === true) {
-    window.setIgnoreMouseEvents(true);
-  } else {
-    window.setIgnoreMouseEvents(false);
-  }
 
   if (state.visible === false) {
     window.hide();
@@ -340,6 +461,8 @@ function applyState(state) {
   }
   reportBounds();
   layoutNotificationWindow();
+  // 窗口初次出现、尺寸变化或指针下的帧被替换后都要重新判定。
+  refreshHit();
 }
 
 function ensureCharacterWindow() {
@@ -387,9 +510,14 @@ function ensureCharacterWindow() {
     if (latestState) {
       applyState(latestState);
     }
+    refreshHit();
   });
   win.on("closed", () => app.quit());
+  win.on("move", refreshHit);
+  windowIgnoring = null;
   window = win;
+  // 新窗口先穿透，等 renderer 报来实际显示帧后再按 alpha 决定是否接收。
+  setIgnoreMouse(true);
   return win;
 }
 
@@ -412,6 +540,7 @@ function handleParentLine(line) {
     return;
   }
   if (message.type === "role-hidden") {
+    cancelDragState();
     if (window && !window.isDestroyed()) {
       window.hide();
     }
@@ -462,7 +591,10 @@ function registerIpc() {
       generation: Number.isInteger(payload?.generation) ? payload.generation : null,
     });
   });
-  ipcMain.on("canvas:display-state", (_event, payload) => {
+  ipcMain.on("canvas:display-state", (event, payload) => {
+    if (!acceptsCanvasIpc({ sender: event.sender, window })) {
+      return;
+    }
     send({
       type: "display-state",
       kind: payload?.kind === "character" ? "character" : "status",
@@ -471,39 +603,105 @@ function registerIpc() {
       frame: typeof payload?.frame === "string" ? payload.frame : "",
     });
   });
-  ipcMain.on("canvas:asset-error", (_event, message) => {
-    send({ type: "asset-error", message: String(message || "角色素材加载失败").slice(0, 300) });
-  });
-  ipcMain.on("canvas:drag-start", (_event, point) => {
-    if (!window || !point) {
+  ipcMain.on("canvas:asset-error", (event, message) => {
+    if (!acceptsCanvasIpc({ sender: event.sender, window })) {
       return;
     }
-    const bounds = window.getBounds();
-    dragState = {
-      offsetX: bounds.x - Number(point.x),
-      offsetY: bounds.y - Number(point.y),
-    };
+    send({ type: "asset-error", message: String(message || "角色素材加载失败").slice(0, 300) });
   });
-  ipcMain.on("canvas:drag-move", (_event, point) => {
-    if (!window || !dragState || !point) {
+  // 当前显示帧变化才更新 alpha 缓存；空帧表示状态卡/加载，立即恢复穿透。
+  ipcMain.on("canvas:hit-frame", (event, payload) => {
+    if (!acceptsCurrentHit(event, payload)) {
+      return;
+    }
+    const frame = typeof payload.frame === "string" ? payload.frame : "";
+    if (!frame || !currentFrames.has(frame)) {
+      frameAlpha.clear();
+    } else {
+      frameAlpha.select(frame);
+    }
+    refreshHit();
+  });
+  // 穿透时的 mousemove 由 renderer 转发；主进程始终以系统指针位置判定。
+  ipcMain.on("canvas:pointer-move", (event, payload) => {
+    if (!acceptsCurrentHit(event, payload)) {
+      return;
+    }
+    refreshHit();
+  });
+  // 同步返回是否接受：透明像素或过期代次不能开始拖拽/招呼。
+  // 只在最后赋值一次 returnValue：避免先写 false 时同步回执以第一次赋值为准。
+  ipcMain.on("canvas:drag-start", (event, payload) => {
+    let accepted = 0;
+    if (acceptsCurrentHit(event, payload)) {
+      // 隐藏窗口收不到真实系统点击；这里只按 alpha/代次/全局开关判定，
+      // 保留既有 renderer DOM 测试的点击语义。
+      if (!window || globalIgnoreMouse) {
+        accepted = false;
+      } else {
+        const alpha = frameAlpha.get();
+        const localX = Number(payload.localX);
+        const localY = Number(payload.localY);
+        if (
+          alpha
+          && currentDisplay
+          && Number.isFinite(localX)
+          && Number.isFinite(localY)
+          && isBodyHit(alpha, currentDisplay, localX, localY)
+        ) {
+          const bounds = window.getBounds();
+          dragToken += 1;
+          dragState = {
+            token: dragToken,
+            offsetX: bounds.x - Number(payload.x),
+            offsetY: bounds.y - Number(payload.y),
+          };
+          accepted = dragState.token;
+          refreshHit();
+        }
+      }
+    }
+    event.returnValue = accepted;
+  });
+  ipcMain.on("canvas:drag-move", (event, point) => {
+    if (!acceptsCanvasIpc({ sender: event.sender, window })) {
+      return;
+    }
+    if (!window || !dragState || !point || point.token !== dragState.token) {
+      return;
+    }
+    const x = Number(point.x);
+    const y = Number(point.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
       return;
     }
     const bounds = window.getBounds();
     const target = clampPosition(
-      Number(point.x) + dragState.offsetX,
-      Number(point.y) + dragState.offsetY,
+      x + dragState.offsetX,
+      y + dragState.offsetY,
       bounds.width,
       bounds.height,
     );
     window.setPosition(target.x, target.y, false);
+    refreshHit();
   });
-  ipcMain.on("canvas:drag-end", () => {
+  ipcMain.on("canvas:drag-end", (event, payload) => {
+    if (!acceptsCanvasIpc({ sender: event.sender, window })) {
+      return;
+    }
+    if (!dragState || payload?.token !== dragState.token) {
+      return;
+    }
     dragState = null;
     if (window) {
       const bounds = window.getBounds();
       send({ type: "position-changed", x: bounds.x, y: bounds.y });
+      // 拖拽期间只发 position-changed；结束时补一次 bounds，父进程与命中判定
+      // 都不会沿用拖拽前的位置。
+      reportBounds();
       layoutNotificationWindow();
     }
+    refreshHit();
   });
   ipcMain.on("notifications:ack", (event, payload) => {
     if (!acceptsNotificationIpc({
@@ -626,6 +824,7 @@ function reanchorToDisplays() {
     send({ type: "position-changed", x: target.x, y: target.y });
   }
   layoutNotificationWindow();
+  refreshHit();
 }
 
 app.whenReady().then(() => {

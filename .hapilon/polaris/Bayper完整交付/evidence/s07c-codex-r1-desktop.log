@@ -1,0 +1,21 @@
+(node:30008) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ POL-DESKTOP-001/004 真实画布、管理窗口输入、关闭隐藏与退出清理 (6869.450916ms)
+✔ POL-DESKTOP-004 重复启动不重复画布，画布崩溃有界重启 (5333.18975ms)
+✔ POL-DESKTOP-004 宿主快速崩溃上限、失败后心跳与显式重启 (6921.371666ms)
+✔ POL-DESKTOP-004 父进程强制退出后画布自行结束 (990.921333ms)
+✔ POL-DESKTOP-005 手动切换/休息等待真实自然节点并切到 Hu 真实待机 (13361.373167ms)
+✔ POL-DESKTOP-005 心跳与 idle 自然节点完成低精力交接；角色基础素材连续 (9095.878125ms)
+✔ POL-DESKTOP-005 真实损坏 PNG 解码失败保留错误并解除节点等待 (442.3515ms)
+✔ POL-DESKTOP-005 旧身份异步加载失效，迟到节点不能完成新身份 (2879.292125ms)
+✔ POL-DESKTOP-005 A→慢加载B→A缓存竞态与失败后返回已加载A (1610.870333ms)
+✔ POL-DESKTOP-007 真实画布 DOM 按共同包围裁切，点击招呼回待机并切 Hu (4306.100417ms)
+✔ POL-DESKTOP-007 几何 bounds 更新不得重置素材错误/展示/节点 (3180.640083ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 55147.823709

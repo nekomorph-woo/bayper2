@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+    />
+    <title>S07c 透明命中验收底板</title>
+    <style>
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: #f5f1e7 repeating-conic-gradient(#e5dfd0 0% 25%, #faf8f2 0% 50%) 0 0 / 28px 28px;
+        font: 13px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+        color: #2f2d27;
+      }
+      #probe {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        outline: none;
+        background: transparent;
+        color: transparent;
+        caret-color: transparent;
+        font-size: 16px;
+      }
+      #badge {
+        position: fixed;
+        left: 12px;
+        top: 12px;
+        padding: 6px 9px;
+        border: 1px solid #c9bea7;
+        border-radius: 8px;
+        background: rgba(255, 253, 246, 0.94);
+        pointer-events: none;
+        white-space: pre;
+      }
+    </style>
+  </head>
+  <body>
+    <input id="probe" autocomplete="off" aria-label="下方应用焦点探针" />
+    <pre id="badge"></pre>
+    <script>
+      const state = {
+        pointerdown: 0,
+        pointerup: 0,
+        mousedown: 0,
+        mouseup: 0,
+        click: 0,
+        focus: 0,
+        blur: 0,
+      };
+      const badge = document.getElementById("badge");
+      const probe = document.getElementById("probe");
+      function render() {
+        badge.textContent = [
+          `下方应用计数`,
+          `pointerdown ${state.pointerdown} / pointerup ${state.pointerup}`,
+          `mousedown ${state.mousedown} / mouseup ${state.mouseup} / click ${state.click}`,
+          `focus ${state.focus} / blur ${state.blur}`,
+          `key: ${document.hasFocus()} / active: ${document.activeElement?.id || "none"}`,
+        ].join("\n");
+      }
+      for (const type of ["pointerdown", "pointerup", "mousedown", "mouseup", "click"]) {
+        document.addEventListener(
+          type,
+          () => {
+            state[type] += 1;
+            render();
+          },
+          true,
+        );
+      }
+      window.addEventListener("focus", () => {
+        state.focus += 1;
+        render();
+      });
+      window.addEventListener("blur", () => {
+        state.blur += 1;
+        render();
+      });
+      window.__plate = {
+        state,
+        snapshot: () => ({
+          ...state,
+          hasFocus: document.hasFocus(),
+          active: document.activeElement?.id || "",
+        }),
+        reset: () => {
+          for (const key of Object.keys(state)) state[key] = 0;
+          render();
+        },
+      };
+      probe.focus();
+      render();
+    </script>
+  </body>
+</html>

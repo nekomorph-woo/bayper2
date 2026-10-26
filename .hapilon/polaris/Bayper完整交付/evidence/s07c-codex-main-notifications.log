@@ -1,0 +1,14 @@
+(node:31126) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ POL-NOTIFY-UI-002 3普通满位、P0独立追加、每条6秒与普通不饿死 (12615.933041ms)
+✔ POL-NOTIFY-UI-004 不可见不ack、子进程重建、暂停恢复与旧回执拒绝 (21991.479625ms)
+✔ POL-NOTIFY-UI-005 边缘位置、超量明细、主动收起与聊天/角色不被打断 (17014.979375ms)
+✔ POL-NOTIFY-UI-009 完全无角色时必需通知仍显示并回执 (2255.879375ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 54042.087625

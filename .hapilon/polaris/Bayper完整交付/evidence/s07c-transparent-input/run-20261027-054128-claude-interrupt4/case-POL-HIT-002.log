@@ -1,0 +1,267 @@
+# case-POL-HIT-002
+batch: 20261027-054128-claude-interrupt4
+time: 2026-10-26T21:42:09.978Z
+result: PASS
+failure: none
+coverage:
+{
+  "frame": "PASS（实际 idle 帧 0/7，指针静止）",
+  "switch": "PASS（Hu↔Cheng 同点透明/身体切换）",
+  "appearance": "PASS（窗口初现于指针下）",
+  "move": "PASS（窗口移动后同屏幕点重判）",
+  "retina": "逻辑点映射由桌面实际 bounds/display.scale 驱动；本机 scaleFactor 见 environment.log"
+}
+
+## facts
+{
+  "frame": {
+    "toggleLocal": {
+      "margin": 2,
+      "x": 73,
+      "y": 80,
+      "from": 0,
+      "to": 7,
+      "fromAlpha": 20,
+      "toAlpha": 0,
+      "candidates": 3
+    },
+    "frame7Alpha": 0,
+    "frame0Alpha": 20,
+    "frame7WindowFrame": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-07.png",
+    "frame0WindowFrame": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-00.png",
+    "frame7Click": {
+      "screen": {
+        "x": 2323,
+        "y": 1123
+      },
+      "before": {
+        "pointerdown": 0,
+        "pointerup": 0
+      },
+      "after": {
+        "pointerdown": 1,
+        "pointerup": 1,
+        "mousedown": 1,
+        "mouseup": 1,
+        "click": 1,
+        "focus": 0,
+        "blur": 0,
+        "hasFocus": true,
+        "active": "probe"
+      },
+      "delta": 1
+    },
+    "frame0WaveNode": 1,
+    "pointerStationary": true,
+    "note": "使用同一角色实际 idle 帧的确定性单帧状态，避免与 80–350ms 播放时序竞争",
+    "waveFrame": {
+      "local": {
+        "margin": 2,
+        "x": 73,
+        "y": 76,
+        "from": 0,
+        "to": 1,
+        "fromAlpha": 251,
+        "toAlpha": 0,
+        "candidates": 99
+      },
+      "frame": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/wave-pixel-v3/frame-01.png",
+      "transparentClick": {
+        "screen": {
+          "x": 2323,
+          "y": 1119
+        },
+        "before": {
+          "pointerdown": 0,
+          "pointerup": 0
+        },
+        "after": {
+          "pointerdown": 1,
+          "pointerup": 1,
+          "mousedown": 1,
+          "mouseup": 1,
+          "click": 1,
+          "focus": 0,
+          "blur": 0,
+          "hasFocus": true,
+          "active": "probe"
+        },
+        "delta": 1
+      },
+      "idleBodyWave": 1
+    },
+    "stretchFrame": {
+      "local": {
+        "margin": 2,
+        "x": 70,
+        "y": 73,
+        "from": 0,
+        "to": 1,
+        "fromAlpha": 246,
+        "toAlpha": 0,
+        "candidates": 169
+      },
+      "frame": "file:///Users/chaooswoo/.codex/worktrees/desktop-alpha-input/bayper/assets/characters/hu/animations/stretch-pixel-v2-canvas320/frame-00.png",
+      "transparentClick": {
+        "screen": {
+          "x": 2320,
+          "y": 1116
+        },
+        "before": {
+          "pointerdown": 0,
+          "pointerup": 0
+        },
+        "after": {
+          "pointerdown": 1,
+          "pointerup": 1,
+          "mousedown": 1,
+          "mouseup": 1,
+          "click": 1,
+          "focus": 0,
+          "blur": 0,
+          "hasFocus": true,
+          "active": "probe"
+        },
+        "delta": 1
+      },
+      "idleBodyWave": 1
+    }
+  },
+  "switch": {
+    "local": {
+      "transToBody": {
+        "x": 80,
+        "y": 46,
+        "fromAlphas": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "toAlphas": [
+          253,
+          254,
+          253,
+          253,
+          253,
+          253,
+          253,
+          253
+        ]
+      },
+      "bodyToTrans": {
+        "x": 29,
+        "y": 62,
+        "fromAlphas": [
+          253,
+          252,
+          253,
+          253,
+          253,
+          253,
+          253,
+          253
+        ],
+        "toAlphas": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "huTransparentClick": {
+      "screen": {
+        "x": 2330,
+        "y": 1089
+      },
+      "before": {
+        "pointerdown": 0,
+        "pointerup": 0
+      },
+      "after": {
+        "pointerdown": 1,
+        "pointerup": 1,
+        "mousedown": 1,
+        "mouseup": 1,
+        "click": 1,
+        "focus": 0,
+        "blur": 0,
+        "hasFocus": true,
+        "active": "probe"
+      },
+      "delta": 1
+    },
+    "chengBodyWave": 2,
+    "chengTransparentClick": {
+      "screen": {
+        "x": 2279,
+        "y": 1105
+      },
+      "before": {
+        "pointerdown": 0,
+        "pointerup": 0
+      },
+      "after": {
+        "pointerdown": 1,
+        "pointerup": 1,
+        "mousedown": 1,
+        "mouseup": 1,
+        "click": 1,
+        "focus": 0,
+        "blur": 0,
+        "hasFocus": true,
+        "active": "probe"
+      },
+      "delta": 1
+    },
+    "staleGenerationControlledHit": false
+  },
+  "appearance": {
+    "body": "PASS"
+  },
+  "move": {
+    "from": {
+      "x": 2250,
+      "y": 1043
+    },
+    "to": {
+      "x": 2199,
+      "y": 981
+    },
+    "sameScreenPoint": {
+      "x": 2293,
+      "y": 1107
+    },
+    "click": {
+      "screen": {
+        "x": 2293,
+        "y": 1107
+      },
+      "before": {
+        "pointerdown": 0,
+        "pointerup": 0
+      },
+      "after": {
+        "pointerdown": 1,
+        "pointerup": 1,
+        "mousedown": 1,
+        "mouseup": 1,
+        "click": 1,
+        "focus": 0,
+        "blur": 0,
+        "hasFocus": true,
+        "active": "probe"
+      },
+      "delta": 1
+    }
+  }
+}
