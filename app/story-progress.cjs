@@ -192,10 +192,15 @@ function createStoryProgress({ db, catalog, now = () => new Date() }) {
     return at;
   }
 
-  function transaction(fn) {
+  /* beforeCommit 在进度、事实、来源与评估写入之后、COMMIT 之前执行，
+     供调用方把同一次活动消费的附加事实写入同一事务；抛错则整笔回滚。 */
+  function transaction(fn, beforeCommit = null) {
     db.exec("BEGIN IMMEDIATE");
     try {
       const result = fn();
+      if (typeof beforeCommit === "function") {
+        beforeCommit(result);
+      }
       db.exec("COMMIT");
       return result;
     } catch (error) {
@@ -430,11 +435,14 @@ function createStoryProgress({ db, catalog, now = () => new Date() }) {
     return selected;
   }
 
-  function recordNode({ activityId, narratorId, storyId, nodeId } = {}) {
+  function recordNode({ activityId, narratorId, storyId, nodeId, onResult } = {}) {
     const activityKey = text(activityId, "activityId");
     const narrator = text(narratorId, "narratorId");
     const storyKey = text(storyId, "storyId");
     const nodeKey = text(nodeId, "nodeId");
+    if (onResult !== undefined && typeof onResult !== "function") {
+      throw new AppError("INVALID_INPUT", "onResult 必须是函数。");
+    }
     const activity = statements.getActivity.get(activityKey);
     if (!activity) {
       throw new AppError("ACTIVITY_NOT_FOUND", "活动不存在。");
@@ -572,7 +580,7 @@ function createStoryProgress({ db, catalog, now = () => new Date() }) {
         at,
       );
       return resultPublic(statements.getResult.get(activityKey), false);
-    });
+    }, onResult);
   }
 
   function getProgress(storyId) {

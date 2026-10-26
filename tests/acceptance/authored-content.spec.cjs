@@ -89,8 +89,13 @@ function makeHarness(t, { accepted = ["rin"], catalog = OFFICIAL } = {}) {
       });
       assert.equal(requested.requested, true, JSON.stringify(requested));
       assert.equal(service.completeNaturalNode().started, true);
+      // S06h 起日常必须由真实动作完成与自然节点收束，不能只推进计时。
+      assert.equal(
+        service.completeDailyAction(activityId, { characterId: current }).completed,
+        true,
+      );
       clock.ms += 10 * 1000;
-      service.advanceActivities();
+      assert.equal(service.completeNaturalNode().completedDaily, 1);
       assert.equal(
         raw.prepare("SELECT status FROM character_activities WHERE activity_id = ?").get(activityId)
           .status,

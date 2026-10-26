@@ -2,7 +2,7 @@
    使用同一 SQLite 连接保持邀请、关系、所有权与展示回执的事务一致。
    本模块不生成故事、不调用模型、不改变名单、固定位、当前角色或互动。 */
 const { AppError } = require("./errors.cjs");
-const { INITIAL_STATS } = require("./store.cjs");
+const { INITIAL_STATS } = require("./initial-stats.cjs");
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const OUTFIT_WINDOW_MS = 72 * 60 * 60 * 1000;

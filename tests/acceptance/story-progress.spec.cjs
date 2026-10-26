@@ -194,8 +194,19 @@ function makeHarness(t, options = {}) {
       assert.equal(requested.requested, true, JSON.stringify(requested));
       const started = service.completeNaturalNode();
       assert.equal(started.started, true, JSON.stringify(started));
+      if (kind === "daily") {
+        // S06h 起日常必须由真实动作完成与自然节点收束，不能只推进计时。
+        assert.equal(
+          service.completeDailyAction(activityId, { characterId }).completed,
+          true,
+        );
+      }
       clock.ms += kind === "daily" ? 10 * 1000 : 20 * MINUTE;
-      service.advanceActivities();
+      if (kind === "daily") {
+        assert.equal(service.completeNaturalNode().completedDaily, 1);
+      } else {
+        service.advanceActivities();
+      }
       const activity = h.activity(activityId);
       assert.equal(activity.status, "completed");
       return activity;
@@ -288,8 +299,12 @@ test("POL-STORY-001 实际活动完成第一节点、24h 后第二节点成熟",
     "ACTIVITY_NOT_COMPLETED",
   );
   assert.equal(h.service.completeNaturalNode().started, true);
+  assert.equal(
+    h.service.completeDailyAction("story-act-1", { characterId: "a" }).completed,
+    true,
+  );
   h.advance(10 * 1000);
-  h.service.advanceActivities();
+  assert.equal(h.service.completeNaturalNode().completedDaily, 1);
 
   const base = {
     activityId: "story-act-1",

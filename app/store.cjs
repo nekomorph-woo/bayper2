@@ -13,6 +13,10 @@ const { createExternalSources } = require("./external-sources.cjs");
 const { createAutomaticBudget } = require("./automatic-budget.cjs");
 const { createSessionSourceReader } = require("./session-sources.cjs");
 const { createSourceAnalysis } = require("./source-analysis.cjs");
+const { createStoryProgress } = require("./story-progress.cjs");
+const { createDiscoveryOutcomes } = require("./discovery-outcomes.cjs");
+const { INITIAL_STATS } = require("./initial-stats.cjs");
+const authoredStories = require("./content/maid-stories.json");
 
 const DB_FILE_NAME = "bayper.sqlite3";
 
@@ -50,8 +54,6 @@ const SCHEMA = `
   );
 `;
 
-const INITIAL_STATS = Object.freeze({ intimacy: 10, energy: 100, mood: 0 });
-
 function createStore(dataDir, options = {}) {
   fs.mkdirSync(dataDir, { recursive: true });
   const dbPath = path.join(dataDir, DB_FILE_NAME);
@@ -77,6 +79,14 @@ function createStore(dataDir, options = {}) {
 
   // S02a 迁移与陪伴方法共用这一条连接，关闭仍由 store 统一负责。
   const companion = createCompanionStore(db);
+  // S06i 故事与发现复用同一 SQLite 连接；正式目录是唯一内容来源，
+  // 测试只能通过显式 storyCatalog 注入已标注的构造目录。
+  const storyProgress = createStoryProgress({
+    db,
+    catalog: options.storyCatalog ?? authoredStories,
+    now,
+  });
+  const discoveryOutcomes = createDiscoveryOutcomes({ db, storyProgress, now });
   // S03 记忆与聊天共用同一连接；不另建生产数据库。
   const memory = createMemoryService({ db, now });
   const chat = createChatService({
@@ -227,15 +237,19 @@ function createStore(dataDir, options = {}) {
   }
 
   function close() {
+    discoveryOutcomes.dispose();
     db.close();
   }
 
   return {
     dbPath,
+    db,
     appRunId,
     connectorLedger,
     notificationPresentation,
     ...companion,
+    storyProgress,
+    discoveryOutcomes,
     memory,
     chat,
     externalSources,

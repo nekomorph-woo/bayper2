@@ -73,6 +73,11 @@ function createCharacterActivities(db) {
       SELECT * FROM character_activities WHERE status = 'running'
       ORDER BY last_progress_at ASC, activity_id ASC
     `),
+    listCompletedSince: db.prepare(`
+      SELECT * FROM character_activities
+      WHERE status = 'completed' AND completed_at IS NOT NULL AND completed_at > ?
+      ORDER BY completed_at ASC, activity_id ASC
+    `),
     countStarted: db.prepare(`
       SELECT COUNT(*) AS count FROM character_activities
       WHERE kind = ? AND started_at IS NOT NULL AND started_at > ?
@@ -173,6 +178,11 @@ function createCharacterActivities(db) {
     return statements.listRunning.all().map(map);
   }
 
+  /* S06i 只读：按真实完成时间读取已完成活动，供故事运行入口消费。 */
+  function listCompletedSince(after) {
+    return statements.listCompletedSince.all(Number(after)).map(map);
+  }
+
   function countStarted(kind, since) {
     return Number(statements.countStarted.get(kind, since).count);
   }
@@ -242,6 +252,7 @@ function createCharacterActivities(db) {
     getScheduled,
     listOpen,
     listRunning,
+    listCompletedSince,
     countStarted,
     insertScheduled,
     start,

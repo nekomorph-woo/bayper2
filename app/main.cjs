@@ -22,6 +22,7 @@ const { createDesktopHost } = require("./desktop-host.cjs");
 const { createSourceSettings, buildDefaultSourceCandidates } = require("./source-settings.cjs");
 const { createSourceAutomation } = require("./source-automation.cjs");
 const { createActivityRuntime } = require("./activity-runtime.cjs");
+const { createStoryRuntime } = require("./story-runtime.cjs");
 const { createAutomaticOpportunities } = require("./automatic-opportunities.cjs");
 const { buildDesktopPresentation, getActivitySupport } = require("./desktop-assets.cjs");
 const { createAppTray } = require("./app-tray.cjs");
@@ -56,6 +57,7 @@ let companionship = null;
 let sourceSettings = null;
 let sourceAutomation = null;
 let activityRuntime = null;
+let storyRuntime = null;
 let automaticOpportunities = null;
 let desktopHost = null;
 let tray = null;
@@ -184,6 +186,14 @@ function startApplication() {
     },
     activitySupport: (characterId, kind) => getActivitySupport(characterId, kind),
     isBlocked: () => Boolean(activeChat) || systemPaused || quitting,
+  });
+
+  // S06i 只消费已完成活动并保存作者故事；不启动新活动、不推送窗口。
+  storyRuntime = createStoryRuntime({
+    db: store.db,
+    store,
+    storyProgress: store.storyProgress,
+    discoveryOutcomes: store.discoveryOutcomes,
   });
 
   automaticOpportunities = createAutomaticOpportunities({
@@ -653,6 +663,19 @@ function handleCanvasAssetError(message) {
   pushSnapshot();
 }
 
+/* 故事运行只读取已完成活动；失败只记录，不影响陪伴心跳与角色画布。 */
+function runStoryRuntime() {
+  if (!storyRuntime || quitting) {
+    return [];
+  }
+  try {
+    return storyRuntime.evaluate();
+  } catch (error) {
+    console.error("故事进度评估失败：", error?.message ?? error);
+    return [];
+  }
+}
+
 function handleCanvasNodeComplete(node, message = {}) {
   if (quitting) {
     return;
@@ -690,6 +713,7 @@ function handleCanvasNodeComplete(node, message = {}) {
     }
     companionship.completeNaturalNode();
     rotationPending = companionship.getSnapshot().pendingRotation;
+    runStoryRuntime();
     syncDesktop();
     pushSnapshot();
     ensurePendingRotationCompletion();
@@ -754,6 +778,7 @@ function ensurePendingRotationCompletion() {
     try {
       companionship.completeNaturalNode();
       rotationPending = companionship.getSnapshot().pendingRotation;
+      runStoryRuntime();
       syncDesktop();
       pushSnapshot();
       ensurePendingRotationCompletion();
@@ -777,6 +802,7 @@ function startHeartbeat() {
       } else {
         rotationPending = snapshot.pendingRotation === true;
       }
+      runStoryRuntime();
       ensurePendingRotationCompletion();
       syncDesktop();
       pushSnapshot();
@@ -1491,6 +1517,7 @@ async function cleanup() {
     activityRuntime.dispose();
     activityRuntime = null;
   }
+  storyRuntime = null;
   if (companionship) {
     try {
       companionship.markClosed();
