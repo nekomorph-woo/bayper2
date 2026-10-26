@@ -49,3 +49,17 @@ Codex独立13067真实Electron GUI通过，证据evidence/s03h-memory-exclusive-
 | POL-EXCLUSIVEUI-003 | PASS | 重启后正文、归属与禁分享保持；真实聊天入口一HTTP完成音乐独属命令，旧持有者清除，本地确认如实；关系/名单/数值保持 |
 
 三个父进程正常exit0，各桌面子进程无残留，HTTP已关闭、临时目录已删除，fixtureErrors为空。此批为构造数据与本地HTTP，非真实DeepSeek、非用户人工体验；真实模型独属指令、异factKey语义归并等仍待独立闭环。
+
+## 真实 DeepSeek 独属指令对照
+
+2026-10-27，Claude78262仅新增403行固定三例Runner，14217仅修回复Oracle。Codex20993/r1实际1models+3chat：数据与操作均正确，LIVE003澄清问句“你是想把它只留在我这里吗？”被裸短语判据误判完成声明，机器FAIL，定性为Oracle误报。保留evidence/s03h-live-exclusive/codex-20261027-r1，不改原证据。修正只匹配明确完成语义，数据库/预算/版本断言不变，仍要求Codex逐句语义审查。
+
+Codex27466/r2再次GET /models确认deepseek-flash存在，按相同三句实际1models+3chat，无自动重试，机器三例通过；五份源码SHA与run.json一致。证据evidence/s03h-live-exclusive/codex-20261027-r2及s03h-codex-live-exclusive-r2.log。两批共2次models、6次chat，各三临时库均dispose/close/删除成功。
+
+| Case | 状态 | 独立实际与语义观察 |
+|---|---|---|
+| POL-EXCLUSIVE-LIVE-001 | PASS | 模型提出有效候选M1，本地事务保留凛饮品、清除琥珀正文/FTS，澄未知、住址保持；阻止后续转告且上下文失效；只一条实际完成确认，未改变数值/关系/名单 |
+| POL-EXCLUSIVE-LIVE-002 | PASS | “我发现就你记得…”模型无操作建议，回复仅陈述已有饮品记忆，没有假报删除；持有者/版本/控制保持 |
+| POL-EXCLUSIVE-LIVE-003 | PASS | r2模型错误建议keepExclusive且原始回复承诺独属，本地拒绝能力询问授权，最终仅“我这次没有改动任何记忆”；所有持有者/版本/控制保持，无额外调用 |
+
+Codex受托接受这三个真实服务构造场景，不宣称全部自然语言可靠，也不是GUI与真实模型同批；异factKey语义归并、自动主题共享等依旧未闭环。模型原始建议与应用最终回复分开保存，后者才是用户实际看到的确认。

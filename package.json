@@ -1,6 +1,6 @@
 {
   "name": "bayper",
-  "version": "0.1.162",
+  "version": "0.1.163",
   "private": true,
   "description": "Bayper 桌面陪伴应用",
   "main": "app/main.cjs",
