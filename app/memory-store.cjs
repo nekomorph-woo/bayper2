@@ -44,13 +44,23 @@ const SCHEMA = `
     PRIMARY KEY (character_id, source_id_hash)
   );
 
+  /* 用户明确“不要再分享这件事”的最小控制：按事实键摘要跨持有者生效，
+     不保存正文，也不因某位持有者删除或纠正而自动解除。 */
+  CREATE TABLE IF NOT EXISTS memory_share_controls (
+    fact_key_hash TEXT PRIMARY KEY,
+    created_at INTEGER NOT NULL
+  );
+
   /* 派生身份与父条目分离：parent_entry_id 不设外键，父条目删除后仍保留
-     “这条记忆是听来的”这一无正文关系。source_id/source_version 记录最初
-     分享来源；后续纠正更新正文时仍可追溯原分享来源。entry_id 删除时级联清理。 */
+     “这条记忆是听来的”这一无正文关系。narrator_character_id 记录直接讲述者
+    的角色身份，父条目删除后仍可说明“听谁说的”；origin_character_id 保留
+     最初来源。source_id/source_version 记录最初分享来源；后续纠正更新正文时
+     仍可追溯原分享来源。entry_id 删除时级联清理。 */
   CREATE TABLE IF NOT EXISTS memory_derivations (
     entry_id TEXT PRIMARY KEY REFERENCES memory_entries(id) ON DELETE CASCADE,
     parent_entry_id TEXT NOT NULL,
     origin_character_id TEXT NOT NULL REFERENCES relationships(character_id),
+    narrator_character_id TEXT,
     source_id TEXT,
     source_version INTEGER,
     created_at INTEGER NOT NULL
@@ -93,6 +103,7 @@ function mapEntry(row) {
     originCharacterId: row.origin_character_id,
     derived,
     derivedFromEntryId,
+    narratorCharacterId: row.derived_narrator_id ?? null,
     derivationSourceId: row.derived_source_id ?? null,
     derivationSourceVersion: row.derived_source_version ?? null,
     kind: row.kind,
@@ -112,12 +123,14 @@ function createMemoryStore(db) {
   db.exec("PRAGMA foreign_keys = ON");
   db.exec(SCHEMA);
   ensureDerivationColumns(db);
-  // 兼容首版关系表：补齐派生关系，并为缺少来源列的行填一次当前来源。
+  // 兼容首版关系表：补齐派生关系与可直接判定的来源/讲述者，不猜测已删除父条目的身份。
   db.exec(`
     INSERT OR IGNORE INTO memory_derivations (
-      entry_id, parent_entry_id, origin_character_id, source_id, source_version, created_at
+      entry_id, parent_entry_id, origin_character_id, narrator_character_id,
+      source_id, source_version, created_at
     )
     SELECT e.id, e.derived_from_entry_id, e.origin_character_id,
+           (SELECT p.character_id FROM memory_entries p WHERE p.id = e.derived_from_entry_id),
            e.source_id, e.source_version, e.created_at
     FROM memory_entries e
     WHERE e.derived_from_entry_id IS NOT NULL
@@ -128,9 +141,21 @@ function createMemoryStore(db) {
         source_version = (SELECT e.source_version FROM memory_entries e WHERE e.id = memory_derivations.entry_id)
     WHERE source_id IS NULL
   `);
+  // 旧转述若父条目仍在，可由父条目持有者确定直接讲述者；父条目已删则保持 NULL。
+  db.exec(`
+    UPDATE memory_derivations
+    SET narrator_character_id = (
+      SELECT p.character_id FROM memory_entries p WHERE p.id = memory_derivations.parent_entry_id
+    )
+    WHERE narrator_character_id IS NULL
+      AND EXISTS (
+        SELECT 1 FROM memory_entries p WHERE p.id = memory_derivations.parent_entry_id
+      )
+  `);
 
   const DERIVED_FIELDS = `
     (SELECT d.parent_entry_id FROM memory_derivations d WHERE d.entry_id = e.id) AS derived_parent_id,
+    (SELECT d.narrator_character_id FROM memory_derivations d WHERE d.entry_id = e.id) AS derived_narrator_id,
     (SELECT d.source_id FROM memory_derivations d WHERE d.entry_id = e.id) AS derived_source_id,
     (SELECT d.source_version FROM memory_derivations d WHERE d.entry_id = e.id) AS derived_source_version
   `;
@@ -146,9 +171,9 @@ function createMemoryStore(db) {
     `),
     insertDerivation: db.prepare(`
       INSERT INTO memory_derivations (
-        entry_id, parent_entry_id, origin_character_id,
+        entry_id, parent_entry_id, origin_character_id, narrator_character_id,
         source_id, source_version, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `),
     updateEntry: db.prepare(`
       UPDATE memory_entries SET
@@ -261,6 +286,16 @@ function createMemoryStore(db) {
       INSERT OR IGNORE INTO memory_source_controls (character_id, source_id_hash, created_at)
       VALUES (?, ?, ?)
     `),
+    hasShareControl: db.prepare(
+      "SELECT 1 AS found FROM memory_share_controls WHERE fact_key_hash = ?",
+    ),
+    addShareControl: db.prepare(`
+      INSERT OR IGNORE INTO memory_share_controls (fact_key_hash, created_at)
+      VALUES (?, ?)
+    `),
+    removeShareControl: db.prepare(
+      "DELETE FROM memory_share_controls WHERE fact_key_hash = ?",
+    ),
     listSourceControls: db.prepare(`
       SELECT source_id_hash FROM memory_source_controls
       WHERE character_id = ?
@@ -306,6 +341,7 @@ function createMemoryStore(db) {
         entry.id,
         entry.derivedFromEntryId,
         entry.originCharacterId,
+        entry.narratorCharacterId ?? null,
         entry.sourceId,
         entry.sourceVersion,
         entry.createdAt,
@@ -406,6 +442,18 @@ function createMemoryStore(db) {
     statements.addSourceControl.run(characterId, sourceIdHash, createdAt);
   }
 
+  function hasShareControl(factKeyHash) {
+    return Boolean(statements.hasShareControl.get(factKeyHash));
+  }
+
+  function addShareControl(factKeyHash, createdAt) {
+    statements.addShareControl.run(factKeyHash, createdAt);
+  }
+
+  function removeShareControl(factKeyHash) {
+    return statements.removeShareControl.run(factKeyHash).changes > 0;
+  }
+
   function listSourceControls(characterId) {
     return statements.listSourceControls.all(characterId).map((row) => row.source_id_hash);
   }
@@ -466,6 +514,9 @@ function createMemoryStore(db) {
     addForgetControl,
     hasSourceControl,
     addSourceControl,
+    hasShareControl,
+    addShareControl,
+    removeShareControl,
     listSourceControls,
     hasExtractionBatch,
     addExtractionBatch,
@@ -486,5 +537,8 @@ function ensureDerivationColumns(db) {
   }
   if (!columns.some((column) => column.name === "source_version")) {
     db.exec("ALTER TABLE memory_derivations ADD COLUMN source_version INTEGER");
+  }
+  if (!columns.some((column) => column.name === "narrator_character_id")) {
+    db.exec("ALTER TABLE memory_derivations ADD COLUMN narrator_character_id TEXT");
   }
 }

@@ -1,7 +1,9 @@
 /* S03a 本地独属记忆业务入口。
    职责：有来源写入、角色范围读取/检索、已定位纠正/删除、指定分享、上下文版本。
-   这里不做自然语言语义定位：纠正和删除必须由调用方给出明确的 factKey；
-   正文中的任何指令都只是记忆内容，不执行删除、分享或扩大权限。
+   S03d 增加用户明确转告与按事实的持久禁分享控制；两者都必须由主进程在可信
+   用户操作后调用，正文或模型回复不能自行取得权限。这里不做自然语言语义定位：
+   纠正和删除必须由调用方给出明确的 factKey；正文中的任何指令都只是记忆内容，
+   不执行删除、分享或扩大权限。API 字段本身不是安全认证，IPC 授权不在本切片。
    characterId 由主进程按当前会话选择；本服务只验证角色关系存在，不把 renderer
    自报的角色当作授权依据。工厂显式接收现有 SQLite 连接，正式 createStore 接入
    由后续步骤完成。 */
@@ -634,7 +636,11 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
         if (entry.expiresAt !== null && entry.expiresAt <= nowMs) {
           throw new MemoryError("SHARE_NOT_ALLOWED", "已到期的记忆不能分享。");
         }
-        if (store.hasForgetControl(toCharacterId, factKeyHash(entry.factKey))) {
+        const hash = factKeyHash(entry.factKey);
+        if (store.hasShareControl(hash)) {
+          throw new MemoryError("SHARE_BLOCKED", "用户已禁止分享该事实。");
+        }
+        if (store.hasForgetControl(toCharacterId, hash)) {
           throw new MemoryError("SHARE_BLOCKED", "接收者已明确忘记该事实。");
         }
         return entry;
@@ -654,6 +660,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
           factKey: original.factKey,
           originCharacterId: original.originCharacterId,
           derivedFromEntryId: original.id,
+          narratorCharacterId: fromCharacterId,
           kind: original.kind,
           body: original.body,
           trust: original.trust,
@@ -672,6 +679,141 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
 
       const contextVersion = created > 0 ? store.bumpContextVersion(toCharacterId, nowMs) : null;
       return { toCharacterId, shared, contextVersion };
+    });
+  }
+
+  function currentHolders(factKey) {
+    return [...new Set(store.listEntriesByFact(factKey).map((entry) => entry.characterId))].sort();
+  }
+
+  /* 用户明确转告：调用方逐条给出当前持有条目、版本和单一已结识接收者。
+     与 share 的区别是允许把听来的事实继续明确转告，但仍保留最初来源、
+     直接讲述者与直接父条目；不把听说写成亲历。接收者已有同一有效内容时
+     幂等，内容不同时如实报告冲突而不是用旧转述覆盖。普通转告不能解除事实禁分享。 */
+  function relay(input = {}) {
+    const fromCharacterId = characterIdOf(input.fromCharacterId);
+    const toCharacterId = characterIdOf(input.toCharacterId);
+    const nowMs = resolveNow(input.nowMs);
+    if (fromCharacterId === toCharacterId) {
+      throw new MemoryError("INVALID_INPUT", "不能转告给自己。");
+    }
+    if (!Array.isArray(input.entries) || input.entries.length === 0) {
+      throw new MemoryError("INVALID_INPUT", "必须指定要转告的记忆。");
+    }
+    if (input.entries.length > LIMITS.shareEntries) {
+      throw new MemoryError("INVALID_INPUT", "一次转告的条目过多。");
+    }
+    const selections = input.entries.map((item) => {
+      if (!item || typeof item !== "object") {
+        throw new MemoryError("INVALID_INPUT", "转告条目必须包含记忆ID与版本。");
+      }
+      return {
+        entryId: cleanText(item.entryId, "记忆ID", 200),
+        expectedVersion: expectedVersionOf(item.expectedVersion),
+      };
+    });
+    if (new Set(selections.map((item) => item.entryId)).size !== selections.length) {
+      throw new MemoryError("INVALID_INPUT", "转告条目不能重复。");
+    }
+
+    return store.transaction(() => {
+      const originals = selections.map(({ entryId, expectedVersion }) => {
+        const entry = store.getEntryById(entryId);
+        if (!entry || entry.characterId !== fromCharacterId) {
+          throw new MemoryError("SHARE_NOT_ALLOWED", "只能转告自己持有的记忆。");
+        }
+        if (entry.version !== expectedVersion) {
+          throw new MemoryError("MEMORY_CHANGED", "记忆已更新，请重新选择。");
+        }
+        if (entry.expiresAt !== null && entry.expiresAt <= nowMs) {
+          throw new MemoryError("SHARE_NOT_ALLOWED", "已到期的记忆不能转告。");
+        }
+        const hash = factKeyHash(entry.factKey);
+        if (store.hasShareControl(hash)) {
+          throw new MemoryError("SHARE_BLOCKED", "用户已禁止分享该事实。");
+        }
+        if (store.hasForgetControl(toCharacterId, hash)) {
+          throw new MemoryError("SHARE_BLOCKED", "接收者已明确忘记该事实。");
+        }
+        return entry;
+      });
+
+      const shared = [];
+      let created = 0;
+      for (const original of originals) {
+        const existing = store.getEntryByFact(toCharacterId, original.factKey);
+        if (existing) {
+          const expired = existing.expiresAt !== null && existing.expiresAt <= nowMs;
+          if (expired) {
+            throw new MemoryError("SHARE_CONFLICT", "接收者已有同事实的失效记忆，未覆盖。");
+          }
+          if (existing.body !== original.body) {
+            throw new MemoryError("SHARE_CONFLICT", "接收者已有不同的同事实内容，未覆盖。");
+          }
+          shared.push({ sourceEntryId: original.id, entryId: existing.id, alreadyHeld: true });
+          continue;
+        }
+        const entry = {
+          id: newEntryId(),
+          characterId: toCharacterId,
+          factKey: original.factKey,
+          originCharacterId: original.originCharacterId,
+          derivedFromEntryId: original.id,
+          narratorCharacterId: fromCharacterId,
+          kind: original.kind,
+          body: original.body,
+          trust: original.trust,
+          importance: original.importance,
+          expiresAt: original.expiresAt,
+          sourceId: `relay:${original.id}:${toCharacterId}`,
+          sourceVersion: 1,
+          version: 1,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        };
+        store.insertEntry(entry, tokenizeForIndex(entry.body));
+        shared.push({ sourceEntryId: original.id, entryId: entry.id, alreadyHeld: false });
+        created += 1;
+      }
+
+      const contextVersion = created > 0 ? store.bumpContextVersion(toCharacterId, nowMs) : null;
+      return { toCharacterId, shared, contextVersion };
+    });
+  }
+
+  /* 新增或解除事实禁分享都要求明确选中当前持有条目并核对版本；只有独立调用
+     allowSharing 才能解除，纠正、删除和普通转告都不会顺手清除限制。
+     限制按事实键摘要跨持有者生效，结果只返回已有持有者，不透露正文。 */
+  function selectedHeldFact(input, characterId) {
+    if (input.entryId === undefined) {
+      throw new MemoryError("INVALID_INPUT", "必须指定选中的记忆。");
+    }
+    const { factKey } = factForSelectedChange(input, characterId);
+    if (!store.getEntryByFact(characterId, factKey)) {
+      throw new MemoryError("FACT_NOT_HELD", "当前角色没有该事实。");
+    }
+    return factKey;
+  }
+
+  function restrictSharing(input = {}) {
+    const characterId = characterIdOf(input.characterId);
+    const nowMs = resolveNow(input.nowMs);
+    return store.transaction(() => {
+      const factKey = selectedHeldFact(input, characterId);
+      const hash = factKeyHash(factKey);
+      const alreadyRestricted = store.hasShareControl(hash);
+      store.addShareControl(hash, nowMs);
+      return { factKeyHash: hash, alreadyRestricted, holders: currentHolders(factKey) };
+    });
+  }
+
+  function allowSharing(input = {}) {
+    const characterId = characterIdOf(input.characterId);
+    return store.transaction(() => {
+      const factKey = selectedHeldFact(input, characterId);
+      const hash = factKeyHash(factKey);
+      const lifted = store.removeShareControl(hash);
+      return { factKeyHash: hash, lifted, holders: currentHolders(factKey) };
     });
   }
 
@@ -778,6 +920,9 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     correct,
     forget,
     share,
+    relay,
+    restrictSharing,
+    allowSharing,
     buildContext,
     getContextVersion,
     isContextCurrent,
