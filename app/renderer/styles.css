@@ -1234,6 +1234,19 @@ select:focus {
   margin-top: 8px;
 }
 
+#memory-share-state[data-state="ok"] {
+  color: var(--accent);
+}
+
+#memory-share-status {
+  min-height: 17px;
+  margin-top: 6px;
+}
+
+#memory-share-error {
+  margin-top: 8px;
+}
+
 .source-scroll {
   flex: 1;
   min-height: 0;

@@ -15,6 +15,7 @@ const state = {
   selectedCharacterId: null,
   characterTab: "overview",
   settingsTab: "model",
+  autoShareEnabled: null,
 };
 
 const navigation = window.createWindowNavigation({
@@ -634,7 +635,7 @@ async function checkStoredModelConnection() {
 }
 
 function showSettingsTab(tab) {
-  if (!["model", "sources", "desktop"].includes(tab)) {
+  if (!["model", "memory", "sources", "connectors", "desktop"].includes(tab)) {
     return;
   }
   state.settingsTab = tab;
@@ -652,6 +653,70 @@ function showSettingsTab(tab) {
   } else {
     sourcePanel.deactivate();
   }
+  if (tab === "memory") {
+    loadAutoShareState();
+  }
+}
+
+/* 设置页只从可信主窗口 IPC 读取自动分享状态；保存失败时回退到最近一次确认值。 */
+function updateAutoShareLabels() {
+  const enabled = state.autoShareEnabled === true;
+  const label = byId("memory-share-state");
+  label.textContent = enabled ? "已开启" : "已关闭";
+  label.dataset.state = enabled ? "ok" : "";
+}
+
+async function loadAutoShareState() {
+  const toggle = byId("memory-auto-share");
+  const status = byId("memory-share-status");
+  showAlert(byId("memory-share-error"), null);
+  toggle.disabled = true;
+  toggle.indeterminate = true;
+  status.dataset.state = "";
+  status.textContent = "正在读取…";
+
+  const result = await callMemoryApi("getMemoryAutoShare");
+  if (!result.ok) {
+    state.autoShareEnabled = null;
+    byId("memory-share-state").textContent = "";
+    status.textContent = "";
+    showAlert(byId("memory-share-error"), result.error);
+    return;
+  }
+  state.autoShareEnabled = result.enabled === true;
+  toggle.checked = state.autoShareEnabled;
+  toggle.indeterminate = false;
+  toggle.disabled = false;
+  status.textContent = "";
+  updateAutoShareLabels();
+}
+
+async function saveAutoShare(toggle) {
+  const error = byId("memory-share-error");
+  const status = byId("memory-share-status");
+  const previous = state.autoShareEnabled === true;
+  const next = toggle.checked;
+  showAlert(error, null);
+  toggle.disabled = true;
+  status.dataset.state = "";
+  status.textContent = "正在保存…";
+
+  const result = await callMemoryApi("setMemoryAutoShare", next);
+  if (!result.ok) {
+    toggle.checked = previous;
+    toggle.disabled = false;
+    status.textContent = "";
+    showAlert(error, result.error);
+    return;
+  }
+  state.autoShareEnabled = result.enabled === true;
+  toggle.checked = state.autoShareEnabled;
+  toggle.disabled = false;
+  status.dataset.state = "ok";
+  status.textContent = state.autoShareEnabled
+    ? "已开启自动分享。"
+    : "已关闭自动分享；已分享内容不会删除，明确转告仍然有效。";
+  updateAutoShareLabels();
 }
 
 /* ---------- 页面切换与陪伴动作 ---------- */
@@ -807,6 +872,9 @@ byId("wish-form").addEventListener("submit", submitWish);
 byId("next-candidate").addEventListener("click", nextCandidate);
 byId("accept-button").addEventListener("click", acceptCandidate);
 byId("check-model").addEventListener("click", checkStoredModelConnection);
+byId("memory-auto-share").addEventListener("change", (event) => {
+  saveAutoShare(event.target);
+});
 byId("rest-companion").addEventListener("click", () => {
   const button = byId("rest-companion");
   const current = state.snapshot?.companionship?.current;

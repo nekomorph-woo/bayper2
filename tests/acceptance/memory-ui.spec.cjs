@@ -469,11 +469,13 @@ test("POL-MEMUI-001 GUI 角色归属、200+分页与两尺寸操作", { timeout:
       "allowMemorySharing",
       "correctMemory",
       "forgetMemory",
+      "getMemoryAutoShare",
       "keepExclusive",
       "listMemories",
       "onMemoryChanged",
       "relayMemory",
       "restrictMemorySharing",
+      "setMemoryAutoShare",
     ]);
     assert.equal(surface.hasIpcRenderer, false);
     const before = await readSnapshot(page);

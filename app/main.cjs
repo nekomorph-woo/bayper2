@@ -1517,6 +1517,26 @@ function registerIpcHandlers() {
     }
   });
 
+  /* S03i 全局自动分享开关：只允许正式管理窗读取/修改，布尔值由记忆服务核验。
+     读取不触发分享；修改只影响 memory.share，明确转告仍走原有 relay 路径。 */
+  ipcMain.handle("bayper:memory:auto-share", (event) => {
+    try {
+      assertTrustedSender(event);
+      return { ok: true, enabled: store.memory.isAutoShareEnabled() };
+    } catch (error) {
+      return memoryFailureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:memory:auto-share:set", (event, enabled) => {
+    try {
+      assertTrustedSender(event);
+      return { ok: true, ...store.memory.setAutoShareEnabled({ enabled }) };
+    } catch (error) {
+      return memoryFailureResult(error);
+    }
+  });
+
   ipcMain.handle("bayper:memory:list", (event, payload) => {
     try {
       assertTrustedSender(event);

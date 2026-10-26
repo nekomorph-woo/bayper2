@@ -43,6 +43,10 @@ const DEFAULT_IMPORTANCE = Object.freeze({
   detail: 20,
 });
 
+/* S03i：全局开关只控制自动/派生的 share 入口；用户明确 relay 不受影响。
+   默认开启表示允许窄范围自动分享，不代表已经有后台分享行为。 */
+const AUTO_SHARE_STATE_KEY = "memory_auto_share_enabled";
+
 class MemoryError extends Error {
   constructor(code, message) {
     super(message);
@@ -696,10 +700,24 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       : store.transaction(applyKeepExclusive);
   }
 
+  /* 全局开关只保存一个布尔值，缺省视为开启；读取不触发任何分享或模型调用。 */
+  function isAutoShareEnabled() {
+    return store.getState(AUTO_SHARE_STATE_KEY) !== "false";
+  }
+
+  function setAutoShareEnabled(input = {}) {
+    if (!input || typeof input.enabled !== "boolean") {
+      throw new MemoryError("INVALID_INPUT", "自动分享开关必须是布尔值。");
+    }
+    store.setState(AUTO_SHARE_STATE_KEY, input.enabled ? "true" : "false");
+    return { enabled: input.enabled };
+  }
+
   /* 指定分享只复制明确列出的条目，保留原讲述者与派生链；
      B 再转发 A 的派生内容会被 origin/derived 检查拒绝。用户明确转告属于 S03b
      的独立业务入口，不与这里的自动/派生分享权限混用。
-     未显式传 sourceId 时，来源ID由这次明确的分享操作和条目ID组合生成，不从正文推断。 */
+     未显式传 sourceId 时，来源ID由这次明确的分享操作和条目ID组合生成，不从正文推断。
+     S03i 起该入口代表自动/派生分享，必须先通过全局开关；relay 不受此开关影响。 */
   function share(input = {}) {
     const fromCharacterId = characterIdOf(input.fromCharacterId);
     const toCharacterId = characterIdOf(input.toCharacterId);
@@ -714,6 +732,9 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     const entryIds = input.entryIds.map((id) => cleanText(id, "记忆ID", 200));
     if (new Set(entryIds).size !== entryIds.length) {
       throw new MemoryError("INVALID_INPUT", "分享条目不能重复。");
+    }
+    if (!isAutoShareEnabled()) {
+      throw new MemoryError("AUTO_SHARE_DISABLED", "角色之间的自动分享已关闭。");
     }
 
     return store.transaction(() => {
@@ -1019,6 +1040,8 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     keepExclusive,
     share,
     relay,
+    isAutoShareEnabled,
+    setAutoShareEnabled,
     restrictSharing,
     allowSharing,
     buildContext,

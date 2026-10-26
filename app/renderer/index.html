@@ -364,6 +364,9 @@
               <button type="button" role="tab" data-settings-tab="model" aria-selected="true">
                 模型
               </button>
+              <button type="button" role="tab" data-settings-tab="memory" aria-selected="false">
+                记忆
+              </button>
               <button type="button" role="tab" data-settings-tab="sources" aria-selected="false">
                 会话来源
               </button>
@@ -393,6 +396,27 @@
                     </button>
                     <span id="check-model-status" class="status-text" role="status" aria-live="polite"></span>
                   </div>
+                </section>
+              </section>
+
+              <!-- 记忆：只暴露一个窄范围自动分享开关，不声称已有后台分享行为。 -->
+              <section class="settings-panel" data-settings-panel="memory" role="tabpanel" aria-label="记忆" hidden>
+                <section class="settings-block" id="memory-settings" aria-labelledby="memory-settings-title">
+                  <div class="section-head">
+                    <h2 id="memory-settings-title">记忆</h2>
+                    <span id="memory-share-state" class="status-text"></span>
+                  </div>
+                  <label class="source-toggle">
+                    <input id="memory-auto-share" type="checkbox" />
+                    <span>允许角色之间自动分享主题见闻</span>
+                  </label>
+                  <p class="note">
+                    仅主题日常或探索的小故事可能被自动分享；私聊偏好和 Coding Agent 内容不会自动分享。
+                    有合适见闻时才会分享，不会每天安排分享任务。关闭不会删除已分享内容，
+                    你明确让角色转告的事仍然有效。
+                  </p>
+                  <p id="memory-share-status" class="status-text" role="status" aria-live="polite"></p>
+                  <div id="memory-share-error" class="alert" role="alert" hidden></div>
                 </section>
               </section>
 

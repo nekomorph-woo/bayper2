@@ -82,6 +82,13 @@ const SCHEMA = `
     updated_at INTEGER NOT NULL
   );
 
+  /* S03i 全局自动分享开关复用正式 app_state；这里补建只是为了工具和独立记忆
+     测试能直接打开本模块，生产库仍由 store.cjs 作为唯一 schema 入口创建。 */
+  CREATE TABLE IF NOT EXISTS app_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+
   CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
     entry_id UNINDEXED,
     char_tokens,
@@ -311,6 +318,11 @@ function createMemoryStore(db) {
         version = version + 1,
         updated_at = excluded.updated_at
     `),
+    getState: db.prepare("SELECT value FROM app_state WHERE key = ?"),
+    setState: db.prepare(`
+      INSERT INTO app_state (key, value) VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `),
   };
 
   function isKnownCharacter(characterId) {
@@ -477,6 +489,14 @@ function createMemoryStore(db) {
     return getContextVersion(characterId);
   }
 
+  function getState(key) {
+    return statements.getState.get(key)?.value ?? null;
+  }
+
+  function setState(key, value) {
+    statements.setState.run(key, value);
+  }
+
   function clearIndex() {
     statements.clearFts.run();
   }
@@ -522,6 +542,8 @@ function createMemoryStore(db) {
     addExtractionBatch,
     getContextVersion,
     bumpContextVersion,
+    getState,
+    setState,
     clearIndex,
     insertIndex,
     transaction,

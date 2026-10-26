@@ -42,6 +42,9 @@ contextBridge.exposeInMainWorld(
   "bayperMemory",
   Object.freeze({
     listMemories: (payload) => ipcRenderer.invoke("bayper:memory:list", payload),
+    getMemoryAutoShare: () => ipcRenderer.invoke("bayper:memory:auto-share"),
+    setMemoryAutoShare: (enabled) =>
+      ipcRenderer.invoke("bayper:memory:auto-share:set", enabled),
     correctMemory: (payload) => ipcRenderer.invoke("bayper:memory:correct", payload),
     forgetMemory: (payload) => ipcRenderer.invoke("bayper:memory:forget", payload),
     keepExclusive: (payload) => ipcRenderer.invoke("bayper:memory:keep-exclusive", payload),
