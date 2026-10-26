@@ -1,0 +1,9 @@
+ app/chat.cjs   | 226 ++++++++++++++++++++++++++++++++++++++++++++++-----------
+ app/memory.cjs |  41 ++++++++---
+ 2 files changed, 217 insertions(+), 50 deletions(-)
+     645 app/chat-memory-operations.cjs
+     895 app/chat.cjs
+     961 app/memory.cjs
+    2062 tests/acceptance/chat-memory-operations.spec.cjs
+     300 tests/acceptance/live-chat-memory-operations.spec.cjs
+    4863 total

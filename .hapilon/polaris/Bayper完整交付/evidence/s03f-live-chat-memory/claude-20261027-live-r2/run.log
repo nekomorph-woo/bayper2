@@ -1,0 +1,12 @@
+(node:26773) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+S03F_LIVE_BATCH .hapilon/polaris/Bayper完整交付/evidence/s03f-live-chat-memory/claude-20261027-live-r2
+✔ S03F 真实 DeepSeek：六场自然语言记忆操作 (5339.2115ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5389.62675

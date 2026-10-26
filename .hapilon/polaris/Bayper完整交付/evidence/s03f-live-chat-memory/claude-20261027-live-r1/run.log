@@ -1,0 +1,35 @@
+(node:24251) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+S03F_LIVE_BATCH .hapilon/polaris/Bayper完整交付/evidence/s03f-live-chat-memory/claude-20261027-live-r1
+✖ S03F 真实 DeepSeek：六场自然语言记忆操作 (6416.607792ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6488.575959
+
+✖ failing tests:
+
+test at tests/acceptance/live-chat-memory-operations.spec.cjs:34:1
+✖ S03F 真实 DeepSeek：六场自然语言记忆操作 (6416.607792ms)
+  AssertionError [ERR_ASSERTION]: 真实服务机器结论 MACHINE_FAIL；证据 .hapilon/polaris/Bayper完整交付/evidence/s03f-live-chat-memory/claude-20261027-live-r1
+  + actual - expected
+  
+  + 'MACHINE_FAIL'
+  - 'MACHINE_PASS'
+             ^
+  
+      at TestContext.<anonymous> (/Volumes/Under_M2/morphiiouo/bayper/tests/acceptance/live-chat-memory-operations.spec.cjs:61:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'MACHINE_FAIL',
+    expected: 'MACHINE_PASS',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

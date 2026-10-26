@@ -1,0 +1,55 @@
+(node:19572) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ POL-CHAT-001 同一 SQLite、已结识角色隔离与名单不变 (86.518125ms)
+✔ POL-CHAT-008 无记忆时标注检索边界，对照例不进入记忆且不落库 (35.074375ms)
+✔ POL-CHAT-002 用户明确事实写一次，助手建议与模型授权不写入 (37.9845ms)
+✔ POL-CHAT-002 纯文本宣称记住但未返回结构不得作为完成 (26.5915ms)
+✔ POL-CHAT-003 取消与关闭对话丢弃迟到回复 (36.343208ms)
+✔ POL-CHAT-003 超时/结构失败可重试且不重复消息与记忆 (298.358292ms)
+✔ POL-CHAT-004/005 在途纠正与删除使迟到回复失效 (337.434041ms)
+✔ POL-CHAT-005 删除来源后重启不再拼接旧聊天片段 (34.519708ms)
+✔ POL-CHAT-003 重试前核验来源，来源排除后不外发旧事实 (26.487833ms)
+✔ POL-CHAT-003 助手写入失败时记忆与聊天原子回滚 (31.399875ms)
+✔ POL-CHAT-003 完成时间使用真实时钟，发起时间不变 (28.258458ms)
+✔ POL-CHAT-001 同一 requestId 只重放完全相同输入 (25.454458ms)
+✔ POL-CHAT-002 证据必须覆盖事实，宽泛引用不写入 (24.68525ms)
+✔ POL-CHAT-001 同毫秒消息按插入顺序而非 UUID 排序 (29.007833ms)
+✔ POL-CHAT-001 启动恢复遗留 pending，普通重开不误伤 (34.84625ms)
+✔ POL-CHAT-003 dispose 取消在途请求后可安全关闭数据库 (30.011708ms)
+✔ POL-CHAT-001 旧消息表补 seq 后保持原插入顺序 (23.404542ms)
+✔ POL-CHAT-006 旧派生记录未知直接讲述者时不猜成最初来源 (22.49675ms)
+(node:19573) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ POL-SHARING-001 明确转告只给指定条目、保留来源且重复操作幂等 (17.079792ms)
+✔ POL-SHARING-002 保守分享仍拒绝派生内容，明确转告保留来源与讲述链 (11.403792ms)
+✔ REVIEW-S03D-1 B自删除后C仍保留直接讲述者，重开并再转告D (13.094417ms)
+✔ REVIEW-S03D-2 旧派生关系迁移只补可确定的直接讲述者 (13.663542ms)
+✔ POL-SHARING-003 事实禁分享跨持有者持久生效，独立解除且失败事务无半写 (15.601958ms)
+✔ POL-SHARING-004 自己忘记后禁止回流，全局删除后只留无正文控制 (11.700875ms)
+✔ POL-SHARING-005 旧版本与已删除条目拒绝，接收者较新内容不被覆盖 (15.038791ms)
+✔ POL-SHARING-006 输入拒绝、整批原子与接收者上下文失效 (15.615792ms)
+(node:19574) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ POL-MEMORY-001 A 独属记忆、重复来源与昵称变化 (15.660375ms)
+✔ POL-MEMORY-003 已定位纠正更新原始与派生持有者并保留来源 (12.239292ms)
+✔ POL-MEMORY-004 默认删除正文、重建索引、旧来源不能回填 (13.310208ms)
+✔ POL-MEMORY-005 只 A 忘记、拒绝回流与明确新许可 (12.341375ms)
+✔ POL-MEMORY-006 临时偏好到期、长期内容与时间门禁 (14.164959ms)
+✔ POL-MEMORY-007 指定分享只复制片段且拒绝二次转发 (11.544292ms)
+✔ 上下文版本、回滚与错误边界 (13.577541ms)
+✔ 记忆正文中的指令不被执行，错误不泄漏其他角色正文 (11.093625ms)
+✔ REVIEW-1 correct 排除原始与独立持有者旧来源并保留新纠正来源 (11.316834ms)
+✔ REVIEW-2 A仅自己忘记后B仍可纠正且不会恢复A（r2 Oracle） (10.46675ms)
+✔ REVIEW-3 同一来源多个事实的提炼批次重扫幂等 (7.931833ms)
+✔ REVIEW-4 自然提问命中相关记忆并保留无关干扰项 (12.394084ms)
+✔ REVIEW-5 B可纠正并默认删除自己持有的共享记忆（r2 Oracle） (8.616875ms)
+✔ REVIEW-6 反问与不同否定表达保留正反候选，时效/删除/隔离仍硬过滤 (9.850125ms)
+✔ REVIEW-7 索引重建覆盖第 10000 条之后的尾部记忆 (958.079666ms)
+ℹ tests 41
+ℹ suites 0
+ℹ pass 41
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1223.562958

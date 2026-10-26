@@ -272,14 +272,16 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
 
   function remember(input = {}) {
     const fact = normalizeFact(input);
-    return store.transaction(() => {
+    const applyRemember = () => {
       const result = insertFactIfAllowed(fact);
       if (!result.created) {
         return result;
       }
       const contextVersion = store.bumpContextVersion(fact.characterId, fact.createdAt);
       return { ...result, contextVersion };
-    });
+    };
+    // 聊天临时理解需要与回复、请求状态共用同一事务。
+    return input.inTransaction === true ? applyRemember() : store.transaction(applyRemember);
   }
 
   /* S03b 的提炼入口基础：一次明确提交同一个来源的多个事实。
@@ -501,7 +503,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     const sourceId = input.sourceId === undefined ? null : cleanText(input.sourceId, "来源ID", LIMITS.sourceId);
     const sourceVersion = input.sourceVersion === undefined ? null : sourceVersionOf(input.sourceVersion);
 
-    return store.transaction(() => {
+    const applyCorrection = () => {
       const { factKey } = factForSelectedChange(input, characterId);
       const held = store.getEntryByFact(characterId, factKey);
       if (!held) {
@@ -564,12 +566,19 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
         affectedCharacters: [...affected].sort(),
         contextVersions,
       };
-    });
+    };
+    /* 聊天操作需要把记忆变更、回复与请求状态放进同一事务；
+       inTransaction 时不再自行 BEGIN，由调用方负责提交/回滚。 */
+    return input.inTransaction === true
+      ? applyCorrection()
+      : store.transaction(applyCorrection);
   }
 
   /* scope='self' 只让当前角色忘记；默认 'all' 清除该事实键的已知持有者。
      任何当前已知持有者（含共享派生持有者）都可发起默认删除；未知角色不新增。
-     控制表只保存事实键摘要与来源引用哈希，不保存被删正文。 */
+     控制表只保存事实键摘要与来源引用哈希，不保存被删正文。
+     sourceIdsToExclude 用于聊天删除命令：保留聊天原文，但该来源不再进入
+     后续记忆上下文或旧提炼重试。 */
   function forget(input = {}) {
     const characterId = characterIdOf(input.characterId);
     const nowMs = resolveNow(input.nowMs);
@@ -577,8 +586,15 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     if (scope !== "all" && scope !== "self") {
       throw new MemoryError("INVALID_INPUT", "删除范围无效。");
     }
+    const rawExcluded = input.sourceIdsToExclude ?? [];
+    if (!Array.isArray(rawExcluded) || rawExcluded.length > 5) {
+      throw new MemoryError("INVALID_INPUT", "排除来源列表无效。");
+    }
+    const excludedSources = rawExcluded.map((sourceId) =>
+      cleanText(sourceId, "来源ID", LIMITS.sourceId),
+    );
 
-    return store.transaction(() => {
+    const applyForget = () => {
       const { factKey } = factForSelectedChange(input, characterId);
       const hash = factKeyHash(factKey);
       const held = store.getEntryByFact(characterId, factKey);
@@ -595,6 +611,9 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
         store.addForgetControl(entry.characterId, hash, nowMs);
         affected.add(entry.characterId);
       }
+      for (const sourceId of excludedSources) {
+        store.addSourceControl(characterId, sourceIdHash(sourceId), nowMs);
+      }
 
       const contextVersions = {};
       for (const holder of affected) {
@@ -605,7 +624,8 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
         affectedCharacters: [...affected].sort(),
         contextVersions,
       };
-    });
+    };
+    return input.inTransaction === true ? applyForget() : store.transaction(applyForget);
   }
 
   /* 指定分享只复制明确列出的条目，保留原讲述者与派生链；
@@ -802,13 +822,16 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
   function restrictSharing(input = {}) {
     const characterId = characterIdOf(input.characterId);
     const nowMs = resolveNow(input.nowMs);
-    return store.transaction(() => {
+    const applyRestriction = () => {
       const factKey = selectedHeldFact(input, characterId);
       const hash = factKeyHash(factKey);
       const alreadyRestricted = store.hasShareControl(hash);
       store.addShareControl(hash, nowMs);
       return { factKeyHash: hash, alreadyRestricted, holders: currentHolders(factKey) };
-    });
+    };
+    return input.inTransaction === true
+      ? applyRestriction()
+      : store.transaction(applyRestriction);
   }
 
   function allowSharing(input = {}) {

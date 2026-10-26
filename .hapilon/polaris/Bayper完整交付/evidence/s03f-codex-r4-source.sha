@@ -1,0 +1,5 @@
+3216b14c18767ab4ea03b6e256d2b072fb8fe2fff3c9e40330d60c95522414bb  app/chat.cjs
+a4104f589903cc915e6811300ac100eb86f36c8197e23b98fc57a982b92f9530  app/memory.cjs
+1733bc88ea427e8b7e0c71e73c24d610968dc4d4853a8d80172d750f19414976  app/chat-memory-operations.cjs
+6f0a9ba788e32a2e072367b6b3fed1af79a1491380299c66b6a579065e8078a8  tests/acceptance/chat-memory-operations.spec.cjs
+af759f4a3b9719b212acc1c951ae995f4cf7332502104d70c0650215a56f04d8  tests/acceptance/live-chat-memory-operations.spec.cjs

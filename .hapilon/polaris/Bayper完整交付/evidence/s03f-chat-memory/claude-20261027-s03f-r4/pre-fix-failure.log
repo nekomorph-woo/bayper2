@@ -1,0 +1,52 @@
+(node:27624) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+S03F_CLEANUP POL-CHATMEM-001-polarity dbClosed=true httpClosed=true tempDirRemoved=true
+✖ POL-CHATMEM-001 纯否定翻转不需要新对象词 (51.828792ms)
+S03F_CLEANUP POL-CHATMEM-001-independent-uncertain dbClosed=true httpClosed=true tempDirRemoved=true
+✖ POL-CHATMEM-001 独立不确定分句不能被提升为确定事实 (31.59825ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 145.807125
+
+✖ failing tests:
+
+test at tests/acceptance/chat-memory-operations.spec.cjs:528:1
+✖ POL-CHATMEM-001 纯否定翻转不需要新对象词 (51.828792ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /不喜欢热茶/u. Input:
+  
+  '我还不确定你指的是哪一件事，能具体说是哪条记忆吗？'
+  
+      at TestContext.<anonymous> (/Volumes/Under_M2/morphiiouo/bayper/tests/acceptance/chat-memory-operations.spec.cjs:566:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '我还不确定你指的是哪一件事，能具体说是哪条记忆吗？',
+    expected: /不喜欢热茶/u,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/chat-memory-operations.spec.cjs:571:1
+✖ POL-CHATMEM-001 独立不确定分句不能被提升为确定事实 (31.59825ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /不确定/u. Input:
+  
+  '好，这条记忆已按你给的原话更新为“我喜欢咖啡，不是茶”；原来源不会自动恢复。'
+  
+      at TestContext.<anonymous> (/Volumes/Under_M2/morphiiouo/bayper/tests/acceptance/chat-memory-operations.spec.cjs:609:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '好，这条记忆已按你给的原话更新为“我喜欢咖啡，不是茶”；原来源不会自动恢复。',
+    expected: /不确定/u,
+    operator: 'match',
+    diff: 'simple'
+  }

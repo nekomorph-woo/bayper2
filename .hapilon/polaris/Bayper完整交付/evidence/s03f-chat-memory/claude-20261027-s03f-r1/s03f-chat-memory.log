@@ -1,0 +1,30 @@
+(node:19566) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+S03F_CLEANUP POL-CHATMEM-001 dbClosed=true httpClosed=true tempDirRemoved=true
+✔ POL-CHATMEM-001 聊天纠正更新 A/B、排除旧来源并保留过去经历 (72.03725ms)
+S03F_CLEANUP POL-CHATMEM-001-temporal dbClosed=true httpClosed=true tempDirRemoved=true
+✔ POL-CHATMEM-001 纠正保留否定与时序，不把“最近”升级为无条件偏好 (37.516125ms)
+S03F_CLEANUP POL-CHATMEM-002-all dbClosed=true httpClosed=true tempDirRemoved=true
+✔ POL-CHATMEM-002 默认忘记删除 A/B、旧来源与 FTS 不能恢复，无关记录不变 (35.123667ms)
+S03F_CLEANUP POL-CHATMEM-002-self dbClosed=true httpClosed=true tempDirRemoved=true
+✔ POL-CHATMEM-002 明确“只你忘记”按 self 删除，B 内容与上下文保持准确 (35.706792ms)
+S03F_CLEANUP POL-CHATMEM-003 dbClosed=true httpClosed=true tempDirRemoved=true
+✔ POL-CHATMEM-003 聊天中禁止分享跨持有者持久生效且保留已有内容 (33.852375ms)
+S03F_CLEANUP POL-CHATMEM-004 dbClosed=true httpClosed=true tempDirRemoved=true
+✔ POL-CHATMEM-004 歧义、引用、假设、否定与越界目标不改库，正常命令对照生效 (61.058125ms)
+S03F_CLEANUP POL-CHATMEM-005 dbClosed=true httpClosed=true tempDirRemoved=true
+✔ POL-CHATMEM-005 在途本地修改、取消与同 requestId 重复不执行旧操作 (40.039209ms)
+S03F_CLEANUP POL-CHATMEM-005-restart dbClosed=true httpClosed=true tempDirRemoved=true
+✔ POL-CHATMEM-005 重启遗留 pending 不执行操作，恢复后仍保留记忆 (83.780958ms)
+S03F_CLEANUP POL-CHATMEM-006-rollback-assistant dbClosed=true httpClosed=true tempDirRemoved=true
+✔ POL-CHATMEM-006 助手回复写入失败时记忆整笔回滚，解除后同请求一次成功 (34.746625ms)
+S03F_CLEANUP POL-CHATMEM-006-rollback-request dbClosed=true httpClosed=true tempDirRemoved=true
+✔ POL-CHATMEM-006 request 最后一写失败时记忆与回复整笔回滚 (29.909833ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 517.939459

@@ -1,0 +1,23 @@
+✔ POL-DESKTOP-007 三角色各自基础动作同尺度裁剪，Hu/Cheng 保持候选标识 (8.959875ms)
+✔ 画布节点/进度 IPC 只接受当前角色窗口，其他窗口不能冒充 (0.815958ms)
+✔ POL-DESKTOP-005 迟到节点必须匹配当前展示身份 (0.332333ms)
+✔ S06h 活动回报必须匹配展示角色、显示代次与明确活动 ID (0.098ms)
+✔ 通知 IPC 只接受当前窗口，隐藏或非可见视图拒绝回执 (0.362375ms)
+✔ Base URL 只允许 HTTPS 或本机 loopback HTTP (0.749667ms)
+✔ 模型名与 API Key 在发请求前完成校验 (0.185791ms)
+✔ 兼容端点由 Base URL 拼接，不修改用户路径 (0.046875ms)
+✔ DeepSeek 官方短检查关闭 thinking，通用服务不带私有字段 (1.45775ms)
+(node:26660) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ 愿望推荐：空愿望按目录顺序，命中特征后稳定排序 (0.642125ms)
+✔ 接纳事务幂等：重复接纳不新增关系、固定位或当前角色 (28.00225ms)
+✔ POL-DESKTOP-005 手动切换等待时长来自 manifest，超时明确失败 (1.807375ms)
+✔ POL-DESKTOP-006 锁屏与休眠交错保持真实暂停状态，全部解除后才恢复 (1.812167ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 95.370875
