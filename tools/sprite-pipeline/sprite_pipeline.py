@@ -98,6 +98,171 @@ def analyze_cells(sheet: Image.Image, columns: int, rows: int,
                       "image": cleaned, "bbox": bbox, "foot_x": foot_x})
     return cells
 
+def load_regions_config(path: Path, columns: int, rows: int) -> dict:
+    """读取显式帧区域配置；结构、数量、越界、重叠和锚点都在导出前拒绝。"""
+    path = Path(path)
+    try:
+        raw = path.read_bytes()
+        data = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise SpritePipelineError(f"regions 配置无法读取或解析：{path}") from exc
+    if not isinstance(data, dict):
+        raise SpritePipelineError("regions 配置顶层必须是对象")
+    if data.get("columns") != columns or data.get("rows") != rows:
+        raise SpritePipelineError(
+            f"regions 配置网格 {data.get('columns')}x{data.get('rows')} "
+            f"与命令行 {columns}x{rows} 不一致")
+    regions = data.get("regions")
+    if not isinstance(regions, list):
+        raise SpritePipelineError("regions 配置必须包含 regions 数组")
+    if len(regions) != columns * rows:
+        raise SpritePipelineError(
+            f"regions 数量 {len(regions)} 与帧数 {columns * rows} 不一致")
+
+    normalized = []
+    for index, entry in enumerate(regions):
+        if not isinstance(entry, dict):
+            raise SpritePipelineError(f"第 {index} 个 region 必须是对象")
+        values = []
+        for key in ("x", "y", "width", "height"):
+            value = entry.get(key)
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise SpritePipelineError(f"第 {index} 个 region 的 {key} 必须是整数")
+            values.append(value)
+        x, y, width, height = values
+        if x < 0 or y < 0 or width <= 0 or height <= 0:
+            raise SpritePipelineError(f"第 {index} 个 region 必须非空且不越界")
+        anchor = entry.get("anchor")
+        if not isinstance(anchor, dict):
+            raise SpritePipelineError(f"第 {index} 个 region 缺少 anchor")
+        anchor_x, anchor_y = anchor.get("x"), anchor.get("y")
+        if (
+            not isinstance(anchor_x, int) or isinstance(anchor_x, bool)
+            or not isinstance(anchor_y, int) or isinstance(anchor_y, bool)
+        ):
+            raise SpritePipelineError(
+                f"第 {index} 个 region 的 anchor x/y 必须是整数")
+        if not (0 <= anchor_x < width and 0 <= anchor_y < height):
+            raise SpritePipelineError(
+                f"第 {index} 个 region 的 anchor 不在区域内部")
+        normalized.append({
+            "x": x, "y": y, "width": width, "height": height,
+            "anchor": {"x": anchor_x, "y": anchor_y},
+        })
+
+    for left_index, left in enumerate(normalized):
+        for right_index in range(left_index + 1, len(normalized)):
+            right = normalized[right_index]
+            if (
+                left["x"] < right["x"] + right["width"]
+                and right["x"] < left["x"] + left["width"]
+                and left["y"] < right["y"] + right["height"]
+                and right["y"] < left["y"] + left["height"]
+            ):
+                raise SpritePipelineError(
+                    f"第 {left_index} 与第 {right_index} 个 region 重叠")
+
+    return {
+        "path": str(path),
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "content": data,
+        "regions": normalized,
+    }
+
+def analyze_regions(sheet: Image.Image, config: dict,
+                    alpha_threshold: int) -> list[dict]:
+    """按显式区域裁切；区域外的像素不参与，区域内的主体不可触边。"""
+    sheet_width, sheet_height = sheet.size
+    cells = []
+    for index, region in enumerate(config["regions"]):
+        x, y = region["x"], region["y"]
+        width, height = region["width"], region["height"]
+        if x + width > sheet_width or y + height > sheet_height:
+            raise SpritePipelineError(f"第 {index} 个 region 超出源图范围")
+        cell = sheet.crop((x, y, x + width, y + height))
+        alpha = cell.getchannel("A").point(
+            lambda value: value if value > alpha_threshold else 0)
+        bbox = alpha.getbbox()
+        if bbox is None:
+            raise SpritePipelineError(f"第 {index} 个显式区域为空")
+        left, top, right, bottom = bbox
+        edges = {"左": left == 0, "上": top == 0, "右": right == width, "下": bottom == height}
+        touched = [name for name, hit in edges.items() if hit]
+        if touched:
+            raise SpritePipelineError(
+                f"第 {index} 个显式区域主体触到区域边界"
+                f"（{'、'.join(touched)}），请调整 region，不得裁切主体")
+        cleaned = cell.copy()
+        cleaned.putalpha(alpha)
+        cells.append({
+            "index": index,
+            "row": index // config["content"]["columns"],
+            "column": index % config["content"]["columns"],
+            "image": cleaned,
+            "bbox": bbox,
+            "anchor": region["anchor"],
+            "region": region,
+        })
+    return cells
+
+def explicit_layout(cells: list[dict], frame_size: tuple[int, int], padding: int,
+                   neutral_height: int | None) -> tuple[float, dict]:
+    """以显式 anchor 计算全套统一 scale 与固定输出地面锚；上下容量都按 anchor 计算。"""
+    frame_width, frame_height = frame_size
+    anchor_x = frame_width // 2
+    capacities = (anchor_x - padding, frame_width - padding - anchor_x,
+                  frame_height - 2 * padding)
+    if min(capacities) <= 0:
+        raise SpritePipelineError("padding 过大或画布过小，无法保留安全边距")
+
+    max_left = max(max(0, cell["anchor"]["x"] - cell["bbox"][0]) for cell in cells)
+    max_right = max(max(0, cell["bbox"][2] - cell["anchor"]["x"]) for cell in cells)
+    max_above = max(max(0, cell["anchor"]["y"] - cell["bbox"][1]) for cell in cells)
+    max_below = max(max(0, cell["bbox"][3] - cell["anchor"]["y"]) for cell in cells)
+    if neutral_height is not None:
+        first_height = cells[0]["bbox"][3] - cells[0]["bbox"][1]
+        scale = neutral_height / first_height
+    else:
+        scale = min(
+            capacities[0] / max_left if max_left else float("inf"),
+            capacities[1] / max_right if max_right else float("inf"),
+            capacities[2] / (max_above + max_below) if max_above + max_below else float("inf"),
+        )
+
+    if (
+        max_left * scale > capacities[0]
+        or max_right * scale > capacities[1]
+        or (max_above + max_below) * scale > capacities[2]
+    ):
+        raise SpritePipelineError(
+            "显式 anchor 在给定 frame-size/padding/neutral-height 下超出安全容量；"
+            "请调整画布、padding 或 neutral-height，不得裁切")
+    anchor_y = round(frame_height - padding - max_below * scale)
+    return scale, {"x": anchor_x, "y": anchor_y}
+
+def build_explicit_frame(cell: dict, scale: float, frame_size: tuple[int, int],
+                         padding: int, output_anchor: dict):
+    """按显式 anchor 平移主体；anchor 以下的脚/尾巴像素也保留在画布内。"""
+    frame_width, frame_height = frame_size
+    left, top, right, bottom = cell["bbox"]
+    width = max(1, round((right - left) * scale))
+    height = max(1, round((bottom - top) * scale))
+    subject = cell["image"].crop(cell["bbox"]).resize(
+        (width, height), Image.Resampling.NEAREST)
+    x = output_anchor["x"] - round((cell["anchor"]["x"] - left) * scale)
+    y = output_anchor["y"] - round((cell["anchor"]["y"] - top) * scale)
+    if (
+        x < padding or y < padding
+        or x + width > frame_width - padding
+        or y + height > frame_height - padding
+    ):
+        raise SpritePipelineError(
+            f"第 {cell['index']} 个显式区域在 anchor={output_anchor} 下越界；"
+            "请调整 region、anchor 或安全容量")
+    canvas = Image.new("RGBA", frame_size, (0, 0, 0, 0))
+    canvas.alpha_composite(subject, (x, y))
+    return canvas, {"width": width, "height": height}, {"x": x, "y": y}, output_anchor
+
 def common_scale(cells: list[dict], frame_size: tuple[int, int], padding: int,
                  neutral_height: int | None = None) -> float:
     """所有帧共用一个 scale；指定 neutral_height 时按第0帧主体高度定 scale。"""
@@ -174,7 +339,8 @@ def save_contact_sheet(images: list[Image.Image], durations: list[int], columns:
 def process_sprite_sheet(source: Path, output: Path, columns: int, rows: int,
                          frame_size: tuple[int, int], alpha_threshold: int = 16,
                          padding: int = DEFAULT_PADDING, neutral_height: int | None = None,
-                         durations_ms: list[int] | None = None, loop: bool = True) -> dict:
+                         durations_ms: list[int] | None = None, loop: bool = True,
+                         regions_json: Path | None = None) -> dict:
     source, output = Path(source), Path(output)
     frame_width, frame_height = frame_size
     total = columns * rows
@@ -196,49 +362,106 @@ def process_sprite_sheet(source: Path, output: Path, columns: int, rows: int,
 
     sheet, digest = load_source(source)
     sheet_width, sheet_height = sheet.size
-    if sheet_width % columns or sheet_height % rows:
-        raise SpritePipelineError(
-            f"源图尺寸 {sheet_width}x{sheet_height} 不能被 {columns}x{rows} 网格整除")
-    cell_size = (sheet_width // columns, sheet_height // rows)
-    cells = analyze_cells(sheet, columns, rows, cell_size, alpha_threshold)
-    scale = common_scale(cells, frame_size, padding, neutral_height)
+    regions_config = None
+    explicit_anchor = None
+    if regions_json is not None:
+        regions_config = load_regions_config(regions_json, columns, rows)
+        expected_digest = regions_config["content"].get("sourceSha256")
+        if expected_digest is not None and expected_digest != digest:
+            raise SpritePipelineError(
+                "源图 SHA-256 与 regions 配置的 sourceSha256 不一致")
+        cells = analyze_regions(sheet, regions_config, alpha_threshold)
+        scale, explicit_anchor = explicit_layout(
+            cells, frame_size, padding, neutral_height)
+        cell_size = None
+    else:
+        if sheet_width % columns or sheet_height % rows:
+            raise SpritePipelineError(
+                f"源图尺寸 {sheet_width}x{sheet_height} 不能被 {columns}x{rows} 网格整除")
+        cell_size = (sheet_width // columns, sheet_height // rows)
+        cells = analyze_cells(sheet, columns, rows, cell_size, alpha_threshold)
+        scale = common_scale(cells, frame_size, padding, neutral_height)
 
     digits = max(2, len(str(total - 1)))
     records, images = [], []
     for cell in cells:
-        image, scaled_size, paste, output_anchor = build_frame(
-            cell, scale, frame_size, padding)
+        if regions_config is None:
+            image, scaled_size, paste, output_anchor = build_frame(
+                cell, scale, frame_size, padding)
+            bbox = cell["bbox"]
+            records.append({
+                "index": cell["index"], "row": cell["row"], "column": cell["column"],
+                "file": f"frame-{cell['index']:0{digits}d}.png",
+                "duration_ms": durations[cell["index"]],
+                "source_bbox": {"x": bbox[0], "y": bbox[1],
+                                "width": bbox[2] - bbox[0], "height": bbox[3] - bbox[1]},
+                "source_foot_anchor": {"x": cell["foot_x"], "y": bbox[3]},
+                "output_foot_anchor": output_anchor,
+                "scaled_size": scaled_size, "paste": paste,
+            })
+        else:
+            image, scaled_size, paste, output_anchor = build_explicit_frame(
+                cell, scale, frame_size, padding, explicit_anchor)
+            bbox, region = cell["bbox"], cell["region"]
+            records.append({
+                "index": cell["index"], "row": cell["row"], "column": cell["column"],
+                "file": f"frame-{cell['index']:0{digits}d}.png",
+                "duration_ms": durations[cell["index"]],
+                "source_region": {
+                    "x": region["x"], "y": region["y"],
+                    "width": region["width"], "height": region["height"],
+                },
+                "source_bbox": {
+                    "x": region["x"] + bbox[0], "y": region["y"] + bbox[1],
+                    "width": bbox[2] - bbox[0], "height": bbox[3] - bbox[1],
+                },
+                "source_anchor": {
+                    "x": region["x"] + cell["anchor"]["x"],
+                    "y": region["y"] + cell["anchor"]["y"],
+                },
+                "output_ground_anchor": output_anchor,
+                "scaled_size": scaled_size, "paste": paste,
+            })
         images.append(image)
-        bbox = cell["bbox"]
-        records.append({
-            "index": cell["index"], "row": cell["row"], "column": cell["column"],
-            "file": f"frame-{cell['index']:0{digits}d}.png",
-            "duration_ms": durations[cell["index"]],
-            "source_bbox": {"x": bbox[0], "y": bbox[1],
-                            "width": bbox[2] - bbox[0], "height": bbox[3] - bbox[1]},
-            "source_foot_anchor": {"x": cell["foot_x"], "y": bbox[3]},
-            "output_foot_anchor": output_anchor,
-            "scaled_size": scaled_size, "paste": paste,
-        })
 
     output_names = {"atlas.png", "manifest.json", "contact-sheet-light.png",
                     "contact-sheet-dark.png", *(record["file"] for record in records)}
     if source.parent.resolve() == output.resolve() and source.name in output_names:
         raise SpritePipelineError("输出会覆盖源文件；请更换输出目录或源文件名")
 
+    if regions_config is None:
+        spec = {
+            "columns": columns, "rows": rows,
+            "cell_size": {"width": cell_size[0], "height": cell_size[1]},
+            "frame_size": {"width": frame_width, "height": frame_height},
+            "alpha_threshold": alpha_threshold, "scale": round(scale, 6),
+            "neutral_height": neutral_height,
+            "resample": "nearest", "alignment": "foot-bottom-center",
+            "padding": padding, "foot_band_ratio": FOOT_BAND_RATIO,
+            "anchor_mode": "standing-foot-band",
+            "anchor_note": "站立素材底部12%区域alpha范围的中点；尾巴低垂、趴卧或道具低于脚不适用",
+        }
+    else:
+        spec = {
+            "columns": columns, "rows": rows,
+            "frame_size": {"width": frame_width, "height": frame_height},
+            "alpha_threshold": alpha_threshold, "scale": round(scale, 6),
+            "neutral_height": neutral_height,
+            "resample": "nearest", "alignment": "explicit-region-anchor",
+            "padding": padding, "anchor_mode": "explicit-region-anchor",
+            "anchor_note": "按配置的每帧源区域与区域内anchor统一缩放；输出地面锚固定，anchor以下像素保留",
+            "output_ground_anchor": explicit_anchor,
+            "regions_config": {
+                "path": regions_config["path"],
+                "sha256": regions_config["sha256"],
+                "content": regions_config["content"],
+            },
+        }
     manifest = {
         "tool": "sprite-pipeline",
         "source": {"path": str(source), "sha256": digest,
                    "size": {"width": sheet_width, "height": sheet_height}},
-        "spec": {"columns": columns, "rows": rows,
-                 "cell_size": {"width": cell_size[0], "height": cell_size[1]},
-                 "frame_size": {"width": frame_width, "height": frame_height},
-                 "alpha_threshold": alpha_threshold, "scale": round(scale, 6),
-                 "neutral_height": neutral_height,
-                 "resample": "nearest", "alignment": "foot-bottom-center",
-                 "padding": padding, "foot_band_ratio": FOOT_BAND_RATIO,
-                 "anchor_mode": "standing-foot-band",
-                 "anchor_note": "站立素材底部12%区域alpha范围的中点；尾巴低垂、趴卧或道具低于脚不适用"},
+        "spec": spec,
         "loop": loop,
         "frame_durations_ms": durations,
         "atlas": {"file": "atlas.png", "columns": columns, "rows": rows,
@@ -277,6 +500,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="画布安全边距，默认 8 像素")
     parser.add_argument("--neutral-height", type=positive_int, default=None,
                         help="按第0帧主体高度指定目标像素，全套共用同一 scale；越界报错")
+    parser.add_argument("--regions-json", type=Path, default=None,
+                        help="可选显式区域 JSON；数量须等于 columns×rows，保持默认网格不变")
     parser.add_argument("--durations-ms", type=parse_durations_ms, default=None,
                         help="逗号分隔的每帧毫秒；默认值为 8 帧呼吸试样时序")
     parser.add_argument("--no-loop", action="store_true", help="在 manifest 中标记 loop=false")
@@ -287,7 +512,8 @@ def main(argv: list[str] | None = None) -> int:
             args.source, args.output, args.columns, args.rows, args.frame_size,
             alpha_threshold=args.alpha_threshold, padding=args.padding,
             neutral_height=args.neutral_height,
-            durations_ms=args.durations_ms, loop=not args.no_loop)
+            durations_ms=args.durations_ms, loop=not args.no_loop,
+            regions_json=args.regions_json)
     except (OSError, SpritePipelineError) as exc:
         print(f"错误: {exc}", file=sys.stderr)
         return 2

@@ -1,0 +1,430 @@
+{
+  "tool": "sprite-pipeline",
+  "source": {
+    "path": "assets/characters/rin/source/sit-pixel-v2.png",
+    "sha256": "d395234de2392ed9184bbb9745a307a41b4c2e9e9e67caa17576f8ee0c5d06b5",
+    "size": {
+      "width": 1536,
+      "height": 1024
+    }
+  },
+  "spec": {
+    "columns": 4,
+    "rows": 2,
+    "frame_size": {
+      "width": 320,
+      "height": 384
+    },
+    "alpha_threshold": 16,
+    "scale": 0.697892,
+    "neutral_height": 298,
+    "resample": "nearest",
+    "alignment": "explicit-region-anchor",
+    "padding": 8,
+    "anchor_mode": "explicit-region-anchor",
+    "anchor_note": "按配置的每帧源区域与区域内anchor统一缩放；输出地面锚固定，anchor以下像素保留",
+    "output_ground_anchor": {
+      "x": 160,
+      "y": 370
+    },
+    "regions_config": {
+      "path": "tools/sprite-pipeline/data/rin-sit-v2-regions.json",
+      "sha256": "a7696d50f784d767e69c17db57311129ac95776add5e6dc5c6e0d0ab4498f1bd",
+      "content": {
+        "schemaVersion": 1,
+        "sourceSha256": "d395234de2392ed9184bbb9745a307a41b4c2e9e9e67caa17576f8ee0c5d06b5",
+        "columns": 4,
+        "rows": 2,
+        "note": "sit-pixel-v2 显式区域：上行 y0..576 为站姿帧，下行 y576..1024 为坐姿帧；每列锚点取列内 x 中线，接地锚全图 y=512/962。",
+        "regions": [
+          {
+            "x": 0,
+            "y": 0,
+            "width": 384,
+            "height": 576,
+            "anchor": {
+              "x": 192,
+              "y": 512
+            }
+          },
+          {
+            "x": 384,
+            "y": 0,
+            "width": 384,
+            "height": 576,
+            "anchor": {
+              "x": 192,
+              "y": 512
+            }
+          },
+          {
+            "x": 768,
+            "y": 0,
+            "width": 384,
+            "height": 576,
+            "anchor": {
+              "x": 192,
+              "y": 512
+            }
+          },
+          {
+            "x": 1152,
+            "y": 0,
+            "width": 384,
+            "height": 576,
+            "anchor": {
+              "x": 192,
+              "y": 512
+            }
+          },
+          {
+            "x": 0,
+            "y": 576,
+            "width": 384,
+            "height": 448,
+            "anchor": {
+              "x": 192,
+              "y": 386
+            }
+          },
+          {
+            "x": 384,
+            "y": 576,
+            "width": 384,
+            "height": 448,
+            "anchor": {
+              "x": 192,
+              "y": 386
+            }
+          },
+          {
+            "x": 768,
+            "y": 576,
+            "width": 384,
+            "height": 448,
+            "anchor": {
+              "x": 192,
+              "y": 386
+            }
+          },
+          {
+            "x": 1152,
+            "y": 576,
+            "width": 384,
+            "height": 448,
+            "anchor": {
+              "x": 192,
+              "y": 386
+            }
+          }
+        ]
+      }
+    }
+  },
+  "loop": false,
+  "frame_durations_ms": [
+    300,
+    150,
+    160,
+    180,
+    180,
+    180,
+    200,
+    600
+  ],
+  "atlas": {
+    "file": "atlas.png",
+    "columns": 4,
+    "rows": 2,
+    "frame_size": {
+      "width": 320,
+      "height": 384
+    }
+  },
+  "contact_sheets": {
+    "light": "contact-sheet-light.png",
+    "dark": "contact-sheet-dark.png"
+  },
+  "frames": [
+    {
+      "index": 0,
+      "row": 0,
+      "column": 0,
+      "file": "frame-00.png",
+      "duration_ms": 300,
+      "source_region": {
+        "x": 0,
+        "y": 0,
+        "width": 384,
+        "height": 576
+      },
+      "source_bbox": {
+        "x": 90,
+        "y": 86,
+        "width": 257,
+        "height": 427
+      },
+      "source_anchor": {
+        "x": 192,
+        "y": 512
+      },
+      "output_ground_anchor": {
+        "x": 160,
+        "y": 370
+      },
+      "scaled_size": {
+        "width": 179,
+        "height": 298
+      },
+      "paste": {
+        "x": 89,
+        "y": 73
+      }
+    },
+    {
+      "index": 1,
+      "row": 0,
+      "column": 1,
+      "file": "frame-01.png",
+      "duration_ms": 150,
+      "source_region": {
+        "x": 384,
+        "y": 0,
+        "width": 384,
+        "height": 576
+      },
+      "source_bbox": {
+        "x": 466,
+        "y": 111,
+        "width": 262,
+        "height": 401
+      },
+      "source_anchor": {
+        "x": 576,
+        "y": 512
+      },
+      "output_ground_anchor": {
+        "x": 160,
+        "y": 370
+      },
+      "scaled_size": {
+        "width": 183,
+        "height": 280
+      },
+      "paste": {
+        "x": 83,
+        "y": 90
+      }
+    },
+    {
+      "index": 2,
+      "row": 0,
+      "column": 2,
+      "file": "frame-02.png",
+      "duration_ms": 160,
+      "source_region": {
+        "x": 768,
+        "y": 0,
+        "width": 384,
+        "height": 576
+      },
+      "source_bbox": {
+        "x": 842,
+        "y": 136,
+        "width": 270,
+        "height": 378
+      },
+      "source_anchor": {
+        "x": 960,
+        "y": 512
+      },
+      "output_ground_anchor": {
+        "x": 160,
+        "y": 370
+      },
+      "scaled_size": {
+        "width": 188,
+        "height": 264
+      },
+      "paste": {
+        "x": 78,
+        "y": 108
+      }
+    },
+    {
+      "index": 3,
+      "row": 0,
+      "column": 3,
+      "file": "frame-03.png",
+      "duration_ms": 180,
+      "source_region": {
+        "x": 1152,
+        "y": 0,
+        "width": 384,
+        "height": 576
+      },
+      "source_bbox": {
+        "x": 1223,
+        "y": 197,
+        "width": 262,
+        "height": 317
+      },
+      "source_anchor": {
+        "x": 1344,
+        "y": 512
+      },
+      "output_ground_anchor": {
+        "x": 160,
+        "y": 370
+      },
+      "scaled_size": {
+        "width": 183,
+        "height": 221
+      },
+      "paste": {
+        "x": 76,
+        "y": 150
+      }
+    },
+    {
+      "index": 4,
+      "row": 1,
+      "column": 0,
+      "file": "frame-04.png",
+      "duration_ms": 180,
+      "source_region": {
+        "x": 0,
+        "y": 576,
+        "width": 384,
+        "height": 448
+      },
+      "source_bbox": {
+        "x": 83,
+        "y": 638,
+        "width": 279,
+        "height": 333
+      },
+      "source_anchor": {
+        "x": 192,
+        "y": 962
+      },
+      "output_ground_anchor": {
+        "x": 160,
+        "y": 370
+      },
+      "scaled_size": {
+        "width": 195,
+        "height": 232
+      },
+      "paste": {
+        "x": 84,
+        "y": 144
+      }
+    },
+    {
+      "index": 5,
+      "row": 1,
+      "column": 1,
+      "file": "frame-05.png",
+      "duration_ms": 180,
+      "source_region": {
+        "x": 384,
+        "y": 576,
+        "width": 384,
+        "height": 448
+      },
+      "source_bbox": {
+        "x": 461,
+        "y": 640,
+        "width": 284,
+        "height": 328
+      },
+      "source_anchor": {
+        "x": 576,
+        "y": 962
+      },
+      "output_ground_anchor": {
+        "x": 160,
+        "y": 370
+      },
+      "scaled_size": {
+        "width": 198,
+        "height": 229
+      },
+      "paste": {
+        "x": 80,
+        "y": 145
+      }
+    },
+    {
+      "index": 6,
+      "row": 1,
+      "column": 2,
+      "file": "frame-06.png",
+      "duration_ms": 200,
+      "source_region": {
+        "x": 768,
+        "y": 576,
+        "width": 384,
+        "height": 448
+      },
+      "source_bbox": {
+        "x": 834,
+        "y": 641,
+        "width": 282,
+        "height": 327
+      },
+      "source_anchor": {
+        "x": 960,
+        "y": 962
+      },
+      "output_ground_anchor": {
+        "x": 160,
+        "y": 370
+      },
+      "scaled_size": {
+        "width": 197,
+        "height": 228
+      },
+      "paste": {
+        "x": 72,
+        "y": 146
+      }
+    },
+    {
+      "index": 7,
+      "row": 1,
+      "column": 3,
+      "file": "frame-07.png",
+      "duration_ms": 600,
+      "source_region": {
+        "x": 1152,
+        "y": 576,
+        "width": 384,
+        "height": 448
+      },
+      "source_bbox": {
+        "x": 1214,
+        "y": 645,
+        "width": 275,
+        "height": 319
+      },
+      "source_anchor": {
+        "x": 1344,
+        "y": 962
+      },
+      "output_ground_anchor": {
+        "x": 160,
+        "y": 370
+      },
+      "scaled_size": {
+        "width": 192,
+        "height": 223
+      },
+      "paste": {
+        "x": 69,
+        "y": 149
+      }
+    }
+  ]
+}

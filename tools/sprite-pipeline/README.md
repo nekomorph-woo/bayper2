@@ -33,10 +33,10 @@ python3 tools/sprite-pipeline/sprite_pipeline.py \
 
 ## 处理规则
 
-- 源图需为 RGBA 或 LA，按 `columns × rows` 等分。
+- 源图需为 RGBA 或 LA，默认按 `columns × rows` 等分；非均匀排布可使用下述显式区域。
 - 尺寸不能整除、格子为空、主体 bbox 触到格子边界（可能跨格）或缩放越界时，命令以退出码 2 报错，不猜测吞掉。
 - alpha ≤ threshold 的像素按背景处理；其余 alpha 保留原值，不重绘、不补画、不染色。
-- 脚锚取每格底部 12% 高度区域的 alpha 主体水平中点，纵坐标为 bbox 底边。该模式只适用于双脚着地的站立素材；尾巴低垂进入底部带、趴卧或道具低于脚时不适用，未来用显式锚点另行支持。
+- 脚锚取每格底部 12% 高度区域的 alpha 主体水平中点，纵坐标为 bbox 底边。该模式只适用于双脚着地的站立素材；尾巴低垂进入底部带、趴卧或道具低于脚时不适用，应使用显式区域与接地锚。
 - 所有帧共用一个缩放系数，按各帧相对脚锚点的左右最大扩展和上方最大高度适配画布与 `padding`，避免尾巴伸缩改变脚的位置或造成裁剪。
 - 每帧把源脚锚点整数平移到画布水平中线（`frame_width // 2`）与 `frame_height - padding`；不逐帧拉伸。
 - 源图只读，不写回；`manifest.json` 记录源文件 SHA-256。输出目录中的已知产物文件名会被覆盖，不清理其他文件。
@@ -92,3 +92,11 @@ python3 tools/sprite-pipeline/test_sprite_pipeline.py -v
 2026-10-26 Codex独立运行参数构造检查，并对rin/idle-pixel-v2运行0.5验证：实际128×192，循环、暂停、逐帧、慢放、背景切换及清理通过。证据`evidence/codex-rin-pixel-idle-v2-half.json`。这是工具能力与候选导入证据，不能代替连续视觉、跨动作和正式桌面合成验收。
 
 2026-10-26 非整数缩放复验：显示尺寸容差按1/64 CSS点布局量化单位限定，仍核对实际DOM、源尺寸和pixelated；避免0.01阈值误判0.014431点舍入。attention-pixel-v1按128/301比例的独立复验通过，首轮失败及r2证据均保留。该比例依据所有候选动作共同包围范围，不能逐帧fit改变角色大小；尚未替代正式桌面体验验收。
+
+## 显式区域与坐姿接地锚
+
+`--regions-json tools/sprite-pipeline/data/rin-sit-v2-regions.json` 指定非均匀帧区域。配置列出columns、rows、可选sourceSha256及regions，每项为源图绝对矩形x/y/width/height与区域内anchor{x,y}。区域不可越界、重叠或触及角色主体，数量必须等于帧数。
+
+所有帧仍使用同一scale，输出地面锚固定；容量计算保留锚点以下的脚、裙摆和尾巴，不逐帧fit。manifest记录源区域、源图绝对bbox与anchor、输出地面锚、配置内容与哈希。默认网格仍沿用原站立脚带行为。
+
+凛sit-pixel-v2配置与源图哈希绑定，导出320×384，neutral-height298，非循环8帧，时长300/150/160/180/180/180/200/600ms。静态独立8项测试通过，浅深棋盘检查完整；这是候选提取，不代表128pt播放或正式日常动作通过。旧idle重导出的11个图像逐字节相同，旧manifest仅缺少后来已有的neutral_height:null字段，未宣称历史manifest逐字节一致。
