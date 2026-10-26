@@ -21,3 +21,9 @@ Re-layout these exact 8 same-character pixel animation frames into a properly sp
 ## 256宽兼容导出
 
 2026-10-27 使用既有sprite-pipeline从同一v3源导出animations/listen-pixel-v3-canvas256，256×384、neutral-height298及原时序不变。Codex逐帧比较8帧RGBA：与旧320宽导出去除左右各32列全透明空白完全一致，源SHA、scale0.90303、时长不变；新脚锚128/376与现行idle/wave一致。保留旧导出追溯，后续集成优先用此候选；还未正式播放/衔接验收。日志完整交付evidence/rin-listen-pixel-v3-canvas256-export.log。
+
+## 独立小尺寸播放器检查
+
+2026-10-27 Codex以scale128/314=0.4076433121实际导入listen-pixel-v3-canvas256；该动作范围(37,73)～(241,376)落在当前凛四动作共同范围内。31029播放器exit0，8帧一次性完整播放后停末帧、重播、暂停、逐帧、0.25倍、背景/导航/清理全部通过；证据tools/sprite-pipeline/evidence/s07-listen-small/。Codex查看全帧浅棋盘及实际小尺寸深浅第5帧，身份、合手和轻侧头可辨，无白底或截耳截尾。
+
+仅接受候选播放器能力；第0→1帧合手变化较大，第3→4帧发型轮廓变化仍须正式聊天触发与idle过渡实测，不能因为单段播放器绿灯就接为正式倾听。无用户人工连续体验、无真实Retina验收，本次未改运行代码或素材内容。
