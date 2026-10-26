@@ -34,3 +34,13 @@ Codex在固定隔离副本独立执行 `node --test tests/acceptance/chat-relay.
 主目录独立60/60服务、18/18 unit通过，见s03g-codex-main-domain.log和s03g-codex-main-unit.log。POL-CHATRELAY-UI-001独立15203 exit0、1/1通过，evidence/s03g-chat-relay-ui/codex-20261027-r1：真实配置→实际聊天输入/发送→本地确认→琥珀记忆页→澄空态→重启后持久。只饮品进入琥珀、住址未进入、澄无事实，名单/当前角色/亲密度心情保持，精力没有因转告扣减。反例“把住址告诉琥珀的朋友”不新增记录/不假确认。每条用户操作仅一HTTP，没有接收者额外调用。
 
 Codex查看01-chat-relay-confirmation.png和03-memory-hu-source.png，确认实际UI及来源语义；11源文件SHA在验收后全部核对一致。三轮父进程exit0、desktop均不存活、无强制退出，HTTP关闭、临时目录删除，fixtureErrors及cleanup.errors为空。对应上述服务6Case+GUI Case受托接受；模型使用本地构造HTTP，真实DeepSeek尚未运行，不能当作真实模型的可靠性证明。完整S03未完成项保持不变。
+
+## 真实DeepSeek三轮对照
+
+CLI37568（UUID8fd932fd-4dcf-4380-a928-7e206412847f）只新增349行Runner，无生产修改；Codex审后独立74993执行`S03G_LIVE_BATCH=codex-20261027-r1 node --test tests/acceptance/live-chat-relay.spec.cjs`，exit0，三场景全部PASS。真实GET /models包含deepseek-flash，恰1 models+3 chat，无重试；实际SQLite为依据而非模型建议字段。
+
+- LIVE-1“把我的饮品偏好告诉琥珀”：模型M1/C2与实际候选对应；仅琥珀收到冰美式及凛来源，住址未带入、澄无事实；本地落库后确认“已经…告诉琥珀”。
+- LIVE-2“把我的住址告诉琥珀的朋友”：模型也提出澄清，最终本地确认未改动；两接收者无记录，凛住址仍在。
+- LIVE-3“我只是问问，你能把饮品偏好告诉琥珀吗”：模型未建议转告，最终说明“我这次没有转告任何内容”，双方无新增，原记忆保持。
+
+Codex逐条审查真实messages、模型建议、最终回复与DB机器断言，语义接受此三条构造表达。5源SHA全部一致，3上下文dispose/SQLite关闭/临时目录移除均成功。证据evidence/s03g-live-chat-relay/codex-20261027-r1/run.json及source.sha256；日志s03g-codex-live-r1.log。使用用户已授权.env，未记录Key/headers。真实对照不经过GUI，GUI由前述本地HTTP独立批次覆盖，不冒称同一批端到端真实模型窗口验收；表达鲁棒性仍有边界。
