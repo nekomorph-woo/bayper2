@@ -149,6 +149,7 @@ function createProtocolServer(root, name, initialSnapshot) {
     requests: [], snapshotCount: 0, subscribeCount: 0,
     subscriptions: new Set(), sockets: new Set(), server: null,
     held: null, hold: null, heldPing: null, holdPing: null,
+    failFirstPing: false, pingFailures: 0,
   };
   function write(socket, message) {
     if (socket.destroyed) return false;
@@ -191,6 +192,12 @@ function createProtocolServer(root, name, initialSnapshot) {
         if (typeof message.method !== "string") continue;
         state.requests.push(message.method);
         if (message.method === "ping") {
+          if (state.failFirstPing) {
+            state.failFirstPing = false;
+            state.pingFailures += 1;
+            socket.destroy();
+            continue;
+          }
           if (state.holdPing) {
             const hold = state.holdPing;
             state.holdPing = null;
@@ -947,13 +954,13 @@ async function stopRealServer(ctx, record) {
   return cleanup;
 }
 
-test("POL-HERDR-RUNTIME-REAL 隔离真实Herdr自动发现、在线确认与清理", {
+test("POL-HERDR-RUNTIME-008 真实Herdr在线后server stop确认下线、unknown与重复scan", {
   timeout: 45000,
   skip: SKIP_LIVE,
 }, async () => {
-  const root = tempRoot("real");
+  const root = tempRoot("008");
   const registryDir = path.join(root, "registry");
-  const recordEvidence = { case: "real", commands: [], cleanup: {} };
+  const recordEvidence = { case: "008", commands: [], cleanup: {} };
   let ctx = null;
   let db = null;
   let runtime = null;
@@ -971,8 +978,13 @@ test("POL-HERDR-RUNTIME-REAL 隔离真实Herdr自动发现、在线确认与清�
     ).trim();
     fs.mkdirSync(configDir, { recursive: true });
     fs.writeFileSync(path.join(configDir, "bayper.json"), JSON.stringify({ registryDir }));
+    const created = JSON.parse(realCli(ctx.env, recordEvidence, [
+      "workspace", "create", "--cwd", root, "--label", "runtime-008", "--focus",
+    ]));
+    const paneId = created.result.root_pane.pane_id;
     realCli(ctx.env, recordEvidence, [
-      "workspace", "create", "--cwd", root, "--label", "runtime-real", "--focus",
+      "pane", "report-agent", paneId, "--source", "bayper-runtime-fixture",
+      "--agent", "runtime-agent", "--state", "working", "--seq", "1",
     ]);
     realCli(ctx.env, recordEvidence, ["plugin", "action", "invoke", ACTION_ID]);
     const registration = await waitFor(() => {
@@ -999,11 +1011,34 @@ test("POL-HERDR-RUNTIME-REAL 隔离真实Herdr自动发现、在线确认与清�
     const state = instanceState(runtime, registration.instanceId);
     assert.equal(state.runId, registration.runId);
     assert.equal(state.endpoint, "matches");
+    assert.ok(state.agents.some((item) => item.effectiveState === "working"));
     recordEvidence.onlineState = state;
-    runtime.dispose();
-    runtime = null;
     serverCleanup = await stopRealServer(ctx, recordEvidence);
     ctx = null;
+    await waitFor(
+      () => opened.ledger.getInstance({ instanceId: registration.instanceId }).online === false,
+      5000, "real ledger disconnected",
+    );
+    await runtime.scan();
+    const stoppedState = instanceState(runtime, registration.instanceId);
+    assert.equal(stoppedState.stopped, true);
+    assert.equal(stoppedState.online, false);
+    const offlineEvents = ledgerEvents(opened.ledger, registration.instanceId)
+      .filter((item) => item.kind === "offline");
+    assert.equal(offlineEvents.length, 1);
+    const agentsAfter = stoppedState.agents;
+    assert.ok(agentsAfter.length >= 1);
+    assert.ok(agentsAfter.every((item) => item.effectiveState === "unknown"));
+    const all = ledgerEvents(opened.ledger, registration.instanceId);
+    assert.equal(all.some((item) => ["finished", "failed", "stopped"].includes(item.state)), false);
+    await runtime.scan();
+    assert.equal(ledgerEvents(opened.ledger, registration.instanceId)
+      .filter((item) => item.kind === "offline").length, 1);
+    recordEvidence.stoppedState = stoppedState;
+    recordEvidence.offlineEvents = offlineEvents.length;
+    recordEvidence.cleanup.stopConfirmed = true;
+    runtime.dispose();
+    runtime = null;
   } catch (error) {
     bodyError = error;
     recordEvidence.error = { code: error.code || null, message: error.message };
@@ -1022,7 +1057,7 @@ test("POL-HERDR-RUNTIME-REAL 隔离真实Herdr自动发现、在线确认与清�
     recordEvidence.cleanup.ok = Boolean(
       serverCleanup?.ok !== false && recordEvidence.cleanup.tempDirRemoved,
     );
-    recordEvidence.evidence = saveEvidence("real", recordEvidence, [root]);
+    recordEvidence.evidence = saveEvidence("008", recordEvidence, [root]);
   }
   if (bodyError) throw bodyError;
   assert.ok(recordEvidence.cleanup.ok, "真实 server/socket/临时目录清理未完成");
@@ -1178,5 +1213,388 @@ test("POL-HERDR-RUNTIME-007 握手跨短连接端点替换未被旧run摄入", {
     fs.rmSync(root, { recursive: true, force: true });
     recordEvidence.cleanup.tempRemoved = !fs.existsSync(root);
     recordEvidence.evidence = saveEvidence("007", recordEvidence, [root]);
+  }
+});
+
+test("POL-HERDR-RUNTIME-009 socket移走但PID活着、EPERM/stat权限/首次握手失败均不确认下线", {
+  timeout: 30000,
+}, async () => {
+  const root = tempRoot("009");
+  const recordEvidence = { case: "009", cleanup: {}, subcases: [] };
+  const opened = [];
+  const servers = [];
+  const runtimes = [];
+  const makeServer = async (dir, name, snapshot) => {
+    fs.mkdirSync(dir, { recursive: true });
+    const server = createProtocolServer(dir, name, snapshot);
+    await server.start();
+    servers.push(server);
+    return server;
+  };
+  const makeRuntime = (registryDir, ledger, extra = {}) => {
+    const runtime = createHerdrRuntime({ registryDir, ledger, scanIntervalMs: 60000, ...extra });
+    runtimes.push(runtime);
+    return runtime;
+  };
+  try {
+    /* A：连接后仅移走 socket，登记 PID 仍活着。 */
+    const rootA = path.join(root, "a");
+    const registryA = path.join(rootA, "registry");
+    const serverA = await makeServer(rootA, "socket", agentSnapshot("term-A", "pane-A"));
+    const recordA = registryRecord(serverA.socketPath, crypto.randomUUID(), process.pid);
+    writeRegistry(registryA, recordA);
+    const dbA = openLedger(rootA, "app-runtime-009a");
+    opened.push(dbA);
+    const runtimeA = makeRuntime(registryA, dbA.ledger);
+    await runtimeA.start();
+    await waitFor(() => instanceState(runtimeA, recordA.instanceId)?.online, 5000, "A online");
+    for (const subscription of [...serverA.state.subscriptions]) subscription.socket.destroy();
+    await waitFor(
+      () => dbA.ledger.getInstance({ instanceId: recordA.instanceId }).online === false,
+      3000, "A disconnected",
+    );
+    fs.unlinkSync(serverA.socketPath);
+    await runtimeA.scan();
+    assert.equal(noOffline(dbA.ledger, recordA.instanceId), true);
+    assert.notEqual(instanceState(runtimeA, recordA.instanceId).stopped, true);
+    recordEvidence.subcases.push({ name: "socket-missing-pid-alive", offline: false });
+
+    /* B：socket ENOENT，但 processProbe 为 EPERM。 */
+    const rootB = path.join(root, "b");
+    const registryB = path.join(rootB, "registry");
+    const serverB = await makeServer(rootB, "socket", agentSnapshot("term-B", "pane-B"));
+    const recordB = registryRecord(serverB.socketPath, crypto.randomUUID(), process.pid);
+    writeRegistry(registryB, recordB);
+    const dbB = openLedger(rootB, "app-runtime-009b");
+    opened.push(dbB);
+    const runtimeB = makeRuntime(registryB, dbB.ledger, {
+      processProbe: () => ({ code: "EPERM" }),
+    });
+    await runtimeB.start();
+    await waitFor(() => instanceState(runtimeB, recordB.instanceId)?.online, 5000, "B online");
+    for (const subscription of [...serverB.state.subscriptions]) subscription.socket.destroy();
+    await waitFor(
+      () => dbB.ledger.getInstance({ instanceId: recordB.instanceId }).online === false,
+      3000, "B disconnected",
+    );
+    fs.unlinkSync(serverB.socketPath);
+    await runtimeB.scan();
+    assert.equal(noOffline(dbB.ledger, recordB.instanceId), true);
+    recordEvidence.subcases.push({ name: "eperm", offline: false });
+
+    /* C：socket 路径 stat 权限失败，即使 PID ESRCH 也不确认。 */
+    const rootC = path.join(root, "c");
+    const sockDirC = path.join(rootC, "sock");
+    const registryC = path.join(rootC, "registry");
+    const dead = spawn(process.execPath, ["-e", ""]);
+    await waitFor(() => dead.exitCode !== null || dead.signalCode !== null, 3000, "dead child");
+    const serverC = await makeServer(sockDirC, "socket", agentSnapshot("term-C", "pane-C"));
+    const recordC = registryRecord(serverC.socketPath, crypto.randomUUID(), dead.pid);
+    writeRegistry(registryC, recordC);
+    const dbC = openLedger(rootC, "app-runtime-009c");
+    opened.push(dbC);
+    const runtimeC = makeRuntime(registryC, dbC.ledger);
+    await runtimeC.start();
+    await waitFor(() => instanceState(runtimeC, recordC.instanceId)?.online, 5000, "C online");
+    for (const subscription of [...serverC.state.subscriptions]) subscription.socket.destroy();
+    await waitFor(
+      () => dbC.ledger.getInstance({ instanceId: recordC.instanceId }).online === false,
+      3000, "C disconnected",
+    );
+    fs.chmodSync(sockDirC, 0o000);
+    try {
+      await runtimeC.scan();
+      assert.equal(noOffline(dbC.ledger, recordC.instanceId), true);
+      recordEvidence.subcases.push({ name: "stat-eacces", offline: false });
+    } finally {
+      fs.chmodSync(sockDirC, 0o700);
+    }
+
+    /* D：首次握手从未成功，socket 消失且 PID ESRCH 也不确认。 */
+    const rootD = path.join(root, "d");
+    const registryD = path.join(rootD, "registry");
+    const serverD = await makeServer(rootD, "socket", agentSnapshot("term-D", "pane-D"));
+    const deadD = spawn(process.execPath, ["-e", ""]);
+    await waitFor(() => deadD.exitCode !== null || deadD.signalCode !== null, 3000, "dead d");
+    const recordD = registryRecord(serverD.socketPath, crypto.randomUUID(), deadD.pid);
+    writeRegistry(registryD, recordD);
+    await serverD.stop();
+    const dbD = openLedger(rootD, "app-runtime-009d");
+    opened.push(dbD);
+    const runtimeD = makeRuntime(registryD, dbD.ledger);
+    await runtimeD.start();
+    await sleep(200);
+    await runtimeD.scan();
+    assert.equal(noOffline(dbD.ledger, recordD.instanceId), true);
+    assert.notEqual(instanceState(runtimeD, recordD.instanceId)?.stopped, true);
+    recordEvidence.subcases.push({ name: "never-connected", offline: false });
+
+    /* E：登记已处于 ledger stopped；runtime 不新增 offline。 */
+    const rootE = path.join(root, "e");
+    const registryE = path.join(rootE, "registry");
+    const serverE = await makeServer(rootE, "socket", agentSnapshot("term-E", "pane-E"));
+    const recordE = registryRecord(serverE.socketPath, crypto.randomUUID(), process.pid);
+    writeRegistry(registryE, recordE);
+    const dbE = openLedger(rootE, "app-runtime-009e");
+    opened.push(dbE);
+    dbE.ledger.registerInstance({ instanceId: recordE.instanceId, runId: recordE.runId });
+    dbE.ledger.confirmStopped({ instanceId: recordE.instanceId, runId: recordE.runId });
+    const beforeE = ledgerEvents(dbE.ledger, recordE.instanceId)
+      .filter((item) => item.kind === "offline").length;
+    const runtimeE = makeRuntime(registryE, dbE.ledger);
+    await runtimeE.start();
+    await runtimeE.scan();
+    assert.equal(ledgerEvents(dbE.ledger, recordE.instanceId)
+      .filter((item) => item.kind === "offline").length, beforeE);
+    assert.notEqual(instanceState(runtimeE, recordE.instanceId)?.online, true);
+    recordEvidence.subcases.push({ name: "already-stopped", offline: false });
+
+    /* F：坏登记目录不产生 offline。 */
+    const rootF = path.join(root, "f");
+    const registryF = path.join(rootF, "registry");
+    fs.mkdirSync(registryF, { recursive: true });
+    fs.writeFileSync(path.join(registryF, "broken.json"), "{broken");
+    const dbF = openLedger(rootF, "app-runtime-009f");
+    opened.push(dbF);
+    const runtimeF = makeRuntime(registryF, dbF.ledger);
+    await runtimeF.start();
+    assert.equal(ledgerEvents(dbF.ledger).some((item) => item.kind === "offline"), false);
+    assert.ok(runtimeF.getState().diagnostics.length >= 1);
+    recordEvidence.subcases.push({ name: "bad-registration", offline: false });
+    recordEvidence.cleanup.service = "dispose";
+  } catch (error) {
+    recordEvidence.error = { code: error.code || null, message: error.message };
+    throw error;
+  } finally {
+    for (const runtime of runtimes) runtime.dispose();
+    for (const server of servers) await server.stop().catch(() => {});
+    for (const entry of opened) entry.db.close();
+    fs.rmSync(root, { recursive: true, force: true });
+    recordEvidence.cleanup.tempRemoved = !fs.existsSync(root);
+    recordEvidence.evidence = saveEvidence("009", recordEvidence, [root]);
+  }
+});
+
+test("POL-HERDR-RUNTIME-010 新run先登记/连接时旧run不停止新run，disable/dispose无offline", {
+  timeout: 25000,
+}, async () => {
+  const root = tempRoot("010");
+  const registryDir = path.join(root, "registry");
+  const recordEvidence = { case: "010", cleanup: {} };
+  let db = null;
+  let oldServer = null;
+  let newServer = null;
+  let runtime = null;
+  try {
+    const opened = openLedger(root, "app-runtime-010");
+    db = opened.db;
+    const ledger = opened.ledger;
+    const namespaceId = crypto.randomUUID();
+    oldServer = createProtocolServer(root, "endpoint", agentSnapshot("term-old", "pane-A"));
+    await oldServer.start();
+    const dead = spawn(process.execPath, ["-e", ""]);
+    await waitFor(() => dead.exitCode !== null || dead.signalCode !== null, 3000, "dead old pid");
+    const oldRecord = registryRecord(oldServer.socketPath, namespaceId, dead.pid);
+    writeRegistry(registryDir, oldRecord);
+    runtime = createHerdrRuntime({ registryDir, ledger, scanIntervalMs: 60000 });
+    await runtime.start();
+    await waitFor(
+      () => instanceState(runtime, oldRecord.instanceId)?.online,
+      5000, "old online",
+    );
+    await oldServer.stop();
+    oldServer = null;
+    newServer = createProtocolServer(root, "endpoint", agentSnapshot("term-new", "pane-A"));
+    await newServer.start();
+    const newRecord = registryRecord(newServer.socketPath, namespaceId, process.pid);
+    assert.equal(newRecord.instanceId, oldRecord.instanceId);
+    assert.notEqual(newRecord.runId, oldRecord.runId);
+    writeRegistry(registryDir, newRecord);
+    await runtime.scan();
+    await waitFor(
+      () => instanceState(runtime, newRecord.instanceId)?.online,
+      5000, "new online",
+    );
+    const newOnline = instanceState(runtime, newRecord.instanceId);
+    assert.equal(ledgerEvents(ledger, newRecord.instanceId)
+      .some((item) => item.kind === "offline"), false);
+    assert.equal(ledgerEvents(ledger, oldRecord.instanceId, oldRecord.runId)
+      .some((item) => item.kind === "offline"), false);
+    runtime.disable(newRecord.instanceId);
+    await runtime.scan();
+    assert.equal(ledgerEvents(ledger, newRecord.instanceId)
+      .some((item) => item.kind === "offline"), false);
+    runtime.dispose();
+    runtime = null;
+    assert.equal(ledgerEvents(ledger, newRecord.instanceId)
+      .some((item) => item.kind === "offline"), false);
+    recordEvidence.oldRecord = oldRecord;
+    recordEvidence.newRecord = newRecord;
+    recordEvidence.newOnline = newOnline;
+    recordEvidence.cleanup.service = "dispose";
+  } catch (error) {
+    recordEvidence.error = { code: error.code || null, message: error.message };
+    throw error;
+  } finally {
+    if (runtime) runtime.dispose();
+    if (oldServer) await oldServer.stop().catch(() => {});
+    if (newServer) await newServer.stop().catch(() => {});
+    if (db) db.close();
+    fs.rmSync(root, { recursive: true, force: true });
+    recordEvidence.cleanup.tempRemoved = !fs.existsSync(root);
+    recordEvidence.evidence = saveEvidence("010", recordEvidence, [root]);
+  }
+});
+
+test("POL-HERDR-RUNTIME-011 首次失败内部retry成功后停止仍记录一次offline", {
+  timeout: 20000,
+}, async () => {
+  const root = tempRoot("011");
+  const registryDir = path.join(root, "registry");
+  const namespaceId = crypto.randomUUID();
+  const recordEvidence = { case: "011", cleanup: {} };
+  let db = null;
+  let runtime = null;
+  let server = null;
+  try {
+    const opened = openLedger(root, "app-runtime-011");
+    db = opened.db;
+    const ledger = opened.ledger;
+    const dead = spawn(process.execPath, ["-e", ""]);
+    await waitFor(() => dead.exitCode !== null || dead.signalCode !== null, 3000, "dead pid");
+    server = createProtocolServer(root, "endpoint", agentSnapshot("term-011", "pane-011"));
+    await server.start();
+    const record = registryRecord(server.socketPath, namespaceId, dead.pid);
+    writeRegistry(registryDir, record);
+    server.state.failFirstPing = true;
+    runtime = createHerdrRuntime({ registryDir, ledger, scanIntervalMs: 60000 });
+    await runtime.start();
+    /* 只用 ledger/server 侧独立 Oracle 等待内部 retry 成功；期间不读 runtime.getState/scan。 */
+    await waitFor(
+      () => ledger.getInstance({ instanceId: record.instanceId })?.online === true,
+      6000, "ledger online after retry",
+    );
+    assert.equal(server.state.pingFailures, 1);
+    assert.ok(server.state.subscribeCount >= 1);
+    const beforeOffline = ledgerEvents(ledger, record.instanceId)
+      .filter((item) => item.kind === "offline").length;
+    assert.equal(beforeOffline, 0);
+    await server.stop();
+    server = null;
+    await waitFor(
+      () => ledger.getInstance({ instanceId: record.instanceId }).online === false,
+      3000, "disconnected after retry",
+    );
+    await runtime.scan();
+    const stopped = instanceState(runtime, record.instanceId);
+    recordEvidence.stoppedState = stopped;
+    assert.equal(stopped.stopped, true);
+    const offline = ledgerEvents(ledger, record.instanceId)
+      .filter((item) => item.kind === "offline");
+    assert.equal(offline.length, 1);
+    assert.ok(stopped.agents.length >= 1);
+    assert.ok(stopped.agents.every((item) => item.effectiveState === "unknown"));
+    assert.equal(ledgerEvents(ledger, record.instanceId)
+      .some((item) => ["finished", "failed", "stopped"].includes(item.state)), false);
+    recordEvidence.record = record;
+    recordEvidence.pingFailures = server?.state.pingFailures ?? 1;
+    recordEvidence.stopped = stopped;
+    recordEvidence.offline = offline.length;
+    recordEvidence.cleanup.service = "dispose";
+  } catch (error) {
+    recordEvidence.error = { code: error.code || null, message: error.message };
+    throw error;
+  } finally {
+    if (runtime) runtime.dispose();
+    if (server) await server.stop().catch(() => {});
+    if (db) db.close();
+    fs.rmSync(root, { recursive: true, force: true });
+    recordEvidence.cleanup.tempRemoved = !fs.existsSync(root);
+    recordEvidence.evidence = saveEvidence("011", recordEvidence, [root]);
+  }
+});
+
+test("POL-HERDR-RUNTIME-012 已确认下线后同instance新run自动重连且旧offline不重复", {
+  timeout: 20000,
+}, async () => {
+  const root = tempRoot("012");
+  const registryDir = path.join(root, "registry");
+  const namespaceId = crypto.randomUUID();
+  const recordEvidence = { case: "012", cleanup: {} };
+  let db = null;
+  let runtime = null;
+  let oldServer = null;
+  let newServer = null;
+  try {
+    const opened = openLedger(root, "app-runtime-012");
+    db = opened.db;
+    const ledger = opened.ledger;
+    oldServer = createProtocolServer(root, "endpoint", agentSnapshot("term-old", "pane-012"));
+    await oldServer.start();
+    const dead = spawn(process.execPath, ["-e", ""]);
+    await waitFor(() => dead.exitCode !== null || dead.signalCode !== null, 3000, "dead old pid");
+    const oldRecord = registryRecord(oldServer.socketPath, namespaceId, dead.pid);
+    writeRegistry(registryDir, oldRecord);
+    runtime = createHerdrRuntime({ registryDir, ledger, scanIntervalMs: 60000 });
+    await runtime.start();
+    await waitFor(
+      () => instanceState(runtime, oldRecord.instanceId)?.online,
+      5000, "old online",
+    );
+    await oldServer.stop();
+    oldServer = null;
+    await waitFor(
+      () => ledger.getInstance({ instanceId: oldRecord.instanceId }).online === false,
+      3000, "old disconnected",
+    );
+    await runtime.scan();
+    assert.equal(instanceState(runtime, oldRecord.instanceId).stopped, true);
+    const oldOffline = ledgerEvents(ledger, oldRecord.instanceId, oldRecord.runId)
+      .filter((item) => item.kind === "offline");
+    assert.equal(oldOffline.length, 1);
+
+    newServer = createProtocolServer(root, "endpoint", agentSnapshot("term-new", "pane-012"));
+    await newServer.start();
+    const newRecord = registryRecord(newServer.socketPath, namespaceId, process.pid);
+    assert.equal(newRecord.instanceId, oldRecord.instanceId);
+    assert.notEqual(newRecord.runId, oldRecord.runId);
+    writeRegistry(registryDir, newRecord);
+    await runtime.scan();
+    await waitFor(
+      () => instanceState(runtime, newRecord.instanceId)?.online,
+      5000, "new run online",
+    );
+    const newState = instanceState(runtime, newRecord.instanceId);
+    assert.equal(newState.runId, newRecord.runId);
+    assert.equal(newState.stopped, false);
+    assert.deepEqual(newState.agents.map((item) => item.agentId), ["term-new"]);
+    const oldOfflineAgain = ledgerEvents(ledger, oldRecord.instanceId, oldRecord.runId)
+      .filter((item) => item.kind === "offline");
+    assert.equal(oldOfflineAgain.length, 1);
+    const newOnline = ledgerEvents(ledger, newRecord.instanceId, newRecord.runId)
+      .filter((item) => item.kind === "online");
+    assert.equal(newOnline.length, 1);
+    await runtime.scan();
+    assert.equal(ledgerEvents(ledger, oldRecord.instanceId, oldRecord.runId)
+      .filter((item) => item.kind === "offline").length, 1);
+    assert.equal(ledgerEvents(ledger, newRecord.instanceId, newRecord.runId)
+      .filter((item) => item.kind === "online").length, 1);
+    recordEvidence.oldRecord = oldRecord;
+    recordEvidence.newRecord = newRecord;
+    recordEvidence.newState = newState;
+    recordEvidence.oldOffline = oldOfflineAgain.length;
+    recordEvidence.newOnline = newOnline.length;
+    recordEvidence.cleanup.service = "dispose";
+  } catch (error) {
+    recordEvidence.error = { code: error.code || null, message: error.message };
+    throw error;
+  } finally {
+    if (runtime) runtime.dispose();
+    if (oldServer) await oldServer.stop().catch(() => {});
+    if (newServer) await newServer.stop().catch(() => {});
+    if (db) db.close();
+    fs.rmSync(root, { recursive: true, force: true });
+    recordEvidence.cleanup.tempRemoved = !fs.existsSync(root);
+    recordEvidence.evidence = saveEvidence("012", recordEvidence, [root]);
   }
 });

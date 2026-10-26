@@ -95,7 +95,7 @@ function normalizeSnapshot(snapshot) {
 function createHerdrAdapter({
   registration, ledger,
   requestTimeoutMs = 3000, setTimer = setTimeout, clearTimer = clearTimeout,
-  verifyEndpoint = null,
+  verifyEndpoint = null, onConnected = null,
 } = {}) {
   if (!registration || typeof registration !== "object") throw invalid("需要已校验的登记对象。");
   const instanceId = requiredText(registration.instanceId, "instanceId");
@@ -114,6 +114,9 @@ function createHerdrAdapter({
   }
   if (verifyEndpoint !== null && typeof verifyEndpoint !== "function") {
     throw invalid("verifyEndpoint 必须是函数或空值。");
+  }
+  if (onConnected !== null && typeof onConnected !== "function") {
+    throw invalid("onConnected 必须是函数或空值。");
   }
   const io = createHerdrTransport({ socketPath, requestTimeoutMs });
   const appRunId = requiredText(ledger.appRunId, "ledger.appRunId");
@@ -537,6 +540,13 @@ function createHerdrAdapter({
         retryIndex = 0;
         clearRetry();
         clearTick();
+        if (onConnected) {
+          try {
+            onConnected({ instanceId, runId });
+          } catch {
+            // 消费方回调失败不改变已确认的连接成功事实。
+          }
+        }
         return { started: true, instanceId, runId, snapshot: final };
       } catch (error) {
         closeSubscription();

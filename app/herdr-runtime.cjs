@@ -11,6 +11,15 @@ const { createHerdrAdapter } = require("./herdr-adapter.cjs");
 const DEFAULT_SCAN_INTERVAL_MS = 5000;
 const MAX_RUNTIME_DIAGNOSTICS = 50;
 
+function defaultProcessProbe(pid) {
+  try {
+    process.kill(pid, 0);
+    return { code: null };
+  } catch (error) {
+    return { code: error.code || null };
+  }
+}
+
 function invalid(message) {
   return new AppError("INVALID_INPUT", message);
 }
@@ -31,6 +40,7 @@ function createHerdrRuntime({
   registryDir, ledger, now = () => Date.now(),
   scanIntervalMs = DEFAULT_SCAN_INTERVAL_MS,
   setIntervalFn = setInterval, clearIntervalFn = clearInterval,
+  processProbe = defaultProcessProbe,
 } = {}) {
   if (typeof registryDir !== "string" || !path.isAbsolute(registryDir)) {
     throw invalid("registryDir 必须是绝对路径。");
@@ -49,6 +59,7 @@ function createHerdrRuntime({
     || typeof now !== "function") {
     throw invalid("需要有效的调度与时钟。");
   }
+  if (typeof processProbe !== "function") throw invalid("processProbe 必须是函数。");
 
   const entries = new Map();
   const runtimeDiagnostics = [];
@@ -75,7 +86,7 @@ function createHerdrRuntime({
     if (adapter) adapter.dispose();
   }
 
-  function adapterFor(record) {
+  function adapterFor(record, onConnected) {
     return createHerdrAdapter({
       registration: {
         instanceId: record.instanceId,
@@ -85,11 +96,33 @@ function createHerdrRuntime({
       },
       ledger,
       verifyEndpoint: () => socketMatches(record.socket),
+      onConnected,
     });
   }
 
+  function socketEnoent(socketPath) {
+    try {
+      fs.statSync(socketPath);
+      return false;
+    } catch (error) {
+      return error.code === "ENOENT";
+    }
+  }
+
+  function processGone(pid) {
+    let result;
+    try {
+      result = processProbe(pid);
+    } catch (error) {
+      return error.code === "ESRCH";
+    }
+    return Boolean(result && result.code === "ESRCH");
+  }
+
   function startEntry(entry) {
-    const adapter = adapterFor(entry.registration);
+    const adapter = adapterFor(entry.registration, () => {
+      if (!disposed && entry.adapter === adapter) entry.connected = true;
+    });
     entry.adapter = adapter;
     return adapter.start().then(
       (result) => {
@@ -98,6 +131,7 @@ function createHerdrRuntime({
           return result;
         }
         if (result.started) {
+          entry.connected = true;
           entry.lastError = null;
         } else {
           entry.lastError = { reason: result.reason };
@@ -159,6 +193,8 @@ function createHerdrRuntime({
       entry.endpoint = current.endpoint;
       entry.staleReported = false;
       entry.lastError = null;
+      entry.connected = false;
+      entry.stopped = false;
       addDiagnostic("RUN_REPLACED", {
         instanceId, oldRunId: previous.runId, runId: current.runId,
       });
@@ -169,6 +205,7 @@ function createHerdrRuntime({
         entries.set(instanceId, {
           registration: record, endpoint: record.endpoint, current: true,
           adapter: null, lastError: null, staleReported: false,
+          connected: false, stopped: false,
         });
       }
     }
@@ -180,7 +217,9 @@ function createHerdrRuntime({
       } catch {
         instance = null;
       }
-      if (instance?.disabled) {
+      if (instance?.disabled || entry.stopped
+        || (instance !== null && instance.stoppedAt !== null
+          && instance.runId === entry.registration.runId)) {
         if (entry.adapter) disposeEntry(entry);
         continue;
       }
@@ -198,6 +237,36 @@ function createHerdrRuntime({
     }
   }
 
+  /* 下线必须同时具备：本次真实连接过、同 run 当前账本、连接已失去、
+     登记 socket 精确 ENOENT、登记 PID 只读 kill(0) 精确 ESRCH。 */
+  function confirmStoppedRuns() {
+    if (disposed) return;
+    for (const [instanceId, entry] of entries) {
+      if (entry.stopped || !entry.current || !entry.connected || !entry.adapter) continue;
+      if (entry.adapter.state === "online") continue;
+      let instance = null;
+      try {
+        instance = ledger.getInstance({ instanceId });
+      } catch {
+        instance = null;
+      }
+      if (!instance || instance.disabled || instance.stoppedAt !== null
+        || instance.runId !== entry.registration.runId || instance.online) continue;
+      if (!socketEnoent(entry.registration.socket.path)) continue;
+      if (!processGone(entry.registration.observedServerPid)) continue;
+      const stopped = ledger.confirmStopped({
+        instanceId, runId: entry.registration.runId,
+      });
+      if (!stopped.stopped) continue;
+      entry.connected = false;
+      entry.stopped = true;
+      addDiagnostic("OFFLINE_CONFIRMED", {
+        instanceId, runId: entry.registration.runId,
+      });
+      disposeEntry(entry);
+    }
+  }
+
   async function scan() {
     if (disposed) return getState();
     if (scanPromise) return scanPromise;
@@ -212,6 +281,7 @@ function createHerdrRuntime({
       };
       lastScanAt = now();
       reconcile(registry);
+      confirmStoppedRuns();
       return getState();
     })().finally(() => {
       scanning = false;
@@ -244,6 +314,10 @@ function createHerdrRuntime({
         runId: entry.registration.runId,
         endpoint: entry.endpoint,
         registered: entry.current === true,
+        stopped: entry.stopped === true
+          || (instance !== null && instance.stoppedAt !== null
+            && instance.runId === entry.registration.runId),
+        connected: entry.connected === true,
         disabled: instance?.disabled === true,
         online: instance?.online === true && entry.adapter?.state === "online",
         adapterState: entry.adapter?.state ?? null,
