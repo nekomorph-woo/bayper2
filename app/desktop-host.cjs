@@ -36,6 +36,40 @@ function validActivitySource(message, presentation, displayedGeneration) {
   );
 }
 
+/* 本次坐下完成必须带当前休息代次 token、当前展示末帧和代次；同角色
+   上一轮的 rest-settled 即使 displayKey/generation 相同也不能放行。 */
+function validRestSettled(
+  message,
+  presentation,
+  displayedGeneration,
+  displayedKey,
+  displayedFrame,
+) {
+  const sitFrames = presentation?.animations?.sit?.frames;
+  const lastSitFrame = Array.isArray(sitFrames) ? sitFrames[sitFrames.length - 1] : "";
+  return Boolean(
+    Number.isInteger(presentation?.restToken)
+    && presentation.restToken > 0
+    && Number.isInteger(message?.restToken)
+    && message.restToken === presentation.restToken
+    && nodeMatchesPresentation(message.displayKey, presentation)
+    && Number.isInteger(message.generation)
+    && message.generation === displayedGeneration
+    && displayedKey === presentationAssetKey(presentation)
+    && lastSitFrame
+    && displayedFrame === lastSitFrame,
+  );
+}
+
+/* 起身逆序是短自然节点，不证明休息坐下完成；只校验当前展示身份与代次。 */
+function validRestStand(message, presentation, displayedGeneration) {
+  return Boolean(
+    nodeMatchesPresentation(message?.displayKey, presentation)
+    && Number.isInteger(message?.generation)
+    && message.generation === displayedGeneration,
+  );
+}
+
 function notificationPresentation(view, presentationId) {
   return view?.presentations.find((item) => item.presentationId === presentationId) ?? null;
 }
@@ -92,6 +126,8 @@ function createDesktopHost({
   let lastAssetKey = "";
   let lastDisplayGeneration = null;
   const boundaryWaiters = new Set();
+  // 只记录当前展示身份与休息代次下真实完成的坐下；换 token/身份/子进程即清空。
+  let restSettled = { token: 0, displayKey: "", generation: null, at: null };
 
   /* 通知只走同一条子进程通道。父进程保存最近一次视图与 token；
      renderer 的回执必须同时匹配 token、generation 和当前呈现内容。 */
@@ -245,12 +281,14 @@ function createDesktopHost({
   }
 
   function rememberPresentation(presentation) {
+    const previous = lastPresentation;
     const key = presentationAssetKey(presentation);
     if (key !== lastAssetKey) {
       lastAssetKey = key;
       lastDisplayGeneration = null;
       rendererAssetError = false;
       assetErrorMessage = null;
+      restSettled = { token: 0, displayKey: "", generation: null, at: null };
       status = {
         ...status,
         lastNode: null,
@@ -262,6 +300,9 @@ function createDesktopHost({
       };
     }
     lastPresentation = presentation;
+    if (previous?.restToken !== presentation.restToken) {
+      restSettled = { token: 0, displayKey: "", generation: null, at: null };
+    }
   }
 
   function spawnChild() {
@@ -274,6 +315,7 @@ function createDesktopHost({
     ready = false;
     channelReady = false;
     lastDisplayGeneration = null;
+    restSettled = { token: 0, displayKey: "", generation: null, at: null };
 
     const env = {
       PATH: process.env.PATH || "/usr/bin:/bin:/usr/sbin:/sbin",
@@ -389,15 +431,43 @@ function createDesktopHost({
       }
       const activityId = typeof message.activityId === "string" ? message.activityId : "";
       const characterId = typeof message.characterId === "string" ? message.characterId : "";
+      const restToken = Number.isInteger(message.restToken) ? message.restToken : 0;
       if (node === "daily-action-complete") {
         // 动作完成必须来自当前展示角色、同一显示代次和明确活动 ID。
         if (!validActivitySource(message, lastPresentation, lastDisplayGeneration)) {
           return;
         }
+      } else if (node === "rest-settled") {
+        if (!validRestSettled(
+          message,
+          lastPresentation,
+          lastDisplayGeneration,
+          status.displayedKey,
+          status.displayedFrame,
+        )) {
+          return;
+        }
+        restSettled = {
+          token: restToken,
+          displayKey: message.displayKey,
+          generation: message.generation,
+          at: Date.now(),
+        };
+      } else if (node === "rest-stand" && !validRestStand(
+        message,
+        lastPresentation,
+        lastDisplayGeneration,
+      )) {
+        return;
       }
       status = { ...status, lastNode: node, lastNodeAt: Date.now() };
-      onNodeComplete(node, { activityId, characterId, generation: message.generation });
-      resolveBoundaries({ ok: true, node });
+      onNodeComplete(node, {
+        activityId,
+        characterId,
+        generation: message.generation,
+        restToken,
+      });
+      resolveBoundaries({ ok: true, node, restToken }, message);
       return;
     }
 
@@ -536,6 +606,7 @@ function createDesktopHost({
     ready = false;
     channelReady = false;
     lastDisplayGeneration = null;
+    restSettled = { token: 0, displayKey: "", generation: null, at: null };
     notificationPanels.clear();
     setNotificationWindowFact({});
     clearReadyTimer();
@@ -649,7 +720,7 @@ function createDesktopHost({
     }
   }
 
-  function waitForNodeBoundary(timeoutMs = 3000) {
+  function waitForNodeBoundary(timeoutMs = 3000, options = {}) {
     if (
       rendererAssetError ||
       status.assetState === "error" ||
@@ -665,8 +736,15 @@ function createDesktopHost({
     ) {
       return Promise.resolve({ ok: true, reason: "no-canvas-node" });
     }
+    // 休息坐下只接受本次 token 的 rest-settled；其他节点不得提前解除等待。
+    const expectedNode = typeof options.node === "string" ? options.node : "";
+    const expectedRestToken = Number.isInteger(options.restToken) ? options.restToken : 0;
+    const accepts = expectedNode === "rest-settled" && expectedRestToken > 0
+      ? (result) => !result?.ok
+        || (result.node === "rest-settled" && result.restToken === expectedRestToken)
+      : null;
     return new Promise((resolve) => {
-      const waiter = { resolve, timer: null };
+      const waiter = { resolve, timer: null, accepts };
       waiter.timer = setTimeout(() => {
         boundaryWaiters.delete(waiter);
         resolve({ ok: false, reason: "timeout" });
@@ -677,10 +755,13 @@ function createDesktopHost({
 
   function resolveBoundaries(result) {
     for (const waiter of boundaryWaiters) {
+      if (waiter.accepts && !waiter.accepts(result)) {
+        continue;
+      }
       clearTimeout(waiter.timer);
+      boundaryWaiters.delete(waiter);
       waiter.resolve(result);
     }
-    boundaryWaiters.clear();
   }
 
   function clearReadyTimer() {
@@ -800,6 +881,9 @@ function createDesktopHost({
         ? "加载失败"
         : lastPresentation?.assetLabel ?? status.assetLabel,
       characterId: lastPresentation?.character?.id ?? null,
+      restToken: lastPresentation?.restToken ?? 0,
+      restSettledToken: restSettled.token,
+      restSettledAt: restSettled.at,
       notifications: notificationStatus(),
     };
   }
@@ -827,6 +911,8 @@ module.exports = {
   presentationAssetKey,
   nodeMatchesPresentation,
   validActivitySource,
+  validRestSettled,
+  validRestStand,
   validateNotificationAck,
   validateNotificationClose,
 };

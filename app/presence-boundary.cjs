@@ -17,6 +17,7 @@ function boundaryTimeoutFor(presentation) {
   const longest = Math.max(
     animationDuration(animations?.idle),
     animationDuration(animations?.wave),
+    animationDuration(animations?.sit),
   );
   return Math.max(MIN_NODE_TIMEOUT_MS, longest + NODE_TIMEOUT_MARGIN_MS);
 }

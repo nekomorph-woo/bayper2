@@ -25,7 +25,11 @@ function loadAnimation(characterId, name) {
     right: frame.paste.x + frame.scaled_size.width,
     bottom: frame.paste.y + frame.scaled_size.height,
   }));
-  const footAnchors = manifest.frames.map((frame) => frame.output_foot_anchor);
+  // 旧动作导出 output_foot_anchor；坐姿按显式区域导出 output_ground_anchor。
+  // 两者都表示同一地面锚，读取真实定义而不是假定字段名。
+  const footAnchors = manifest.frames.map(
+    (frame) => frame.output_foot_anchor ?? frame.output_ground_anchor,
+  );
 
   return {
     public: {
@@ -82,12 +86,14 @@ function buildDisplayPlan(animations, frameSize) {
 }
 
 /* 同角色三项基础动作使用同一 320×384 画布和脚锚；凛保持已验收的
-   256×384 版本。candidate 只表示待 Codex 视觉验收，不是正式发布。 */
+   256×384 版本，并接入统一画布的坐姿休息。candidate 只表示待 Codex
+   视觉验收，不是正式发布。 */
 const ANIMATION_SETS = Object.freeze({
   rin: {
     idle: "idle-pixel-v2",
     wave: "wave-pixel-v1",
     stretch: "stretch-pixel-v2-canvas256",
+    sit: "sit-pixel-v2-canvas256",
     candidate: false,
   },
   hu: {
@@ -119,11 +125,17 @@ function getAnimations(characterId) {
     const idle = loadAnimation(characterId, names.idle);
     const wave = loadAnimation(characterId, names.wave);
     const stretch = loadAnimation(characterId, names.stretch);
+    const sit = names.sit ? loadAnimation(characterId, names.sit) : null;
     animationCache.set(characterId, {
       idle: publicAnimation(idle, names.candidate),
       wave: publicAnimation(wave, names.candidate),
       stretch: publicAnimation(stretch, names.candidate),
-      display: buildDisplayPlan([idle, wave, stretch], idle.public.frameSize),
+      sit: sit ? publicAnimation(sit, names.candidate) : null,
+      // 四动作共用包围和尺度，避免坐下时逐动作 fit 造成呼吸式缩放。
+      display: buildDisplayPlan(
+        [idle, wave, stretch, ...(sit ? [sit] : [])],
+        idle.public.frameSize,
+      ),
     });
   }
   return animationCache.get(characterId);

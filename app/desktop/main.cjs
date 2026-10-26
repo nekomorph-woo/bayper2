@@ -167,6 +167,7 @@ function syncHitFrame(state) {
         ...animations.idle.frames,
         ...(animations.wave?.frames ?? []),
         ...(animations.stretch?.frames ?? []),
+        ...(animations.sit?.frames ?? []),
       ]
     : [];
   const display = animations?.display ?? null;
@@ -445,6 +446,8 @@ function applyState(state) {
     assetState: state.assetState,
     assetNote: state.assetNote,
     mode: state.mode,
+    resting: state.resting === true,
+    restToken: Number.isInteger(state.restToken) ? state.restToken : 0,
     activity: state.activity ?? null,
     displayKey: state.displayKey,
     epoch: canvasEpoch,
@@ -576,6 +579,7 @@ function registerIpc() {
       generation: Number.isInteger(payload?.generation) ? payload.generation : null,
       activityId: typeof payload?.activityId === "string" ? payload.activityId : "",
       characterId: typeof payload?.characterId === "string" ? payload.characterId : "",
+      restToken: Number.isInteger(payload?.restToken) ? payload.restToken : 0,
     });
   });
   ipcMain.on("canvas:activity-progress", (event, payload) => {

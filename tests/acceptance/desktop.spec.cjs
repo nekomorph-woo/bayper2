@@ -72,7 +72,15 @@ function assertDisplayPlan(desktop, plan, label) {
   assert.equal(desktop.bounds.height, plan.windowHeight, `${label} 窗口高度`);
   assert.ok(plan.windowWidth <= 128, `${label} 宽度应约 128pt 以内`);
   assert.ok(plan.windowHeight <= 128, `${label} 高度应约 128pt 以内`);
-  assert.ok(Math.abs(plan.footAnchor.y - plan.windowHeight) < 1, `${label} 落脚点应在窗口底部`);
+  // 凛按四动作真实并集 308/314 落在窗口底部上方；其他角色保持旧约束。
+  if (label === "Rin") {
+    assert.ok(
+      Math.abs(plan.footAnchor.y - 308 * (128 / 314)) < 0.01,
+      `${label} 四动作并集锚点`,
+    );
+  } else {
+    assert.ok(Math.abs(plan.footAnchor.y - plan.windowHeight) < 1, `${label} 落脚点应在窗口底部`);
+  }
 }
 
 async function setup() {
@@ -306,6 +314,7 @@ test("POL-DESKTOP-001/004 真实画布、管理窗口输入、关闭隐藏与退
       "idle-pixel-v2",
       "wave-pixel-v1",
       "stretch-pixel-v2-canvas256",
+      "sit-pixel-v2-canvas256",
     ]);
     const snapshot = await waitForSnapshot(
       page,
@@ -1096,6 +1105,7 @@ test("POL-DESKTOP-007 真实画布 DOM 按共同包围裁切，点击招呼回�
       "idle-pixel-v2",
       "wave-pixel-v1",
       "stretch-pixel-v2-canvas256",
+      "sit-pixel-v2-canvas256",
     ]);
     const rinDom = await readCanvasDom(page);
     assert.equal(rinDom.windowWidth, rinPlan.windowWidth);
@@ -1105,7 +1115,8 @@ test("POL-DESKTOP-007 真实画布 DOM 按共同包围裁切，点击招呼回�
     assertClose(rinDom.left, -rinPlan.offsetX, "Rin 图片左偏移");
     assertClose(rinDom.top, -rinPlan.offsetY, "Rin 图片上偏移");
     assert.match(rinDom.src, /idle-pixel-v2\/frame-/);
-    assert.ok(Math.abs(rinPlan.footAnchor.y - rinPlan.windowHeight) < 1);
+    // 凛四动作并集 314 高，地面锚对应 308 行；不机械宽放其他角色。
+    assert.ok(Math.abs(rinPlan.footAnchor.y - 308 * (128 / 314)) < 0.01);
     await captureDirectChild(page, `${SCREENSHOT_PREFIX}-dom-rin.png`);
 
     // S07c：透明像素不再触发招呼，这里点击凛确认有 alpha 的身体位置。

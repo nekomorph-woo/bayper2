@@ -809,7 +809,8 @@ test("POL-ACTIVITY-RUNTIME-001 凛日常真实伸展：scheduled 不扣费、节
     assert.equal(snapshot.desktop.bounds.width, plan.windowWidth);
     assert.equal(snapshot.desktop.bounds.height, plan.windowHeight);
     assert.ok(plan.windowWidth <= 128 && plan.windowHeight <= 128);
-    assert.ok(Math.abs(plan.footAnchor.y - plan.windowHeight) < 1, "脚锚应在窗口底部");
+    // 凛四动作并集 314 高，地面锚对应 308 行。
+    assert.ok(Math.abs(plan.footAnchor.y - 308 * (128 / 314)) < 0.01, "脚锚应对应四动作并集");
     assert.match(snapshot.desktop.displayedFrame, /idle-pixel-v2\/frame-/);
     facts.completed = {
       activity: completedRow,

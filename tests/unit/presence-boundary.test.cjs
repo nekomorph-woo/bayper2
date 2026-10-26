@@ -15,6 +15,15 @@ test("POL-DESKTOP-005 手动切换等待时长来自 manifest，超时明确失�
   };
   assert.equal(boundaryTimeoutFor(presentation), 1880 + NODE_TIMEOUT_MARGIN_MS);
 
+  // 坐姿/起身逆序的短节点也计入，不能用旧的 idle/wave 时长误判超时。
+  const resting = {
+    animations: {
+      ...presentation.animations,
+      sit: { durations: [300, 150, 160, 180, 180, 180, 200, 600] },
+    },
+  };
+  assert.equal(boundaryTimeoutFor(resting), 1950 + NODE_TIMEOUT_MARGIN_MS);
+
   assert.doesNotThrow(() => assertBoundaryCompleted({ ok: true, node: "idle-loop" }));
   assert.doesNotThrow(() => assertBoundaryCompleted({ ok: false, reason: "asset-error" }));
   assert.doesNotThrow(() => assertBoundaryCompleted({ ok: false, reason: "child-exit" }));

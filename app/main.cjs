@@ -83,6 +83,23 @@ let connectorRuntime = null;
 let connectorRegistryDir = null;
 let lastConnectorSignature = null;
 let notificationTimer = null;
+// 休息代次 token 只在进入休息或休息中换角色时递增；重复 desktopPresentation
+// 调用不得刷新，避免把尚未播完的过渡误当成已收束。
+let restEpisode = { token: 0, characterId: null, active: false };
+
+function restTokenFor(characterId, resting) {
+  if (!resting) {
+    restEpisode.active = false;
+    restEpisode.characterId = null;
+    return 0;
+  }
+  if (!restEpisode.active || restEpisode.characterId !== characterId) {
+    restEpisode.token += 1;
+    restEpisode.active = true;
+    restEpisode.characterId = characterId;
+  }
+  return restEpisode.token;
+}
 
 function readDataDir(argv) {
   const inline = argv.find((arg) => arg.startsWith("--data-dir="));
@@ -395,6 +412,13 @@ function desktopPresentation() {
     companion.current.displayName,
   );
   const activity = companion.current.activity ?? null;
+  // 休息意图只属于稳定同屏角色：A 本人聊天时仍保持坐姿，临时聊天角色 B
+  // 不继承 A 的姿势；current_mode 在互动期间仍是稳定角色的持久意图。
+  const resting =
+    companion.current.mode === "resting"
+    || (store?.getAppState("current_mode") === "resting"
+      && companion.current.characterId === store?.getAppState("current_character_id"));
+  const restToken = restTokenFor(companion.current.characterId, resting);
   return {
     character: built.character,
     animations: built.animations,
@@ -402,6 +426,8 @@ function desktopPresentation() {
     assetNote: built.assetNote,
     assetLabel: built.assetLabel,
     mode: companion.current.mode,
+    resting,
+    restToken,
     activity,
     visible: desktopVisible,
     ignoreMouse: desktopPassthrough,
@@ -800,6 +826,10 @@ function handleCanvasNodeComplete(node, message = {}) {
   if (quitting) {
     return;
   }
+  // 休息坐下/起身节点只表示真实播放收束，不参与日常/轮换的自然节点结算。
+  if (node === "rest-settled" || node === "rest-stand") {
+    return;
+  }
   // 真实播放完成是已经发生的事实；即使此时因锁屏/聊天刚暂停，也要记录，
   // 否则恢复后既不会再播完也不会收束，活动会卡住。
   if (node === "daily-action-complete") {
@@ -1021,6 +1051,21 @@ async function waitForPresentationBoundary() {
   }
   const presentation = desktopPresentation();
   if (!presentation || presentation.assetState !== "ready") {
+    return;
+  }
+  // 有坐姿素材的休息只接受本次 token 的真实坐下完成节点；无 sit 的
+  // Hu/Cheng 继续 idle 循环，沿既有自然节点等待，不能等永远不会来的
+  // rest-settled。
+  if (presentation.resting && presentation.animations?.sit) {
+    const restToken = presentation.restToken;
+    if (desktopHost.getStatus().restSettledToken === restToken) {
+      return;
+    }
+    const restResult = await desktopHost.waitForNodeBoundary(
+      boundaryTimeoutFor(presentation),
+      { node: "rest-settled", restToken },
+    );
+    assertBoundaryCompleted(restResult);
     return;
   }
   const result = await desktopHost.waitForNodeBoundary(boundaryTimeoutFor(presentation));

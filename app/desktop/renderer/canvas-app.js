@@ -15,10 +15,13 @@ let displayGeneration = 0;
 let idle = null;
 let wave = null;
 let stretch = null;
+let sit = null;
 let animationTimer = null;
 let frameIndex = 0;
 let playingWave = false;
 let playingDaily = false;
+let restActive = false;
+let activeRestToken = 0;
 let dailyActivityKey = "";
 let dailyCharacterId = "";
 let dailyProgress = 0;
@@ -121,7 +124,9 @@ function sendNode(node, generation) {
       dailyCharacterId,
     );
   }
-  desktopApi.nodeComplete(node, displayKey, generation, "", "");
+  // 休息节点带本次 token；起身节点沿用旧 token，只用于短节点收束证明。
+  const restToken = node === "rest-settled" || node === "rest-stand" ? activeRestToken : 0;
+  desktopApi.nodeComplete(node, displayKey, generation, "", "", restToken);
 }
 
 /* 一轮日常播放的身份在开始时固定；回调只使用该闭包身份，不读会被后续状态
@@ -186,7 +191,7 @@ function startIdle(generation) {
 }
 
 function startWave() {
-  if (!assetReady || !wave || playingWave || playingDaily) {
+  if (!assetReady || !wave || playingWave || playingDaily || restActive) {
     return;
   }
   const generation = displayGeneration;
@@ -197,6 +202,70 @@ function startWave() {
     playingWave = false;
     startIdle(generation);
   }, generation);
+}
+
+/* 休息只播放一次坐下并保留末帧；没有坐姿素材的角色不借用其他角色图片。
+   逐帧上报真实帧文件，供主进程与验收读取实际播放序列。 */
+function startRest(generation, token) {
+  if (generation !== displayGeneration) {
+    return;
+  }
+  restActive = true;
+  activeRestToken = Number.isInteger(token) ? token : 0;
+  if (!sit) {
+    startIdle(generation);
+    return;
+  }
+  stopAnimation();
+  assetReady = true;
+  sprite.hidden = false;
+  statusCard.hidden = true;
+  frameIndex = 0;
+  playFrames(sit, false, "rest-settled", () => {}, generation, null, true);
+}
+
+/* 起身复用已验收坐下帧的逆序，不是新绘制素材；播放完这个短节点后回待机。 */
+function startStandUp(generation) {
+  if (!sit || sprite.src !== sit.frames[sit.frames.length - 1]) {
+    // 未真实停在末帧（例如播放器恢复路径）时直接回待机，避免逆序跳帧。
+    startIdle(generation);
+    return;
+  }
+  const reverse = {
+    frames: [...sit.frames].reverse(),
+    durations: [...sit.durations].reverse(),
+  };
+  frameIndex = 0;
+  playFrames(reverse, false, "rest-stand", () => {
+    activeRestToken = 0;
+    startIdle(generation);
+  }, generation, null, true);
+}
+
+/* 用主进程的休息意图而不是瞬时 mode：聊天期间保持坐姿，手动换人或唤醒后
+   才回待机，避免退出互动时循环重新坐下。 */
+function syncRest(state) {
+  if (!assetReady) {
+    return;
+  }
+  const generation = displayGeneration;
+  if (state?.resting === true) {
+    const token = Number.isInteger(state.restToken) ? state.restToken : 0;
+    if (!restActive || (token > 0 && token !== activeRestToken)) {
+      startRest(generation, token);
+    }
+    return;
+  }
+  if (!restActive) {
+    return;
+  }
+  restActive = false;
+  // 唤醒时若 syncActivity 已按真实进度接上日常动作，让活动继续，不再抢回待机。
+  if (playingDaily) {
+    return;
+  }
+  stopAnimation();
+  startStandUp(generation);
 }
 
 /* 日常伸展按已持久化的已完成帧数衔接；同 ID 反复暂停不会每次从第 0 帧重播。
@@ -305,7 +374,7 @@ function syncActivity(state) {
   }
 }
 
-function playFrames(animation, loop, nodeName, onEnd, generation, dailyRun = null) {
+function playFrames(animation, loop, nodeName, onEnd, generation, dailyRun = null, trace = false) {
   if (generation !== displayGeneration) {
     return;
   }
@@ -318,8 +387,8 @@ function playFrames(animation, loop, nodeName, onEnd, generation, dailyRun = nul
   sprite.src = frames[frameIndex];
   // 主进程按这帧的实际 alpha 决定接收还是穿透，换帧后指针静止也要重判。
   reportHitFrame(sprite.src);
-  // 日常动作逐帧上报实际文件与闭包身份；待机仍按圈上报。
-  if (desktopApi && dailyRun) {
+  // 日常动作和休息逐帧上报实际文件与闭包身份；待机仍按圈上报。
+  if (desktopApi && (dailyRun || trace)) {
     desktopApi.displayState("character", displayKey, generation, sprite.src);
   }
   animationTimer = setTimeout(() => {
@@ -340,7 +409,9 @@ function playFrames(animation, loop, nodeName, onEnd, generation, dailyRun = nul
         onEnd();
         return;
       }
-      sendNode(nodeName, generation);
+      if (nodeName) {
+        sendNode(nodeName, generation);
+      }
       if (loop) {
         frameIndex = 0;
         playFrames(animation, true, nodeName, onEnd, generation);
@@ -349,7 +420,7 @@ function playFrames(animation, loop, nodeName, onEnd, generation, dailyRun = nul
       }
       return;
     }
-    playFrames(animation, loop, nodeName, onEnd, generation, dailyRun);
+    playFrames(animation, loop, nodeName, onEnd, generation, dailyRun, trace);
   }, Math.max(16, durations[frameIndex] ?? 180));
 }
 
@@ -361,6 +432,8 @@ function invalidateDisplay(nextKey) {
   loadingKey = "";
   clearDailyAction();
   stopAnimation();
+  restActive = false;
+  activeRestToken = 0;
   assetReady = false;
   reportedHitFrame = null;
   sprite.hidden = true;
@@ -393,13 +466,14 @@ async function applyState(state) {
     return;
   }
 
-  const key = `${state.character.id}:${state.animations.idle.frames.join("|")}:${state.animations.wave?.frames.join("|") ?? ""}:${state.animations.stretch?.frames.join("|") ?? ""}`;
+  const key = `${state.character.id}:${state.animations.idle.frames.join("|")}:${state.animations.wave?.frames.join("|") ?? ""}:${state.animations.stretch?.frames.join("|") ?? ""}:${state.animations.sit?.frames.join("|") ?? ""}`;
   if (key === currentKey) {
     const nextDisplayKey = state.displayKey || displayKey;
     if (assetReady && !sprite.hidden && nextDisplayKey === displayKey) {
       displayKey = nextDisplayKey;
       applyDisplayPlan(state.animations.display);
       syncActivity(state);
+      syncRest(state);
       return;
     }
     // 缓存身份仍是 A，但 A 的画面已被后续加载隐藏：重新激活 A 并作废该加载。
@@ -408,10 +482,12 @@ async function applyState(state) {
     idle = state.animations.idle;
     wave = state.animations.wave ?? null;
     stretch = state.animations.stretch ?? null;
+    sit = state.animations.sit ?? null;
     applyDisplayPlan(state.animations.display);
     sprite.alt = `${characterName}（桌面角色）`;
     startIdle(generation);
     syncActivity(state);
+    syncRest(state);
     return;
   }
   if (key === loadingKey) {
@@ -431,6 +507,7 @@ async function applyState(state) {
     ...state.animations.idle.frames,
     ...(state.animations.wave?.frames ?? []),
     ...(state.animations.stretch?.frames ?? []),
+    ...(state.animations.sit?.frames ?? []),
   ];
   const loaded = await preloadFrames(allFrames);
   if (token !== loadToken || generation !== displayGeneration) {
@@ -452,10 +529,12 @@ async function applyState(state) {
   idle = state.animations.idle;
   wave = state.animations.wave ?? null;
   stretch = state.animations.stretch ?? null;
+  sit = state.animations.sit ?? null;
   applyDisplayPlan(state.animations.display);
   sprite.alt = `${characterName}（桌面角色）`;
   startIdle(generation);
   syncActivity(state);
+  syncRest(state);
 }
 
 function beginDrag(event) {
