@@ -1,0 +1,101 @@
+# POL-ASSET3-003-cheng
+batch: codex-20261027-isolated-r3
+time: 2026-10-26T20:56:42.051Z
+result: PASS
+failure: none
+cleanup: {"appPid":18953,"desktopPid":18958,"appExitCode":0,"appExited":true,"desktopChildAlive":false,"processesStopped":true,"directoryRemoved":true,"directoryRetained":false,"processRounds":[{"phase":"initial","appPid":18934,"desktopPid":18939,"exit":{"appPid":18934,"desktopPid":18939,"appExitCode":0,"appExited":true,"desktopChildAlive":false}},{"phase":"restart","appPid":18953,"desktopPid":18958,"exit":{"appPid":18953,"desktopPid":18958,"appExitCode":0,"appExited":true,"desktopChildAlive":false}}],"http":"not-started"}
+screenshots: ["/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/daily-hu-home.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/daily-hu-stretch.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/daily-hu-stretch-native.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/daily-hu-completed.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/daily-hu-completed-native.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/daily-cheng-home.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/daily-cheng-stretch.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/daily-cheng-stretch-native.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/daily-cheng-completed.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/daily-cheng-completed-native.png"]
+
+## facts
+{
+  "activityId": "auto-ffc02952-9aad-4be2-8120-a5d9d7a77dd8",
+  "pauseKind": "system",
+  "paused1": {
+    "activity_id": "auto-ffc02952-9aad-4be2-8120-a5d9d7a77dd8",
+    "character_id": "cheng",
+    "kind": "daily",
+    "status": "paused",
+    "duration_ms": 10000,
+    "active_elapsed_ms": 0,
+    "started_at": 1793050054612,
+    "last_progress_at": 1793050054612,
+    "completed_at": null,
+    "action_completed_at": null,
+    "action_frame": 3,
+    "created_at": 1793050054612,
+    "updated_at": 1793050054612
+  },
+  "stretchFramePath": "file:///private/tmp/bayper-s07b-review-WfNV8H/assets/characters/cheng/animations/stretch-pixel-v2-canvas320/frame-02.png",
+  "firstResume": 3,
+  "firstResumePath": "file:///private/tmp/bayper-s07b-review-WfNV8H/assets/characters/cheng/animations/stretch-pixel-v2-canvas320/frame-03.png",
+  "paused2": {
+    "activity_id": "auto-ffc02952-9aad-4be2-8120-a5d9d7a77dd8",
+    "character_id": "cheng",
+    "kind": "daily",
+    "status": "paused",
+    "duration_ms": 10000,
+    "active_elapsed_ms": 0,
+    "started_at": 1793050054612,
+    "last_progress_at": 1793050054612,
+    "completed_at": null,
+    "action_completed_at": null,
+    "action_frame": 3,
+    "created_at": 1793050054612,
+    "updated_at": 1793050054612
+  },
+  "resumeProgress": 3,
+  "restartFrame": 3,
+  "restartFramePath": "file:///private/tmp/bayper-s07b-review-WfNV8H/assets/characters/cheng/animations/stretch-pixel-v2-canvas320/frame-03.png",
+  "completed": {
+    "activity_id": "auto-ffc02952-9aad-4be2-8120-a5d9d7a77dd8",
+    "character_id": "cheng",
+    "kind": "daily",
+    "status": "completed",
+    "duration_ms": 10000,
+    "active_elapsed_ms": 10000,
+    "started_at": 1793050054612,
+    "last_progress_at": null,
+    "completed_at": 1793050074612,
+    "action_completed_at": 1793050063612,
+    "action_frame": 8,
+    "created_at": 1793050054612,
+    "updated_at": 1793050074612
+  },
+  "homeImage": {
+    "src": "file:///private/tmp/bayper-s07b-review-WfNV8H/assets/characters/cheng/source/master-pixel-v1.png",
+    "loaded": true
+  },
+  "assetLabel": "idle/wave/stretch 候选",
+  "energyBefore": 100,
+  "expectedAfterStart": 94.897,
+  "energyAfterStart": 94.9,
+  "energyAfterComplete": 94.9,
+  "processRounds": [
+    {
+      "phase": "initial",
+      "appPid": 18934,
+      "desktopPid": 18939,
+      "exit": {
+        "appPid": 18934,
+        "desktopPid": 18939,
+        "appExitCode": 0,
+        "appExited": true,
+        "desktopChildAlive": false
+      }
+    },
+    {
+      "phase": "restart",
+      "appPid": 18953,
+      "desktopPid": 18958,
+      "exit": {
+        "appPid": 18953,
+        "desktopPid": 18958,
+        "appExitCode": 0,
+        "appExited": true,
+        "desktopChildAlive": false
+      }
+    }
+  ]
+}
+
+## renderer console

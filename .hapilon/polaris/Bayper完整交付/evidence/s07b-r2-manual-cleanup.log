@@ -1,0 +1,2 @@
+Codex: 非稳定共享源码导致启动时读到memory.cjs半编辑语法错误。本轮ERROR，不作为业务通过。
+已对本轮自建Electron PID18672发送SIGTERM；随后工具23764终态exit1。核实PID不存在，再删除唯一构造目录bayper-s07b-daily-4QRzZD。未操作用户进程/目录。

@@ -1,0 +1,3 @@
+源码基线 c13a815 的 app/tests/package/VERSION，通过git archive创建只读来源快照，再覆盖本轮S07b两生产文件及相关Runner/测试；node_modules/assets/prototypes为稳定现有目录软链。未链接.env。
+实际S07b两入口退出0，各父子PID确认退出、fixtures删除。证据原样复制至同名codex-20261027-isolated-r3目录；日志原临时路径对应此目录同名文件。
+临时快照 /tmp/bayper-s07b-review-WfNV8H 已删除，shutil.rmtree仅移除软链本身，未修改其目标。

@@ -1,0 +1,55 @@
+(node:18662) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ POL-ASSET3-001/002/004/005 三角色真实画布导入、招呼、切换、缺帧与尺寸（透明命中未覆盖） (8056.098958ms)
+✖ POL-ASSET3-003 琥珀与澄真实日常伸展、暂停恢复与退出重开 (131471.871584ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 139694.087417
+
+✖ failing tests:
+
+test at tests/acceptance/s07b-three-character.spec.cjs:1089:1
+✖ POL-ASSET3-003 琥珀与澄真实日常伸展、暂停恢复与退出重开 (131471.871584ms)
+  electron.launch: Process failed to launch!
+  Call log:
+  [2m  - <launching> /Volumes/Under_M2/morphiiouo/bayper/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron --inspect=0 --remote-debugging-port=0 /Volumes/Under_M2/morphiiouo/bayper --data-dir=/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-s07b-daily-4QRzZD[22m
+  [2m  - <launched> pid=18672[22m
+  [2m  - [pid=18672][err] Debugger listening on ws://127.0.0.1:65410/8abb4450-11c2-437e-8a93-9fc0bd529272[22m
+  [2m  - [pid=18672][err] For help, see: https://nodejs.org/learn/getting-started/debugging[22m
+  [2m  - <ws connecting> ws://127.0.0.1:65410/8abb4450-11c2-437e-8a93-9fc0bd529272[22m
+  [2m  - [pid=18672][err] Debugger attached.[22m
+  [2m  - <ws connected> ws://127.0.0.1:65410/8abb4450-11c2-437e-8a93-9fc0bd529272[22m
+  [2m  - [pid=18672][err] App threw an error during load[22m
+  [2m  - [pid=18672][err] /Volumes/Under_M2/morphiiouo/bayper/app/memory.cjs:567[22m
+  [2m  - [pid=18672][err]     });[22m
+  [2m  - [pid=18672][err]      ^[22m
+  [2m  - [pid=18672][err][22m
+  [2m  - [pid=18672][err] SyntaxError: Unexpected token ')'[22m
+  [2m  - [pid=18672][err]     at wrapSafe (node:internal/modules/cjs/loader:1868:18)[22m
+  [2m  - [pid=18672][err]     at Module._compile (node:internal/modules/cjs/loader:1910:20)[22m
+  [2m  - [pid=18672][err]     at Object..js (node:internal/modules/cjs/loader:2070:10)[22m
+  [2m  - [pid=18672][err]     at Module.load (node:internal/modules/cjs/loader:1658:32)[22m
+  [2m  - [pid=18672][err]     at Module._load (node:internal/modules/cjs/loader:1450:12)[22m
+  [2m  - [pid=18672][err]     at wrapModuleLoad (node:internal/modules/cjs/loader:268:19)[22m
+  [2m  - [pid=18672][err]     at Module.require (node:internal/modules/cjs/loader:1681:12)[22m
+  [2m  - [pid=18672][err]     at require (node:internal/modules/helpers:157:16)[22m
+  [2m  - [pid=18672][err]     at Object.<anonymous> (/Volumes/Under_M2/morphiiouo/bayper/app/main.cjs:16:25)[22m
+  [2m  - [pid=18672][err]     at Module._compile (node:internal/modules/cjs/loader:1937:14)[22m
+  [2m  - [pid=18672] <kill>[22m
+  [2m  - [pid=18672] <will force kill>[22m
+  [2m  - [pid=18672] exception while trying to kill process: Error: kill EPERM[22m
+  [2m  - <ws disconnected> ws://127.0.0.1:65410/8abb4450-11c2-437e-8a93-9fc0bd529272 code=1006 reason=[22m
+  [2m  - [pid=18672] <process did exit: exitCode=null, signal=SIGTERM>[22m
+  [2m  - [pid=18672] starting temporary directories cleanup[22m
+  [2m  - [pid=18672] finished temporary directories cleanup[22m
+  
+      at async launchApp (/Volumes/Under_M2/morphiiouo/bayper/tests/acceptance/s07b-three-character.spec.cjs:687:15)
+      at async runDailyCase (/Volumes/Under_M2/morphiiouo/bayper/tests/acceptance/s07b-three-character.spec.cjs:817:16)
+      at async TestContext.<anonymous> (/Volumes/Under_M2/morphiiouo/bayper/tests/acceptance/s07b-three-character.spec.cjs:1092:3) {
+    log: [ '  - <launching> /Volumes/Under_M2/morphiiouo/bayper/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron --inspect=0 --remote-debugging-port=0 /Volumes/Under_M2/morphiiouo/bayper --data-dir=/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-s07b-daily-4QRzZD', '  - <launched> pid=18672', '  - [pid=18672][err] Debugger listening on ws://127.0.0.1:65410/8abb4450-11c2-437e-8a93-9fc0bd529272', '  - [pid=18672][err] For help, see: https://nodejs.org/learn/getting-started/debugging', '  - <ws connecting> ws://127.0.0.1:65410/8abb4450-11c2-437e-8a93-9fc0bd529272', '  - [pid=18672][err] Debugger attached.', '  - <ws connected> ws://127.0.0.1:65410/8abb4450-11c2-437e-8a93-9fc0bd529272', '  - [pid=18672][err] App threw an error during load', '  - [pid=18672][err] /Volumes/Under_M2/morphiiouo/bayper/app/memory.cjs:567', '  - [pid=18672][err]     });', '  - [pid=18672][err]      ^', '  - [pid=18672][err]', "  - [pid=18672][err] SyntaxError: Unexpected token ')'", '  - [pid=18672][err]     at wrapSafe (node:internal/modules/cjs/loader:1868:18)', '  - [pid=18672][err]     at Module._compile (node:internal/modules/cjs/loader:1910:20)', '  - [pid=18672][err]     at Object..js (node:internal/modules/cjs/loader:2070:10)', '  - [pid=18672][err]     at Module.load (node:internal/modules/cjs/loader:1658:32)', '  - [pid=18672][err]     at Module._load (node:internal/modules/cjs/loader:1450:12)', '  - [pid=18672][err]     at wrapModuleLoad (node:internal/modules/cjs/loader:268:19)', '  - [pid=18672][err]     at Module.require (node:internal/modules/cjs/loader:1681:12)', '  - [pid=18672][err]     at require (node:internal/modules/helpers:157:16)', '  - [pid=18672][err]     at Object.<anonymous> (/Volumes/Under_M2/morphiiouo/bayper/app/main.cjs:16:25)', '  - [pid=18672][err]     at Module._compile (node:internal/modules/cjs/loader:1937:14)', '  - [pid=18672] <kill>', '  - [pid=18672] <will force kill>', '  - [pid=18672] exception while trying to kill process: Error: kill EPERM', '  - <ws disconnected> ws://127.0.0.1:65410/8abb4450-11c2-437e-8a93-9fc0bd529272 code=1006 reason=', '  - [pid=18672] <process did exit: exitCode=null, signal=SIGTERM>', '  - [pid=18672] starting temporary directories cleanup', '  - [pid=18672] finished temporary directories cleanup' ]
+  }

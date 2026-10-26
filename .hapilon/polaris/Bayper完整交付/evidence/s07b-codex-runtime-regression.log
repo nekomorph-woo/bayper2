@@ -1,0 +1,11 @@
+(node:18504) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ POL-ACTIVITY-RUNTIME-004 单一用途不双发；预算耗尽仍可本地探索；琥珀日常用自身素材；缺帧/不可见 daily 不启动 (16711.54525ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 16895.732208

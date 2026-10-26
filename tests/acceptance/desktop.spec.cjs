@@ -671,7 +671,11 @@ test("POL-DESKTOP-005 手动切换/休息等待真实自然节点并切到 Hu �
       "手动切换必须等待当前自然节点，不能瞬间换身份",
     );
 
-    const huPlan = manifestDisplayPlan("hu", ["idle-v1"]);
+    const huPlan = manifestDisplayPlan("hu", [
+      "idle-pixel-v2-canvas320",
+      "wave-pixel-v3",
+      "stretch-pixel-v2-canvas320",
+    ]);
     const hu = await waitForSnapshot(
       page,
       (value) =>
@@ -681,7 +685,7 @@ test("POL-DESKTOP-005 手动切换/休息等待真实自然节点并切到 Hu �
         value.desktop?.lastNode === "idle-loop" &&
         value.desktop?.bounds?.width === huPlan.windowWidth &&
         value.desktop?.bounds?.height === huPlan.windowHeight &&
-        value.desktop?.displayedFrame?.includes("/idle-v1/frame-"),
+        value.desktop?.displayedFrame?.includes("/idle-pixel-v2-canvas320/frame-"),
       10000,
     );
     assert.ok(hu.desktop.lastNodeAt > aligned.desktop.lastNodeAt);
@@ -721,7 +725,7 @@ test("POL-DESKTOP-005 手动切换/休息等待真实自然节点并切到 Hu �
   }
 });
 
-test("POL-DESKTOP-005 心跳与 idle 自然节点完成低精力交接；无素材时有界收束", async () => {
+test("POL-DESKTOP-005 心跳与 idle 自然节点完成低精力交接；角色基础素材连续", async () => {
   const ctx = await setup();
   let app = null;
   try {
@@ -751,7 +755,8 @@ test("POL-DESKTOP-005 心跳与 idle 自然节点完成低精力交接；无素�
         value.desktop?.lastNode === "idle-loop",
       15000,
     );
-    assert.equal(handedOff.desktop.assetState, "ready", "Hu 真实 idle-v1 应可播放");
+    assert.equal(handedOff.desktop.assetState, "ready", "Hu 新版 idle 应可播放");
+    assert.match(handedOff.desktop.displayedFrame, /idle-pixel-v2-canvas320\/frame-/);
     assert.equal(
       handedOff.companionship.roster.some((entry) => entry.characterId === "hu"),
       true,
@@ -765,15 +770,16 @@ test("POL-DESKTOP-005 心跳与 idle 自然节点完成低精力交接；无素�
     const third = await launchApp(ctx.dataDir);
     app = third.app;
     await waitForStep(third.page, "home");
-    const pendingCheng = await waitForSnapshot(
+    const chengReady = await waitForSnapshot(
       third.page,
       (value) =>
         value.companionship?.current?.characterId === "cheng" &&
-        value.desktop?.assetState === "pending",
+        value.desktop?.assetState === "ready" &&
+        value.desktop?.displayedFrame?.includes("/idle-pixel-v2-canvas320/frame-"),
       8000,
     );
-    assert.equal(pendingCheng.desktop.characterId, "cheng");
-    await capture(third.page, "desktop-pending-asset");
+    assert.equal(chengReady.desktop.characterId, "cheng");
+    await capture(third.page, "desktop-cheng-ready");
 
     const fallback = await waitForSnapshot(
       third.page,
@@ -1252,11 +1258,15 @@ test("POL-DESKTOP-007 真实画布 DOM 按共同包围裁切，点击招呼回�
       })}\n`,
     );
     await page.waitForFunction(
-      () => document.getElementById("sprite")?.src.includes("idle-v1"),
+      () => document.getElementById("sprite")?.src.includes("idle-pixel-v2-canvas320"),
       null,
       { timeout: 10000 },
     );
-    const huPlan = manifestDisplayPlan("hu", ["idle-v1"]);
+    const huPlan = manifestDisplayPlan("hu", [
+      "idle-pixel-v2-canvas320",
+      "wave-pixel-v3",
+      "stretch-pixel-v2-canvas320",
+    ]);
     const huDom = await readCanvasDom(page);
     assert.equal(huDom.windowWidth, huPlan.windowWidth);
     assert.equal(huDom.windowHeight, huPlan.windowHeight);

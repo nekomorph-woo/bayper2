@@ -1502,7 +1502,7 @@ test("POL-ACTIVITY-RUNTIME-003 daily 连续两次中断与退出重开按已完�
   }
 });
 
-test("POL-ACTIVITY-RUNTIME-004 单一用途不双发；预算耗尽仍可本地探索；其他角色/缺帧/不可见 daily 不启动", { timeout: 180000 }, async () => {
+test("POL-ACTIVITY-RUNTIME-004 单一用途不双发；预算耗尽仍可本地探索；琥珀日常用自身素材；缺帧/不可见 daily 不启动", { timeout: 180000 }, async () => {
   const sourceDir = seedDataDir({ purpose: "source", source: true });
   const hiddenDir = seedDataDir({ purpose: "daily", desktopVisible: false });
   const huDir = seedDataDir({ purpose: "daily", roster: ["hu", "rin"], currentId: "hu" });
@@ -1567,30 +1567,45 @@ test("POL-ACTIVITY-RUNTIME-004 单一用途不双发；预算耗尽仍可本地�
     assert.equal(exitedActivity.status, "paused", "退出应暂停运行活动并保留事实");
     facts.exit = { appExit: exitResult, activity: exitedActivity };
 
-    // 其他角色没有已发布的日常动作：不得借用凛素材，也不建立活动。
+    // 琥珀已有自己的基础日常候选：建立自身活动，不借用凛的素材。
     huLaunched = await launchApp(huDir);
     const huBefore = readDb(huDir);
     await triggerOpportunity(huLaunched.app, huLaunched.page, huDir, "daily", 31 * 60 * 1000);
-    await delay(1600);
-    const huAfter = readDb(huDir);
-    assert.equal(huAfter.activities.length, 0, "其他角色 daily 不得建立活动");
-    assert.equal(huAfter.purpose, "exploration");
-    assert.ok(
-      huAfter.energyOf("hu") > huBefore.energyOf("hu") - 4,
-      "其他角色 daily 不得扣除 -2 活动精力",
+    await waitFor(
+      () => readDb(huDir).activities.some((activity) => activity.status === "running"),
+      12000,
+      "琥珀日常未开始",
     );
-    const huLogs = [...huLaunched.consoleLines, ...huLaunched.logs].join("\n");
-    assert.match(huLogs, /ACTIVITY_ACTION_UNAVAILABLE/);
+    const huAfter = readDb(huDir);
+    assert.equal(huAfter.activities.length, 1, "琥珀日常只需建立一项活动");
+    assert.equal(huAfter.activities[0].kind, "daily");
+    assert.equal(huAfter.activities[0].character_id, "hu");
+    assert.equal(huAfter.purpose, "exploration");
+    const huActivityId = huAfter.activities[0].activity_id;
+    await waitFor(
+      async () => {
+        const state = await getSnapshot(huLaunched.page);
+        return (
+          state.desktop?.activity?.activityId === huActivityId &&
+          String(state.desktop?.displayedFrame).includes(
+            "/stretch-pixel-v2-canvas320/frame-",
+          )
+        );
+      },
+      12000,
+      "琥珀日常未播放自己的伸展帧",
+    );
     const huSnapshot = await getSnapshot(huLaunched.page);
     assert.equal(huSnapshot.desktop.characterId, "hu");
-    assert.equal(huSnapshot.desktop.activity ?? null, null);
-    facts.otherCharacterDaily = {
-      activities: huAfter.activities.length,
+    assert.match(huSnapshot.desktop.displayedFrame, /stretch-pixel-v2-canvas320\/frame-/);
+    facts.huDaily = {
+      activity: huAfter.activities[0],
       purpose: huAfter.purpose,
       energyBefore: huBefore.energyOf("hu"),
       energyAfter: huAfter.energyOf("hu"),
+      displayedFrame: huSnapshot.desktop.displayedFrame,
     };
-    screenshots.push(await capture(huLaunched.page, "runtime-004-other-character"));
+    screenshots.push(await capture(huLaunched.page, "runtime-004-hu-daily"));
     huLaunched.exit = await closeApp(huLaunched.app);
 
     // 正式源文件不动：使用独立仓库副本缺失一帧伸展，能力门保持关闭且不扣费。

@@ -1,0 +1,16 @@
+(node:18181) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ POL-DESKTOP-005 手动切换/休息等待真实自然节点并切到 Hu 真实待机 (13511.590625ms)
+✔ POL-DESKTOP-005 心跳与 idle 自然节点完成低精力交接；角色基础素材连续 (8906.882125ms)
+✔ POL-DESKTOP-005 真实损坏 PNG 解码失败保留错误并解除节点等待 (336.958541ms)
+✔ POL-DESKTOP-005 旧身份异步加载失效，迟到节点不能完成新身份 (2872.295333ms)
+✔ POL-DESKTOP-005 A→慢加载B→A缓存竞态与失败后返回已加载A (1610.184292ms)
+✔ POL-DESKTOP-007 真实画布 DOM 按共同包围裁切，点击招呼回待机并切 Hu (4326.657125ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 31710.283709

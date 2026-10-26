@@ -81,33 +81,50 @@ function buildDisplayPlan(animations, frameSize) {
   };
 }
 
-function publicAnimation(animation) {
-  return animation.public;
+/* 同角色三项基础动作使用同一 320×384 画布和脚锚；凛保持已验收的
+   256×384 版本。candidate 只表示待 Codex 视觉验收，不是正式发布。 */
+const ANIMATION_SETS = Object.freeze({
+  rin: {
+    idle: "idle-pixel-v2",
+    wave: "wave-pixel-v1",
+    stretch: "stretch-pixel-v2-canvas256",
+    candidate: false,
+  },
+  hu: {
+    idle: "idle-pixel-v2-canvas320",
+    wave: "wave-pixel-v3",
+    stretch: "stretch-pixel-v2-canvas320",
+    candidate: true,
+  },
+  cheng: {
+    idle: "idle-pixel-v2-canvas320",
+    wave: "wave-pixel-v1-canvas320",
+    stretch: "stretch-pixel-v2-canvas320",
+    candidate: true,
+  },
+});
+
+function publicAnimation(animation, candidate) {
+  return { ...animation.public, candidate };
 }
 
 const animationCache = new Map();
 
 function getAnimations(characterId) {
   if (!animationCache.has(characterId)) {
-    if (characterId === "rin") {
-      const idle = loadAnimation("rin", "idle-pixel-v2");
-      const wave = loadAnimation("rin", "wave-pixel-v1");
-      const stretch = loadAnimation("rin", "stretch-pixel-v2-canvas256");
-      animationCache.set(characterId, {
-        idle: publicAnimation(idle),
-        wave: { ...publicAnimation(wave), candidate: false },
-        stretch: { ...publicAnimation(stretch), candidate: false },
-        display: buildDisplayPlan([idle, wave, stretch], idle.public.frameSize),
-      });
-    } else if (characterId === "hu") {
-      const idle = loadAnimation("hu", "idle-v1");
-      animationCache.set(characterId, {
-        idle: publicAnimation(idle),
-        display: buildDisplayPlan([idle], idle.public.frameSize),
-      });
-    } else {
+    const names = ANIMATION_SETS[characterId];
+    if (!names) {
       return null;
     }
+    const idle = loadAnimation(characterId, names.idle);
+    const wave = loadAnimation(characterId, names.wave);
+    const stretch = loadAnimation(characterId, names.stretch);
+    animationCache.set(characterId, {
+      idle: publicAnimation(idle, names.candidate),
+      wave: publicAnimation(wave, names.candidate),
+      stretch: publicAnimation(stretch, names.candidate),
+      display: buildDisplayPlan([idle, wave, stretch], idle.public.frameSize),
+    });
   }
   return animationCache.get(characterId);
 }
@@ -118,6 +135,10 @@ function getRinAnimations() {
 
 function getHuAnimations() {
   return getAnimations("hu");
+}
+
+function getChengAnimations() {
+  return getAnimations("cheng");
 }
 
 /* 主进程只把角色 ID、显示名和已验证动画路径发给子进程。 */
@@ -150,8 +171,11 @@ function buildDesktopPresentation(characterId, displayName) {
       assetNote:
         characterId === "rin"
           ? "凛 idle-pixel-v2；wave-pixel-v1 与 stretch-pixel-v2-canvas256 已通过播放验收"
-          : "琥珀旧版 idle-v1 待机（新画风未完成）",
-      assetLabel: characterId === "rin" ? "idle-pixel-v2" : "idle-v1",
+          : `${displayName} idle/wave/stretch 基础动作候选已接入，尚未完成视觉发布`,
+      assetLabel:
+        characterId === "rin"
+          ? "idle-pixel-v2"
+          : "idle/wave/stretch 候选",
     };
   } catch (error) {
     return {
@@ -165,12 +189,21 @@ function buildDesktopPresentation(characterId, displayName) {
   }
 }
 
-/* 已发布活动动作的能力边界。候选素材未获 Codex 播放审查前不得在此标记可用，
-   否则会以 idle 或状态标签冒充正式日常/探索。 */
-const DAILY_ACTION = Object.freeze({
-  characterId: "rin",
-  candidate: "stretch-pixel-v2-canvas256",
-  note: "凛 stretch-pixel-v2-canvas256 正式日常伸展已通过播放验收。",
+/* 已发布活动动作的能力边界。Hu/Cheng 只接入三项基础候选，待 Codex
+   视觉验收；不得据此推导完整动作库或正式内容发布。 */
+const DAILY_ACTIONS = Object.freeze({
+  rin: {
+    candidate: "stretch-pixel-v2-canvas256",
+    note: "凛 stretch-pixel-v2-canvas256 正式日常伸展已通过播放验收。",
+  },
+  hu: {
+    candidate: "stretch-pixel-v2-canvas320",
+    note: "琥珀伸展基础动作候选已接入，仍待跨动作视觉验收；不代表动作库完成。",
+  },
+  cheng: {
+    candidate: "stretch-pixel-v2-canvas320",
+    note: "澄伸展基础动作候选已接入，仍待跨动作视觉验收；不代表动作库完成。",
+  },
 });
 
 const ACTIVITY_SUPPORT = Object.freeze({
@@ -184,17 +217,18 @@ const ACTIVITY_SUPPORT = Object.freeze({
 
 function getActivitySupport(characterId, kind) {
   if (kind === "daily") {
-    if (characterId !== DAILY_ACTION.characterId) {
+    const action = DAILY_ACTIONS[characterId];
+    if (!action) {
       return {
         available: false,
         reason: "ACTIVITY_ACTION_UNAVAILABLE",
-        note: "该角色没有已接入的正式日常动作；不借用凛的素材。",
+        note: "该角色没有已接入的正式日常动作；不借用其他角色的素材。",
       };
     }
     return {
       available: true,
-      candidate: DAILY_ACTION.candidate,
-      note: DAILY_ACTION.note,
+      candidate: action.candidate,
+      note: action.note,
     };
   }
   const support = ACTIVITY_SUPPORT[kind];
@@ -209,5 +243,6 @@ module.exports = {
   getActivitySupport,
   getRinAnimations,
   getHuAnimations,
+  getChengAnimations,
   BODY_TARGET_PT,
 };

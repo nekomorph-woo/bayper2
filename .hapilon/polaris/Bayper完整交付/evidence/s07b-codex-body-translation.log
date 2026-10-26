@@ -1,0 +1,4 @@
+hu idle-pixel-v2 => idle-pixel-v2-canvas320 8 frames: exact RGBA translation +32/0; transparent padding PASS
+hu stretch-pixel-v2 => stretch-pixel-v2-canvas320 8 frames: exact RGBA translation +32/0; transparent padding PASS
+cheng idle-pixel-v2 => idle-pixel-v2-canvas320 8 frames: exact RGBA translation +32/0; transparent padding PASS
+cheng wave-pixel-v1 => wave-pixel-v1-canvas320 8 frames: exact RGBA translation +32/0; transparent padding PASS

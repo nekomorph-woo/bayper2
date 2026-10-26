@@ -1,0 +1,6 @@
+batch: codex-20261027-isolated-r3
+created: 2026-10-26T20:56:14.347Z
+requested-batch: codex-20261027-isolated-r3
+exclusive-directory: true
+source: tests/acceptance/s07b-three-character.spec.cjs
+http: not-started（仅构造本地数据，不读取 .env）

@@ -23,7 +23,7 @@
       "traits": ["走路快，说话也快", "喜欢收集石头和旧票据", "不喜欢被人安排行程"],
       "matchKeywords": ["活泼", "聊天", "热闹", "出门", "散步", "冒险", "好奇", "收集"],
       "matchReason": "她坐不住，愿意把路上见到的事讲给你听。",
-      "image": "../../prototypes/desktop/assets/img/hu.png",
+      "image": "../../assets/characters/hu/source/master-pixel-v2.png",
       "imageState": "development-candidate",
       "recipeRef": "reference.maid10",
       "recipeNote": "引用造型画风参考配方，不是正式角色制作配方。"
@@ -36,7 +36,7 @@
       "traits": ["喜欢靠窗的软垫", "睡着的时候会说梦话", "对陌生人先观察三天"],
       "matchKeywords": ["慵懒", "睡", "软", "观察", "发呆", "慢慢", "抱", "午后"],
       "matchReason": "她喜欢慢下来，愿意在窗边陪你发一会儿呆。",
-      "image": "../../prototypes/desktop/assets/img/cheng.png",
+      "image": "../../assets/characters/cheng/source/master-pixel-v1.png",
       "imageState": "development-candidate",
       "recipeRef": "reference.maid10",
       "recipeNote": "引用造型画风参考配方，不是正式角色制作配方。"

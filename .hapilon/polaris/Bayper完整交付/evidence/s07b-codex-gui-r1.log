@@ -1,0 +1,12 @@
+(node:17991) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ POL-ASSET3-001/002/004/005 三角色真实画布导入、招呼、切换、缺帧与尺寸（透明命中未覆盖） (8132.154917ms)
+✔ POL-ASSET3-003 琥珀与澄真实日常伸展、暂停恢复与退出重开 (19793.3405ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 37903.22325

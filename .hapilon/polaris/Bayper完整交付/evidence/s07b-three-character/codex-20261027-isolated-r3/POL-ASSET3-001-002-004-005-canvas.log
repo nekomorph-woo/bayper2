@@ -1,0 +1,189 @@
+# POL-ASSET3-001-002-004-005-canvas
+batch: codex-20261027-isolated-r3
+time: 2026-10-26T20:56:22.390Z
+result: INCONCLUSIVE
+failure: none
+cleanup: {"appPid":18852,"desktopPid":null,"appExitCode":0,"appExited":true,"desktopChildAlive":false,"processesStopped":true,"directoryRemoved":true,"directoryRetained":false,"http":"not-started"}
+screenshots: ["/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/canvas-hu-idle-light.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/canvas-hu-idle-dark.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/canvas-hu-wave-light.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/canvas-hu-wave-dark.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/canvas-cheng-idle-light.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/canvas-cheng-idle-dark.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/canvas-cheng-wave-light.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/canvas-cheng-wave-dark.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/canvas-rin-idle-light.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/canvas-rin-idle-dark.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/canvas-rin-wave-light.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/canvas-rin-wave-dark.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/canvas-switch-cheng-idle.png","/private/tmp/bayper-s07b-review-WfNV8H/.hapilon/polaris/Bayper完整交付/evidence/s07b-three-character/codex-20261027-isolated-r3/canvas-cheng-missing-frame.png"]
+coverage:
+{
+  "POL-ASSET3-001": {
+    "result": "INCONCLUSIVE",
+    "import": "PASS",
+    "window-crop": "PASS",
+    "body-click": "PASS",
+    "transparent-hit": "NOT_COVERED"
+  },
+  "POL-ASSET3-002": {
+    "result": "PASS"
+  },
+  "POL-ASSET3-004": {
+    "result": "PASS"
+  },
+  "POL-ASSET3-005": {
+    "result": "PASS"
+  },
+  "note": "组合 Case 尚缺透明命中，整体记 INCONCLUSIVE；历史日志不覆写。"
+}
+
+## facts
+{
+  "hu": {
+    "plan": {
+      "scale": 0.41025641025641024,
+      "targetPt": 128,
+      "windowWidth": 96,
+      "windowHeight": 128,
+      "canvasWidth": 131.28205128205127,
+      "canvasHeight": 157.53846153846155,
+      "offsetX": 20.102564102564102,
+      "offsetY": 26.256410256410255,
+      "visibleBox": {
+        "x": 49,
+        "y": 64,
+        "width": 232,
+        "height": 312
+      },
+      "footAnchor": {
+        "x": 45.53846153846153,
+        "y": 128
+      }
+    },
+    "window": {
+      "width": 96,
+      "height": 128
+    },
+    "imageCss": {
+      "width": 131.28125,
+      "height": 157.53125
+    },
+    "idleSrc": "file:///private/tmp/bayper-s07b-review-WfNV8H/assets/characters/hu/animations/idle-pixel-v2-canvas320/frame-00.png",
+    "waveFramePrefix": "characters/hu/animations/wave-pixel-v3/frame-",
+    "waveFrames": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "bodyClickStartedWave": true
+  },
+  "cheng": {
+    "plan": {
+      "scale": 0.41830065359477125,
+      "targetPt": 128,
+      "windowWidth": 100,
+      "windowHeight": 128,
+      "canvasWidth": 133.8562091503268,
+      "canvasHeight": 160.62745098039215,
+      "offsetX": 15.895424836601308,
+      "offsetY": 29.28104575163399,
+      "visibleBox": {
+        "x": 38,
+        "y": 70,
+        "width": 239,
+        "height": 306
+      },
+      "footAnchor": {
+        "x": 51.032679738562095,
+        "y": 128
+      }
+    },
+    "window": {
+      "width": 100,
+      "height": 128
+    },
+    "imageCss": {
+      "width": 133.84375,
+      "height": 160.625
+    },
+    "idleSrc": "file:///private/tmp/bayper-s07b-review-WfNV8H/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-00.png",
+    "waveFramePrefix": "characters/cheng/animations/wave-pixel-v1-canvas320/frame-",
+    "waveFrames": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "bodyClickStartedWave": true
+  },
+  "rin": {
+    "plan": {
+      "scale": 0.4155844155844156,
+      "targetPt": 128,
+      "windowWidth": 88,
+      "windowHeight": 128,
+      "canvasWidth": 106.3896103896104,
+      "canvasHeight": 159.58441558441558,
+      "offsetX": 13.2987012987013,
+      "offsetY": 28.259740259740262,
+      "visibleBox": {
+        "x": 32,
+        "y": 68,
+        "width": 210,
+        "height": 308
+      },
+      "footAnchor": {
+        "x": 39.896103896103895,
+        "y": 128.00000000000003
+      }
+    },
+    "window": {
+      "width": 88,
+      "height": 128
+    },
+    "imageCss": {
+      "width": 106.375,
+      "height": 159.578125
+    },
+    "idleSrc": "file:///private/tmp/bayper-s07b-review-WfNV8H/assets/characters/rin/animations/idle-pixel-v2/frame-00.png",
+    "waveFramePrefix": "characters/rin/animations/wave-pixel-v1/frame-",
+    "waveFrames": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "bodyClickStartedWave": true
+  },
+  "switchMidWave": {
+    "staleMessages": 3,
+    "passed": true
+  },
+  "missingFrame": {
+    "statusText": "角色素材加载失败，画布将等待恢复。",
+    "spriteHidden": true,
+    "assetError": true
+  },
+  "recovered": {
+    "src": "file:///private/tmp/bayper-s07b-review-WfNV8H/assets/characters/cheng/animations/idle-pixel-v2-canvas320/frame-00.png",
+    "spriteHidden": false
+  },
+  "coverage": {
+    "POL-ASSET3-001": {
+      "result": "INCONCLUSIVE",
+      "import": "PASS",
+      "window-crop": "PASS",
+      "body-click": "PASS",
+      "transparent-hit": "NOT_COVERED"
+    },
+    "POL-ASSET3-002": {
+      "result": "PASS"
+    },
+    "POL-ASSET3-004": {
+      "result": "PASS"
+    },
+    "POL-ASSET3-005": {
+      "result": "PASS"
+    }
+  }
+}
+
+## renderer console
