@@ -56,6 +56,25 @@ contextBridge.exposeInMainWorld(
 );
 
 contextBridge.exposeInMainWorld(
+  "bayperStories",
+  Object.freeze({
+    listStories: () => ipcRenderer.invoke("bayper:story:list"),
+    getStory: (storyId) => ipcRenderer.invoke("bayper:story:detail", storyId),
+    acknowledgeInvitation: (payload) =>
+      ipcRenderer.invoke("bayper:story:invitation-shown", payload),
+    leaveStory: () => ipcRenderer.invoke("bayper:story:leave"),
+    acceptInvitation: (invitationId) =>
+      ipcRenderer.invoke("bayper:story:invitation-accept", invitationId),
+    deferInvitation: (invitationId) =>
+      ipcRenderer.invoke("bayper:story:invitation-later", invitationId),
+    rejectInvitation: (invitationId) =>
+      ipcRenderer.invoke("bayper:story:invitation-reject", invitationId),
+    reopenInvitation: (invitationId) =>
+      ipcRenderer.invoke("bayper:story:invitation-reopen", invitationId),
+  }),
+);
+
+contextBridge.exposeInMainWorld(
   "bayperSources",
   Object.freeze({
     getState: () => ipcRenderer.invoke("bayper:source:state"),

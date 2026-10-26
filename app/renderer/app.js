@@ -3,6 +3,7 @@
 const api = window.bayper;
 const chatApi = window.bayperChat;
 const memoryApi = window.bayperMemory;
+const storyApi = window.bayperStories;
 const sourceApi = window.bayperSources;
 const byId = (id) => document.getElementById(id);
 
@@ -70,6 +71,21 @@ const memoryPanel = window.createMemoryPanel({
 });
 
 const sourcePanel = window.createSourceSettings({ api: sourceApi });
+
+const storyPanel = window.createStoryPanel({
+  api: storyApi,
+  showAlert,
+  getSnapshot: () => state.snapshot,
+  isActive: () =>
+    state.characterTab === "stories" &&
+    navigation.currentPage() === "characters" &&
+    document.visibilityState === "visible",
+  applySnapshot: (snapshot) => {
+    state.snapshot = snapshot;
+    renderCharacterList();
+    renderCompanionControls(snapshot?.companionship);
+  },
+});
 
 if (memoryApi && typeof memoryApi.onMemoryChanged === "function") {
   memoryApi.onMemoryChanged((payload) => {
@@ -560,6 +576,11 @@ function selectCharacter(characterId) {
   if (!character) {
     return;
   }
+  const changed = state.selectedCharacterId !== characterId;
+  if (changed && state.characterTab === "stories") {
+    // 切换角色后，迟到的故事详情/回执不能落到新的角色页状态。
+    storyPanel.deactivate();
+  }
   state.selectedCharacterId = characterId;
   const nicknameSelect = byId("nickname-character");
   if (
@@ -570,6 +591,9 @@ function selectCharacter(characterId) {
     byId("nickname-input").value = character.nickname ?? "";
   }
   renderCharacters();
+  if (changed && state.characterTab === "stories") {
+    storyPanel.activate();
+  }
 }
 
 function renderCharacters() {
@@ -652,12 +676,21 @@ function renderPage(page) {
   if (state.snapshot?.state !== "accepted") {
     return;
   }
+  if (page !== "characters") {
+    // 离开角色页后，迟到回执不再拥有当前故事详情身份。
+    storyPanel.deactivate();
+  }
   if (page === "home") {
     sourcePanel.deactivate();
     renderHome();
   } else if (page === "characters") {
     sourcePanel.deactivate();
     renderCharacters();
+    if (state.characterTab === "stories") {
+      storyPanel.activate();
+    } else {
+      storyPanel.deactivate();
+    }
   } else if (page === "settings") {
     renderSettings();
     showSettingsTab(state.settingsTab);
@@ -669,6 +702,7 @@ function renderAll() {
   renderHome();
   renderCharacters();
   renderSettings();
+  storyPanel.handleSnapshot();
   updateSubtitle();
 }
 
@@ -807,10 +841,16 @@ byId("nickname-character").addEventListener("change", () => {
 document.querySelectorAll("[data-character-tab]").forEach((button) => {
   button.addEventListener("click", () => {
     if (state.characterTab === button.dataset.characterTab) {
+      button.focus();
       return;
     }
     state.characterTab = button.dataset.characterTab;
     renderCharacterTabs();
+    if (state.characterTab === "stories") {
+      storyPanel.activate();
+    } else {
+      storyPanel.deactivate();
+    }
     button.focus();
   });
 });

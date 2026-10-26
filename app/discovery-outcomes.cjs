@@ -107,6 +107,13 @@ function createDiscoveryOutcomes({ db, storyProgress, now = () => new Date() }) 
       SET status = 'pending', displayed_at = ?, quota_at = ?, updated_at = ?
       WHERE invitation_id = ?
     `),
+    /* 用户主动在管理窗打开故事时由主进程选择 manual：只记录实际展示，
+       不写自动邀请的 7 天 quota_at。 */
+    displayManualInvitation: db.prepare(`
+      UPDATE discovery_invitations
+      SET status = 'pending', displayed_at = ?, updated_at = ?
+      WHERE invitation_id = ?
+    `),
     setResolution: db.prepare(`
       UPDATE discovery_invitations
       SET status = ?, resolution_at = ?, updated_at = ?
@@ -188,6 +195,15 @@ function createDiscoveryOutcomes({ db, storyProgress, now = () => new Date() }) 
     if (disposed) {
       throw new AppError("OUTCOMES_DISPOSED", "发现结果入口已释放。");
     }
+  }
+
+  /* 展示来源只由受信任的主进程选择；renderer 不能借此绕过自动 7 天额度。 */
+  function displaySource(value) {
+    const source = value === undefined ? "automatic" : value;
+    if (source !== "automatic" && source !== "manual") {
+      throw new AppError("INVALID_INPUT", "邀请展示来源无效。");
+    }
+    return source;
   }
 
   function transaction(fn) {
@@ -279,9 +295,10 @@ function createDiscoveryOutcomes({ db, storyProgress, now = () => new Date() }) 
       .find((row) => row.invitation_id !== excludeId) ?? null;
   }
 
-  function prepareInvitation({ storyId } = {}) {
+  function prepareInvitation({ storyId, source } = {}) {
     ensureActive();
     const storyKey = text(storyId, "storyId");
+    const displayMode = displaySource(source);
     const at = nowMs();
     return transaction(() => {
       const progress = storyProgress.getProgress(storyKey);
@@ -340,7 +357,7 @@ function createDiscoveryOutcomes({ db, storyProgress, now = () => new Date() }) 
           invitation: invitationPublic(rejected),
         };
       }
-      if (Number(statements.quota.get(at - WEEK_MS).count) >= 1) {
+      if (displayMode === "automatic" && Number(statements.quota.get(at - WEEK_MS).count) >= 1) {
         return { prepared: false, reason: "INVITATION_QUOTA", invitation: null };
       }
 
@@ -362,9 +379,10 @@ function createDiscoveryOutcomes({ db, storyProgress, now = () => new Date() }) 
     });
   }
 
-  function acknowledgeInvitation({ invitationId } = {}) {
+  function acknowledgeInvitation({ invitationId, source } = {}) {
     ensureActive();
     const key = text(invitationId, "invitationId");
+    const displayMode = displaySource(source);
     const at = nowMs();
     return transaction(() => {
       const invitation = statements.invitation.get(key);
@@ -385,10 +403,17 @@ function createDiscoveryOutcomes({ db, storyProgress, now = () => new Date() }) 
       if (sourceError) {
         throw new AppError("INVITATION_SOURCE_UNAVAILABLE", sourceError);
       }
-      if (Number(statements.quota.get(at - WEEK_MS).count) >= 1) {
+      if (
+        displayMode === "automatic" &&
+        Number(statements.quota.get(at - WEEK_MS).count) >= 1
+      ) {
         throw new AppError("INVITATION_QUOTA", "当前滚动周期不能展示新邀请。");
       }
-      statements.displayInvitation.run(at, at, at, key);
+      if (displayMode === "manual") {
+        statements.displayManualInvitation.run(at, at, key);
+      } else {
+        statements.displayInvitation.run(at, at, at, key);
+      }
       return {
         acknowledged: true,
         duplicate: false,
@@ -545,6 +570,12 @@ function createDiscoveryOutcomes({ db, storyProgress, now = () => new Date() }) 
     return invitationPublic(statements.invitation.get(key));
   }
 
+  /* 只读查询，供故事回看按稳定 storyId 找回同一份邀请；不创建或展示邀请。 */
+  function getInvitationByStory({ storyId } = {}) {
+    const key = text(storyId, "storyId");
+    return invitationPublic(statements.invitationByStory.get(key));
+  }
+
   function getPendingInvitation() {
     return invitationPublic(outstandingInvitation());
   }
@@ -658,6 +689,7 @@ function createDiscoveryOutcomes({ db, storyProgress, now = () => new Date() }) 
     reopenInvitation,
     acceptInvitation,
     getInvitation,
+    getInvitationByStory,
     getPendingInvitation,
     getStorySelectionFilters,
     unlockNextOutfit,

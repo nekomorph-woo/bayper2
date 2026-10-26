@@ -1035,6 +1035,59 @@ select:focus {
   margin-top: 10px;
 }
 
+.story-panel {
+  overflow: hidden;
+}
+
+.story-layout {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+}
+
+.story-detail {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.story-head h3 {
+  font-family: var(--font-quote);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.story-nodes {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.story-invitation {
+  margin-top: 10px;
+}
+
+.story-invitation-title {
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.story-invitation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.story-empty {
+  padding: 10px 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 /* ---------- 设置 ---------- */
 
 .settings-page {

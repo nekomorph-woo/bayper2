@@ -1,6 +1,7 @@
 /* Bayper 主进程：业务数据、普通管理窗口、托盘、角色画布宿主与低频生命周期。 */
 const path = require("node:path");
 const os = require("node:os");
+const fs = require("node:fs");
 const { pathToFileURL } = require("node:url");
 const {
   app,
@@ -23,6 +24,7 @@ const { createSourceSettings, buildDefaultSourceCandidates } = require("./source
 const { createSourceAutomation } = require("./source-automation.cjs");
 const { createActivityRuntime } = require("./activity-runtime.cjs");
 const { createStoryRuntime } = require("./story-runtime.cjs");
+const { createStoryWindow } = require("./story-window.cjs");
 const { createAutomaticOpportunities } = require("./automatic-opportunities.cjs");
 const { buildDesktopPresentation, getActivitySupport } = require("./desktop-assets.cjs");
 const { createAppTray } = require("./app-tray.cjs");
@@ -32,6 +34,7 @@ const {
   assertBoundaryCompleted,
 } = require("./presence-boundary.cjs");
 const characterContent = require("./content/characters.json");
+const authoredStories = require("./content/maid-stories.json");
 
 const RENDERER_FILE = path.join(__dirname, "renderer", "index.html");
 const RENDERER_DIR_PREFIX = pathToFileURL(`${path.join(__dirname, "renderer")}${path.sep}`).href;
@@ -58,6 +61,9 @@ let sourceSettings = null;
 let sourceAutomation = null;
 let activityRuntime = null;
 let storyRuntime = null;
+let storyWindow = null;
+let storyViewSeq = 0;
+let storyView = null;
 let automaticOpportunities = null;
 let desktopHost = null;
 let tray = null;
@@ -87,6 +93,24 @@ function readDataDir(argv) {
   return index !== -1 && argv[index + 1] ? argv[index + 1] : null;
 }
 
+/* 仅验收夹具使用显式目录；正常启动始终读取正式作者目录，且不修改其发布标记。 */
+function readStoryCatalog(argv) {
+  const prefix = "--story-catalog=";
+  const inline = argv.find((arg) => arg.startsWith(prefix));
+  if (!inline) {
+    return null;
+  }
+  const file = inline.slice(prefix.length);
+  if (!file) {
+    throw new AppError("STORY_CATALOG_INVALID", "故事目录路径为空。");
+  }
+  try {
+    return JSON.parse(fs.readFileSync(path.resolve(file), "utf8"));
+  } catch {
+    throw new AppError("STORY_CATALOG_INVALID", "故事目录读取失败。");
+  }
+}
+
 const dataDir = readDataDir(process.argv);
 if (dataDir) {
   app.setPath("userData", path.resolve(dataDir));
@@ -113,7 +137,9 @@ function startApplication() {
     homeDir: os.homedir(),
     env: process.env,
   });
+  const storyCatalog = readStoryCatalog(process.argv) ?? authoredStories;
   store = createStore(app.getPath("userData"), {
+    storyCatalog,
     sources: { candidates: sourceCandidates },
     sourceAnalysis: {
       getCredentials: () => readStoredModelCredentials({ store, safeStorage }),
@@ -194,6 +220,17 @@ function startApplication() {
     store,
     storyProgress: store.storyProgress,
     discoveryOutcomes: store.discoveryOutcomes,
+  });
+
+  // S06j 故事回看与正式故事进度共用同一目录和 SQLite 连接，只读生成展示数据。
+  storyWindow = createStoryWindow({
+    db: store.db,
+    storyProgress: store.storyProgress,
+    discoveryOutcomes: store.discoveryOutcomes,
+    catalog: storyCatalog,
+    characterNames: Object.fromEntries(
+      characterContent.candidates.map((candidate) => [candidate.id, candidate.name]),
+    ),
   });
 
   automaticOpportunities = createAutomaticOpportunities({
@@ -558,6 +595,89 @@ function snapshotForRenderer() {
       reasons: systemLifecycle?.reasons() ?? [],
     },
   };
+}
+
+/* 故事详情是用户主动进入的动作：成熟且可用时才准备同一故事的邀请。
+   准备不写 displayed_at 或 quota_at；实际可见由 renderer 单独回执。 */
+function storyDetailForRenderer(storyId) {
+  const story = storyWindow.getStory(storyId);
+  let preparation = null;
+  if (
+    story.type === "character" &&
+    story.progressStatus === "mature" &&
+    story.available
+  ) {
+    preparation = store.discoveryOutcomes.prepareInvitation({
+      storyId: story.storyId,
+      source: "manual",
+    });
+  }
+  const invitation = store.discoveryOutcomes.getInvitationByStory({
+    storyId: story.storyId,
+  });
+  // 当前管理窗只认最后一次取到的故事详情；切页或换详情后旧回执不能确认展示。
+  const viewToken = `story-view-${++storyViewSeq}`;
+  storyView = { token: viewToken, storyId: story.storyId };
+  return {
+    story,
+    invitation,
+    otherInvitation:
+      preparation?.invitation &&
+      preparation.invitation.storyId !== story.storyId
+        ? preparation.invitation
+        : null,
+    preparation: preparation
+      ? {
+          prepared: preparation.prepared === true,
+          duplicate: preparation.duplicate === true,
+          reason: preparation.reason ?? null,
+        }
+      : null,
+    viewToken,
+  };
+}
+
+function assertManagementWindowVisible() {
+  if (
+    !mainWindow ||
+    mainWindow.isDestroyed() ||
+    mainWindow.webContents.isDestroyed() ||
+    !mainWindow.isVisible() ||
+    mainWindow.isMinimized()
+  ) {
+    throw new AppError("INVITATION_NOT_VISIBLE", "管理窗当前不可见，邀请仍会保留。");
+  }
+}
+
+/* renderer 只能在邀请实际绘制并进入局部视口后回执；主进程用最后一次详情
+   身份核对 storyId/invitationId，切页或换详情后旧回执一律拒绝。 */
+function assertStoryViewReceipt(payload) {
+  if (payload?.visible !== true) {
+    throw new AppError("INVITATION_NOT_VISIBLE", "邀请没有形成可见回执。");
+  }
+  if (
+    !storyView ||
+    payload.viewToken !== storyView.token ||
+    payload.storyId !== storyView.storyId
+  ) {
+    throw new AppError("STORY_VIEW_STALE", "当前故事详情已切换。");
+  }
+  const invitation = store.discoveryOutcomes.getInvitationByStory({
+    storyId: payload.storyId,
+  });
+  if (!invitation || invitation.invitationId !== payload.invitationId) {
+    throw new AppError("STORY_VIEW_STALE", "当前故事详情没有这份邀请。");
+  }
+  return invitation;
+}
+
+function runStoryInvitationAction(method, invitationId, refreshSnapshot = false) {
+  const result = store.discoveryOutcomes[method]({ invitationId });
+  if (!refreshSnapshot) {
+    return result;
+  }
+  pushSnapshot();
+  return { ...result, snapshot: snapshotForRenderer() };
 }
 
 /* 管理界面只需展示正文、类别、来源语义与分享限制；factKey、来源哈希与检索分数不越过 IPC。 */
@@ -1187,6 +1307,83 @@ function registerIpcHandlers() {
     }
   });
 
+  ipcMain.handle("bayper:story:list", (event) => {
+    try {
+      assertTrustedSender(event);
+      return { ok: true, stories: storyWindow.listStories() };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:story:detail", (event, storyId) => {
+    try {
+      assertTrustedSender(event);
+      storyView = null;
+      return { ok: true, ...storyDetailForRenderer(storyId) };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  /* 只有管理窗可见且回执匹配最后一次故事详情身份时，才记为 manual 展示。
+     source 固定由主进程选择，renderer 不能自行绕过自动邀请额度。 */
+  ipcMain.handle("bayper:story:invitation-shown", (event, payload) => {
+    try {
+      assertTrustedSender(event);
+      assertManagementWindowVisible();
+      assertStoryViewReceipt(payload);
+      return {
+        ok: true,
+        ...store.discoveryOutcomes.acknowledgeInvitation({
+          invitationId: payload.invitationId,
+          source: "manual",
+        }),
+      };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  // 切页、切分页或换角色时主动失效当前详情身份，晚到的 ACK 不再被接受。
+  ipcMain.handle("bayper:story:leave", (event) => {
+    try {
+      assertTrustedSender(event);
+      storyView = null;
+      return { ok: true };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  const storyInvitationAction = (method, refreshSnapshot = false) => (event, invitationId) => {
+    try {
+      assertTrustedSender(event);
+      return {
+        ok: true,
+        ...runStoryInvitationAction(method, invitationId, refreshSnapshot),
+      };
+    } catch (error) {
+      return failureResult(error);
+    }
+  };
+  ipcMain.handle(
+    "bayper:story:invitation-accept",
+    storyInvitationAction("acceptInvitation", true),
+  );
+  ipcMain.handle(
+    "bayper:story:invitation-later",
+    storyInvitationAction("deferInvitation"),
+  );
+  ipcMain.handle(
+    "bayper:story:invitation-reject",
+    storyInvitationAction("rejectInvitation"),
+  );
+  ipcMain.handle(
+    "bayper:story:invitation-reopen",
+    storyInvitationAction("reopenInvitation"),
+  );
+
   ipcMain.handle("bayper:connector:set-enabled", async (event, instanceId, enabled) => {
     try {
       assertTrustedSender(event);
@@ -1518,6 +1715,8 @@ async function cleanup() {
     activityRuntime = null;
   }
   storyRuntime = null;
+  storyWindow = null;
+  storyView = null;
   if (companionship) {
     try {
       companionship.markClosed();

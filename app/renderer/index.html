@@ -255,6 +255,9 @@
                   <button type="button" role="tab" data-character-tab="arrange" aria-selected="false">
                     相处设置
                   </button>
+                  <button type="button" role="tab" data-character-tab="stories" aria-selected="false">
+                    故事
+                  </button>
                 </div>
 
                 <div class="detail-panels">
@@ -305,6 +308,49 @@
                         固定陪伴会更新今日名单，但不会切换当前在场角色；昵称只保存在这台电脑上。
                       </p>
                       <p id="arrange-status" class="status-text" role="status" aria-live="polite"></p>
+                    </div>
+                  </section>
+
+                  <!-- 故事：只列出已经真实发生的作者节点，邀请在处理前保持同一身份。 -->
+                  <section id="character-stories" class="detail-panel story-panel" data-character-panel="stories" hidden>
+                    <div class="story-layout">
+                      <nav class="character-list-pane" aria-label="已发生的故事">
+                        <p class="pane-label">已发生</p>
+                        <ul id="story-list" class="character-list"></ul>
+                        <p id="story-empty" class="story-empty" hidden></p>
+                      </nav>
+                      <article id="story-detail" class="story-detail">
+                        <p id="story-detail-empty" class="story-empty">
+                          从左边选一段已经发生的故事。
+                        </p>
+                        <div id="story-detail-content" hidden>
+                          <header class="story-head">
+                            <h3 id="story-title"></h3>
+                            <p id="story-meta" class="status-text"></p>
+                          </header>
+                          <p id="story-notice" class="status-text" role="status" aria-live="polite"></p>
+                          <div id="story-error" class="alert" role="alert" hidden></div>
+                          <div id="story-nodes" class="story-nodes"></div>
+                          <section id="story-invitation" class="settings-block story-invitation" hidden>
+                            <p class="story-invitation-title">相遇邀请</p>
+                            <p id="story-invitation-text"></p>
+                            <div class="story-invitation-actions">
+                              <button id="story-accept" class="btn btn-primary btn-small" type="button">
+                                接纳
+                              </button>
+                              <button id="story-later" class="btn btn-ghost btn-small" type="button">
+                                稍后
+                              </button>
+                              <button id="story-reject" class="btn btn-ghost btn-small" type="button">
+                                不接纳
+                              </button>
+                              <button id="story-reopen" class="btn btn-ghost btn-small" type="button">
+                                重新开启
+                              </button>
+                            </div>
+                          </section>
+                        </div>
+                      </article>
                     </div>
                   </section>
                 </div>
@@ -423,6 +469,7 @@
     <script src="source-settings.js"></script>
     <script src="connector-settings.js"></script>
     <script src="window-navigation.js"></script>
+    <script src="story-panel.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
