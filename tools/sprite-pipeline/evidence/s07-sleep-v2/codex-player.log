@@ -1,0 +1,11 @@
+OK window {"count":1,"bounds":{"x":920,"y":410,"width":720,"height":620},"userData":"/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-sprite-verify-WiPf0z"}
+OK sandbox {"require":"undefined","process":"undefined","ipc":"undefined","frames":8}
+OK display-size {"scale":0.40764331210191085,"target":{"width":104.35668789808918,"height":156.53503184713378},"rendered":{"width":104.34375,"height":156.53125,"naturalWidth":256,"naturalHeight":384,"imageRendering":"pixelated"},"toleranceCssPx":0.015625}
+OK normal {"covered":true,"mode":"loop","firstLoopMs":2717,"status":"帧 1 / 8　循环 1"}
+OK pause {"before":"帧 1 / 8　循环 1","pausedAt":"帧 1 / 8　循环 1","pausedLater":"帧 1 / 8　循环 1"}
+OK step {"before":1,"next":2,"prev":1}
+OK slow {"covered":true,"speed":"0.25","frame":1,"frameDurationMs":350,"expectedMs":1400,"probeMs":700,"sameAtProbe":true,"advancedMs":1424,"frameAfter":2}
+OK background {"dark":"dark","light":"","screenshots":["codex-player-dark.png","codex-player-light.png"]}
+OK navigation-block {"url":"file:///Volumes/Under_M2/morphiiouo/bayper/tools/sprite-pipeline/player.html","windows":1}
+OK cleanup {"path":"/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-sprite-verify-WiPf0z","error":null}
+OK exit {"code":0}
