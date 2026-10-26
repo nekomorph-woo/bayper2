@@ -40,7 +40,7 @@ function createHerdrRuntime({
   registryDir, ledger, now = () => Date.now(),
   scanIntervalMs = DEFAULT_SCAN_INTERVAL_MS,
   setIntervalFn = setInterval, clearIntervalFn = clearInterval,
-  processProbe = defaultProcessProbe,
+  processProbe = defaultProcessProbe, onStateChange = null,
 } = {}) {
   if (typeof registryDir !== "string" || !path.isAbsolute(registryDir)) {
     throw invalid("registryDir 必须是绝对路径。");
@@ -60,6 +60,9 @@ function createHerdrRuntime({
     throw invalid("需要有效的调度与时钟。");
   }
   if (typeof processProbe !== "function") throw invalid("processProbe 必须是函数。");
+  if (onStateChange !== null && typeof onStateChange !== "function") {
+    throw invalid("onStateChange 必须是函数或空值。");
+  }
 
   const entries = new Map();
   const runtimeDiagnostics = [];
@@ -77,6 +80,17 @@ function createHerdrRuntime({
     runtimeDiagnostics.push({ at: now(), code, ...extra });
     if (runtimeDiagnostics.length > MAX_RUNTIME_DIAGNOSTICS) {
       runtimeDiagnostics.splice(0, runtimeDiagnostics.length - MAX_RUNTIME_DIAGNOSTICS);
+    }
+  }
+
+  /* 只通知既有扫描/显式动作后的新鲜状态，供主进程复用应用快照节奏；
+     不在这里追加定时器或读取账本之外的业务数据。 */
+  function notifyStateChange() {
+    if (disposed || !onStateChange) return;
+    try {
+      onStateChange();
+    } catch {
+      addDiagnostic("STATE_CHANGE_CALLBACK_FAILED");
     }
   }
 
@@ -271,7 +285,7 @@ function createHerdrRuntime({
     if (disposed) return getState();
     if (scanPromise) return scanPromise;
     scanning = true;
-    scanPromise = (async () => {
+    const scanned = (async () => {
       const registry = readHerdrRegistry({ registryDir });
       lastRegistry = {
         found: registry.found,
@@ -286,6 +300,10 @@ function createHerdrRuntime({
     })().finally(() => {
       scanning = false;
       scanPromise = null;
+    });
+    scanPromise = scanned.then((state) => {
+      notifyStateChange();
+      return state;
     });
     return scanPromise;
   }
@@ -379,7 +397,9 @@ function createHerdrRuntime({
     /* 先持久禁用再停止 adapter，迟到回调不能再以 online 运行。 */
     ledger.disableInstance({ instanceId });
     disposeEntry(entry);
-    return getState();
+    const state = getState();
+    notifyStateChange();
+    return state;
   }
 
   async function enable(instanceId) {

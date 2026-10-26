@@ -10,10 +10,12 @@ const {
   dialog,
   session,
   powerMonitor,
+  clipboard,
 } = require("electron");
 const { AppError, toPublicError } = require("./errors.cjs");
 const { MemoryError } = require("./memory.cjs");
 const { createStore } = require("./store.cjs");
+const { createHerdrRuntime } = require("./herdr-runtime.cjs");
 const { createOnboardingService, readStoredModelCredentials } = require("./onboarding.cjs");
 const { createCompanionshipService } = require("./companionship.cjs");
 const { createDesktopHost } = require("./desktop-host.cjs");
@@ -44,6 +46,7 @@ const TRAY_ICON_FILE = path.join(
 );
 const HEARTBEAT_MS = Math.max(200, Number(process.env.BAYPER_HEARTBEAT_MS) || 60000);
 const FALLBACK_NODE_MS = 2500;
+const CONNECTOR_REGISTRY_DIR_NAME = "herdr-registry";
 
 let mainWindow = null;
 let store = null;
@@ -67,6 +70,9 @@ let cleanupStarted = false;
 let cleanupFinished = false;
 let quitting = false;
 let activeChat = null;
+let connectorRuntime = null;
+let connectorRegistryDir = null;
+let lastConnectorSignature = null;
 
 function readDataDir(argv) {
   const inline = argv.find((arg) => arg.startsWith("--data-dir="));
@@ -114,6 +120,12 @@ function startApplication() {
       recoverInterrupted: true,
       getCredentials: () => readStoredModelCredentials({ store, safeStorage }),
     },
+  });
+  connectorRegistryDir = path.join(app.getPath("userData"), CONNECTOR_REGISTRY_DIR_NAME);
+  connectorRuntime = createHerdrRuntime({
+    registryDir: connectorRegistryDir,
+    ledger: store.connectorLedger,
+    onStateChange: handleConnectorStateChange,
   });
   desktopVisible = store.getAppState("desktop_visible") !== "0";
   desktopPassthrough = store.getAppState("desktop_passthrough") === "1";
@@ -197,6 +209,9 @@ function startApplication() {
   });
 
   registerIpcHandlers();
+  connectorRuntime.start().catch((error) => {
+    console.error("连接器运行管理启动失败：", error?.message ?? error);
+  });
   mainWindow = createManagementWindow();
   createTray();
   syncDesktop();
@@ -365,11 +380,59 @@ function pushSnapshot() {
   mainWindow.webContents.send("bayper:snapshot-updated", snapshot);
 }
 
+function connectorStatus(instance) {
+  if (instance.disabled) return "disabled";
+  /* 登记消失或端点暂不可验证只代表当前连接不可确认，不能冒充 server 已停止。 */
+  if (instance.stopped) return "offline";
+  if (instance.online && instance.registered) return "online";
+  return "reconnecting";
+}
+
+/* renderer 只拿到可展示状态与停用/恢复所需的稳定实例标识；
+   socket 元数据、runId、账本诊断和任何连接内容都不越过 IPC。 */
+function connectorStateForRenderer() {
+  const state = connectorRuntime?.getState() ?? null;
+  return {
+    registryPath: connectorRegistryDir,
+    registryFound: state?.registry?.found === true,
+    diagnosticCount: (state?.diagnostics ?? [])
+      .filter((item) => item.source === "registry").length,
+    instances: (state?.instances ?? []).map((instance) => ({
+      instanceId: instance.instanceId,
+      shortId: instance.instanceId.slice(-8),
+      source: "Herdr",
+      status: connectorStatus(instance),
+      agents: instance.agents.map((agent) => ({
+        agentId: agent.agentId,
+        label: agent.label ?? agent.agentId,
+        state: agent.effectiveState,
+      })),
+    })),
+  };
+}
+
+function handleConnectorStateChange() {
+  if (quitting || !connectorRuntime) return;
+  const state = connectorStateForRenderer();
+  const signature = JSON.stringify(state);
+  if (signature === lastConnectorSignature) return;
+  lastConnectorSignature = signature;
+  pushSnapshot();
+}
+
+function assertConnectorInstanceId(value) {
+  if (typeof value !== "string" || !/^inst-[0-9a-f]{32}$/.test(value)) {
+    throw new AppError("INVALID_INPUT", "连接实例标识无效。");
+  }
+  return value;
+}
+
 function snapshotForRenderer() {
   return {
     ...onboardingService.getSnapshot(),
     companionship: companionship.getSnapshot(),
     desktop: desktopHost?.getStatus() ?? { state: "stopped" },
+    connectors: connectorStateForRenderer(),
     system: {
       paused: systemLifecycle?.isPaused() ?? systemPaused,
       reasons: systemLifecycle?.reasons() ?? [],
@@ -938,6 +1001,40 @@ function registerIpcHandlers() {
     }
   });
 
+  ipcMain.handle("bayper:connector:set-enabled", async (event, instanceId, enabled) => {
+    try {
+      assertTrustedSender(event);
+      assertConnectorInstanceId(instanceId);
+      if (typeof enabled !== "boolean") {
+        throw new AppError("INVALID_INPUT", "连接启停状态必须是布尔值。");
+      }
+      if (!connectorRuntime) {
+        throw new AppError("CONNECTOR_UNAVAILABLE", "连接器尚未就绪，请稍后重试。");
+      }
+      if (enabled) {
+        await connectorRuntime.enable(instanceId);
+      } else {
+        connectorRuntime.disable(instanceId);
+      }
+      return { ok: true, state: connectorStateForRenderer() };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:connector:copy-registry-path", (event) => {
+    try {
+      assertTrustedSender(event);
+      if (!connectorRegistryDir) {
+        throw new AppError("CONNECTOR_UNAVAILABLE", "连接器登记目录尚未就绪。");
+      }
+      clipboard.writeText(connectorRegistryDir);
+      return { ok: true };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
   ipcMain.handle("bayper:companion:nickname", (event, characterId, nickname) => {
     try {
       assertTrustedSender(event);
@@ -1146,6 +1243,16 @@ async function cleanup() {
     tray.destroy();
     tray = null;
   }
+  // runtime 的 socket/订阅/定时器必须先于唯一 SQLite 连接释放。
+  if (connectorRuntime) {
+    try {
+      connectorRuntime.dispose();
+    } catch (error) {
+      console.error("退出时停止连接器运行管理失败：", error?.message ?? error);
+    }
+    connectorRuntime = null;
+  }
+  lastConnectorSignature = null;
   closeActiveChat({ refresh: false, bestEffort: true });
   if (automaticOpportunities) {
     try {

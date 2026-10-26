@@ -321,6 +321,9 @@
               <button type="button" role="tab" data-settings-tab="sources" aria-selected="false">
                 会话来源
               </button>
+              <button type="button" role="tab" data-settings-tab="connectors" aria-selected="false">
+                连接器
+              </button>
               <button type="button" role="tab" data-settings-tab="desktop" aria-selected="false">
                 桌面
               </button>
@@ -372,6 +375,35 @@
                 </section>
               </section>
 
+              <section class="settings-panel" data-settings-panel="connectors" role="tabpanel" aria-label="连接器" hidden>
+                <section class="settings-block connector-settings" id="connector-settings" aria-labelledby="connector-title">
+                  <div class="section-head">
+                    <h2 id="connector-title">连接器</h2>
+                    <span id="connector-summary" class="status-text"></span>
+                  </div>
+                  <p class="note">
+                    只显示已登记 Herdr 的连接状态；关联 Herdr 不授予会话分析权限，也不会自动启用已停用的实例。
+                  </p>
+                  <div class="connector-registry">
+                    <span class="connector-registry-label">登记目录</span>
+                    <code id="connector-registry-path">—</code>
+                    <button id="connector-copy-path" class="btn btn-ghost btn-small" type="button">
+                      复制路径
+                    </button>
+                  </div>
+                  <p id="connector-status" class="status-text" role="status" aria-live="polite"></p>
+                  <div id="connector-error" class="alert" role="alert" hidden></div>
+                  <div class="connector-scroll">
+                    <div id="connector-empty" class="connector-empty">
+                      <strong>尚未关联</strong>
+                      <span>打开 Herdr 后通过“关联 Bayper”登记，连接实例会出现在这里。</span>
+                    </div>
+                    <ul id="connector-list" class="connector-list source-list" aria-label="Herdr 连接实例"></ul>
+                    <p id="connector-diagnostic-note" class="note" hidden></p>
+                  </div>
+                </section>
+              </section>
+
               <section class="settings-panel" data-settings-panel="desktop" role="tabpanel" aria-label="桌面" hidden>
                 <section class="settings-block">
                   <div class="section-head"><h2>桌面角色</h2></div>
@@ -389,6 +421,7 @@
     <script src="chat-view-gate.js"></script>
     <script src="chat-panel.js"></script>
     <script src="source-settings.js"></script>
+    <script src="connector-settings.js"></script>
     <script src="window-navigation.js"></script>
     <script src="app.js"></script>
   </body>

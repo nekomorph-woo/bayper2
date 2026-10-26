@@ -86,6 +86,7 @@ function normalizeSnapshot(snapshot) {
         ? item.state_change_seq : 0,
       label: optionalText(item.name, "agent name")
         ?? optionalText(item.display_agent, "agent display_agent")
+        ?? optionalText(item.agent, "agent label")
         ?? (fallback || null),
     });
   }

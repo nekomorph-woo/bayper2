@@ -1,9 +1,11 @@
 /* S01 的本地持久化。数据库文件位于显式数据目录（生产为用户应用目录，
    测试由 --data-dir 注入），只保存配置密文、关系、初始数值和安排。 */
 const { DatabaseSync } = require("node:sqlite");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { createCompanionStore } = require("./companion-store.cjs");
+const { createConnectorLedger } = require("./connector-ledger.cjs");
 const { createMemoryService } = require("./memory.cjs");
 const { createChatService } = require("./chat.cjs");
 const { createExternalSources } = require("./external-sources.cjs");
@@ -62,6 +64,9 @@ function createStore(dataDir, options = {}) {
     const value = clock();
     return value instanceof Date ? value.getTime() : value;
   };
+  // S05i 连接账本复用唯一 SQLite 连接；appRunId 只在本次进程内稳定。
+  const appRunId = `app-${crypto.randomUUID()}`;
+  const connectorLedger = createConnectorLedger({ db, now, appRunId });
 
   // S02a 迁移与陪伴方法共用这一条连接，关闭仍由 store 统一负责。
   const companion = createCompanionStore(db);
@@ -220,6 +225,8 @@ function createStore(dataDir, options = {}) {
 
   return {
     dbPath,
+    appRunId,
+    connectorLedger,
     ...companion,
     memory,
     chat,

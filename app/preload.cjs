@@ -61,3 +61,12 @@ contextBridge.exposeInMainWorld(
     revoke: (grantId) => ipcRenderer.invoke("bayper:source:revoke", grantId),
   }),
 );
+
+contextBridge.exposeInMainWorld(
+  "bayperConnectors",
+  Object.freeze({
+    setEnabled: (instanceId, enabled) =>
+      ipcRenderer.invoke("bayper:connector:set-enabled", instanceId, enabled),
+    copyRegistryPath: () => ipcRenderer.invoke("bayper:connector:copy-registry-path"),
+  }),
+);

@@ -1268,6 +1268,106 @@ select:focus {
   margin-bottom: 2px;
 }
 
+/* ---------- 连接器 ---------- */
+
+.settings-panel[data-settings-panel="connectors"] .settings-block {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.connector-registry {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.connector-registry code {
+  flex: 1;
+  min-width: 160px;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+}
+
+#connector-status {
+  min-height: 17px;
+  margin-top: 4px;
+}
+
+#connector-error {
+  flex: none;
+  margin-top: 6px;
+}
+
+.connector-scroll {
+  flex: 1;
+  min-height: 0;
+  margin-top: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.connector-empty {
+  padding: 16px 4px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.connector-empty strong {
+  display: block;
+  color: var(--fg);
+  font-size: 14px;
+}
+
+.connector-row:first-child {
+  border-top: 0;
+}
+
+.connector-state[data-state="online"],
+.connector-agent[data-state="working"] .connector-agent-state {
+  color: var(--accent);
+}
+
+.connector-state[data-state="reconnecting"],
+.connector-agent[data-state="needs_attention"] .connector-agent-state {
+  color: var(--warn);
+}
+
+.connector-state[data-state="offline"],
+.connector-agent[data-state="failed"] .connector-agent-state,
+.connector-agent[data-state="stopped"] .connector-agent-state {
+  color: var(--danger);
+}
+
+.connector-agents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin-top: 5px;
+}
+
+.connector-agent {
+  display: inline-flex;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  font-size: 11.5px;
+}
+
+.connector-agent-state,
+.connector-agent-empty {
+  color: var(--muted);
+}
+
 /* ---------- 聊天面板 ---------- */
 
 .chat-panel {
