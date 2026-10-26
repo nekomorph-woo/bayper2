@@ -242,17 +242,38 @@ function presenceText(companion) {
   return `${current.displayName} · 安静陪伴`;
 }
 
+function activityStateText(activity) {
+  if (!activity) {
+    return "";
+  }
+  const minutes = Math.max(0, Math.floor((activity.activeElapsedMs ?? 0) / 60000));
+  if (activity.kind === "daily") {
+    if (activity.status === "scheduled") return "日常待开始";
+    if (activity.status === "running") return "日常中";
+    if (activity.status === "paused") return "日常暂停";
+    return "";
+  }
+  if (activity.kind === "exploration") {
+    if (activity.status === "scheduled") return "探索待出发";
+    if (activity.status === "running") return `探索中 · ${minutes} 分钟`;
+    if (activity.status === "paused") return `探索暂停 · ${minutes} 分钟`;
+  }
+  return "";
+}
+
 function characterStateText(character) {
+  const activity = activityStateText(character.activity);
+  let base = "名单外";
   if (character.isCurrent && character.isFixed) {
-    return "在场 · 固定位";
+    base = "在场 · 固定位";
+  } else if (character.isCurrent) {
+    base = "在场";
+  } else if (character.isFixed) {
+    base = "固定位";
+  } else if (character.inRoster) {
+    base = "今日名单";
   }
-  if (character.isCurrent) {
-    return "在场";
-  }
-  if (character.isFixed) {
-    return "固定位";
-  }
-  return character.inRoster ? "今日名单" : "名单外";
+  return activity ? `${base} · ${activity}` : base;
 }
 
 function renderRoster(companion) {
@@ -278,7 +299,9 @@ function renderRoster(companion) {
 
       const name = document.createElement("span");
       name.className = "roster-name";
-      name.textContent = entry.displayName;
+      name.textContent = [entry.displayName, activityStateText(entry.activity)]
+        .filter(Boolean)
+        .join(" · ");
 
       const actions = document.createElement("span");
       actions.className = "roster-actions";
@@ -515,9 +538,12 @@ function renderCharacterDetail(character) {
   if (!character) {
     byId("character-roster-state").textContent = "";
   } else if (character.inRoster) {
-    byId("character-roster-state").textContent = character.isCurrent
-      ? "现在在场。浏览其他角色不会切换或改动今日名单。"
-      : "在今日名单中。浏览不会切换当前在场角色。";
+    const activity = activityStateText(character.activity);
+    byId("character-roster-state").textContent = `${
+      character.isCurrent
+        ? "现在在场。浏览其他角色不会切换或改动今日名单。"
+        : "在今日名单中。浏览不会切换当前在场角色。"
+    }${activity ? ` 当前活动：${activity}。` : ""}`;
   } else {
     byId("character-roster-state").textContent =
       "不在今日名单；可以临时聊天，聊天结束会回到原来的陪伴安排。";

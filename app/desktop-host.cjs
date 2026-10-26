@@ -68,6 +68,8 @@ function createDesktopHost({
     displayedKey: null,
     displayedFrame: null,
     displayedAt: null,
+    mode: null,
+    activity: null,
   };
 
   function notify() {
@@ -312,6 +314,8 @@ function createDesktopHost({
         : lastPresentation.assetState === "error"
           ? "角色素材不可用"
           : null,
+      mode: lastPresentation.mode ?? null,
+      activity: lastPresentation.activity ?? null,
     });
     send({
       type: "state",

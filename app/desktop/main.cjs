@@ -91,6 +91,7 @@ function applyState(state) {
     assetState: state.assetState,
     assetNote: state.assetNote,
     mode: state.mode,
+    activity: state.activity ?? null,
     displayKey: state.displayKey,
   });
 

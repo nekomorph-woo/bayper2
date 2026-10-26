@@ -19,7 +19,9 @@ const { createCompanionshipService } = require("./companionship.cjs");
 const { createDesktopHost } = require("./desktop-host.cjs");
 const { createSourceSettings, buildDefaultSourceCandidates } = require("./source-settings.cjs");
 const { createSourceAutomation } = require("./source-automation.cjs");
-const { buildDesktopPresentation } = require("./desktop-assets.cjs");
+const { createActivityRuntime } = require("./activity-runtime.cjs");
+const { createAutomaticOpportunities } = require("./automatic-opportunities.cjs");
+const { buildDesktopPresentation, getActivitySupport } = require("./desktop-assets.cjs");
 const { createAppTray } = require("./app-tray.cjs");
 const { createSystemLifecycle } = require("./system-lifecycle.cjs");
 const {
@@ -49,6 +51,8 @@ let onboardingService = null;
 let companionship = null;
 let sourceSettings = null;
 let sourceAutomation = null;
+let activityRuntime = null;
+let automaticOpportunities = null;
 let desktopHost = null;
 let tray = null;
 let heartbeatTimer = null;
@@ -58,6 +62,7 @@ let rotationPending = false;
 let systemPaused = false;
 let desktopVisible = true;
 let desktopPassthrough = false;
+let desktopReady = false;
 let cleanupStarted = false;
 let cleanupFinished = false;
 let quitting = false;
@@ -150,8 +155,32 @@ function startApplication() {
     analysis: store.sourceAnalysis,
     isBlocked: () => Boolean(activeChat) || systemPaused || quitting,
     isModelConfigured: () => Boolean(store.getModelConfig()),
+  });
+
+  activityRuntime = createActivityRuntime({
+    store,
+    companionship,
+    sourceAutomation,
+    isDesktopReady: () => {
+      if (!desktopVisible) {
+        return false;
+      }
+      const status = desktopHost?.getStatus();
+      return status?.state === "running" && status.assetState === "ready";
+    },
+    activitySupport: (characterId, kind) => getActivitySupport(characterId, kind),
+    isBlocked: () => Boolean(activeChat) || systemPaused || quitting,
+  });
+
+  automaticOpportunities = createAutomaticOpportunities({
+    store,
+    companionship,
     now: () => Date.now(),
     random: () => Math.random(),
+    runActivity: (payload) => activityRuntime.runActivity(payload),
+    cancelActivity: () => {
+      sourceAutomation?.cancelActive();
+    },
   });
 
   desktopHost = createDesktopHost({
@@ -296,6 +325,7 @@ function desktopPresentation() {
     companion.current.characterId,
     companion.current.displayName,
   );
+  const activity = companion.current.activity ?? null;
   return {
     character: built.character,
     animations: built.animations,
@@ -303,6 +333,7 @@ function desktopPresentation() {
     assetNote: built.assetNote,
     assetLabel: built.assetLabel,
     mode: companion.current.mode,
+    activity,
     visible: desktopVisible,
     ignoreMouse: desktopPassthrough,
     position: readDesktopPosition(),
@@ -385,6 +416,11 @@ function createTray() {
       onToggleVisible: () => {
         desktopVisible = !desktopVisible;
         store?.setAppState("desktop_visible", desktopVisible ? "1" : "0");
+        if (desktopVisible) {
+          activityRuntime?.handleDesktopReady();
+        } else {
+          activityRuntime?.handleDesktopUnavailable();
+        }
         syncDesktop();
         tray?.refresh();
         pushSnapshot();
@@ -411,9 +447,20 @@ function createTray() {
   }
 }
 
-function handleDesktopStatusChange() {
+function handleDesktopStatusChange(status = desktopHost?.getStatus()) {
   if (quitting) {
     return;
+  }
+  const ready = status?.state === "running" && status?.assetState === "ready";
+  if (status?.state === "failed" || status?.assetState === "error") {
+    desktopReady = false;
+    activityRuntime?.handleDesktopUnavailable();
+  } else if (ready && !desktopReady) {
+    // 只在画布重新可用时扫描持久暂停事实，几何变化不重复恢复。
+    desktopReady = true;
+    activityRuntime?.handleDesktopReady();
+  } else {
+    desktopReady = ready;
   }
   tray?.refresh();
   pushSnapshot();
@@ -425,11 +472,14 @@ function handleCanvasAssetError(message) {
     return;
   }
   console.error("角色画布素材错误：", message);
+  desktopReady = false;
+  activityRuntime?.handleDesktopUnavailable();
   ensurePendingRotationCompletion();
+  pushSnapshot();
 }
 
 function handleCanvasNodeComplete(node) {
-  if (systemPaused || quitting || !rotationPending || activeChat) {
+  if (systemPaused || quitting || activeChat) {
     return;
   }
   if (desktopHost?.hasBoundaryWaiters()) {
@@ -437,6 +487,12 @@ function handleCanvasNodeComplete(node) {
     return;
   }
   try {
+    if (
+      !rotationPending &&
+      companionship.hasScheduledActivity?.() !== true
+    ) {
+      return;
+    }
     companionship.completeNaturalNode();
     rotationPending = companionship.getSnapshot().pendingRotation;
     syncDesktop();
@@ -515,9 +571,17 @@ function startHeartbeat() {
       syncDesktop();
       pushSnapshot();
       tray?.refresh();
-      sourceAutomation?.evaluate().catch((error) => {
-        console.error("自动来源分析失败：", error?.message ?? error);
-      });
+      automaticOpportunities
+        ?.evaluate()
+        .then(() => {
+          if (!quitting) {
+            syncDesktop();
+            pushSnapshot();
+          }
+        })
+        .catch((error) => {
+          console.error("自动机会执行失败：", error?.message ?? error);
+        });
     } catch (error) {
       console.error("陪伴心跳失败：", error?.message ?? error);
     }
@@ -529,7 +593,7 @@ function pauseForSystem() {
     return;
   }
   systemPaused = true;
-  sourceAutomation?.pause();
+  automaticOpportunities?.pause();
   if (fallbackNodeTimer) {
     clearTimeout(fallbackNodeTimer);
     fallbackNodeTimer = null;
@@ -569,12 +633,13 @@ function resumeFromSystem() {
   try {
     companionship.resumeAfterPause();
     rotationPending = companionship.getSnapshot().pendingRotation;
+    if (!activeChat) {
+      activityRuntime?.resumePausedActivities();
+      automaticOpportunities?.resume();
+    }
     syncDesktop();
     ensurePendingRotationCompletion();
     pushSnapshot();
-    if (!activeChat) {
-      sourceAutomation?.resume();
-    }
     tray?.refresh();
   } catch (error) {
     console.error("系统恢复结算失败：", error?.message ?? error);
@@ -650,10 +715,11 @@ function closeActiveChat({
     });
   }
   if (refresh && !quitting && !systemPaused && !degraded) {
+    activityRuntime?.resumePausedActivities();
     syncDesktop();
     pushSnapshot();
     ensurePendingRotationCompletion();
-    sourceAutomation?.resume();
+    automaticOpportunities?.resume();
     tray?.refresh();
   }
   return {
@@ -672,7 +738,7 @@ function startChat(characterId) {
   if (!character) {
     throw new AppError("INVALID_CHARACTER", "这个角色不在已结识名单中。");
   }
-  sourceAutomation?.pause();
+  automaticOpportunities?.pause();
   const history = store.chat.listConversations({ characterId, limit: 10 });
   closeActiveChat({ refresh: false });
   const interaction = companionship.startInteraction(characterId);
@@ -901,6 +967,9 @@ function registerIpcHandlers() {
       await waitForPresentationBoundary();
       const result = companionship.switchTo(characterId);
       rotationPending = false;
+      if (!systemPaused && !activeChat && !quitting) {
+        activityRuntime?.resumePausedActivities();
+      }
       syncDesktop();
       pushSnapshot();
       return { ok: true, ...result, snapshot: snapshotForRenderer() };
@@ -1078,6 +1147,14 @@ async function cleanup() {
     tray = null;
   }
   closeActiveChat({ refresh: false, bestEffort: true });
+  if (automaticOpportunities) {
+    try {
+      automaticOpportunities.dispose();
+    } catch (error) {
+      console.error("退出时停止自动机会失败：", error?.message ?? error);
+    }
+    automaticOpportunities = null;
+  }
   if (sourceAutomation) {
     try {
       await sourceAutomation.dispose();
@@ -1085,6 +1162,10 @@ async function cleanup() {
       console.error("退出时结束来源分析失败：", error?.message ?? error);
     }
     sourceAutomation = null;
+  }
+  if (activityRuntime) {
+    activityRuntime.dispose();
+    activityRuntime = null;
   }
   if (companionship) {
     try {

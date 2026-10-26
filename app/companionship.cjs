@@ -1082,6 +1082,12 @@ function createCompanionshipService({
     };
   }
 
+  /* 主进程自然节点只需便宜地判断是否有待开始活动，避免每个待机节点都结算快照。 */
+  function hasScheduledActivity() {
+    ensureStarted();
+    return store.activities.getScheduled() !== null;
+  }
+
   function getActivity(activityId) {
     ensureStarted();
     const id = activityText(activityId, "活动 ID");
@@ -1281,6 +1287,7 @@ function createCompanionshipService({
     endInteraction,
     requestAutoRotation,
     completeNaturalNode,
+    hasScheduledActivity,
     requestActivity,
     advanceActivities,
     getActivity,

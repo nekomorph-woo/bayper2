@@ -583,6 +583,19 @@ function setCursor(dataDir, directoryId, relativePath, files = null) {
   }
 }
 
+/* 来源用例固定选中 source 用途；共享机会的轮转本身由活动运行时 Case 覆盖。 */
+function setPurpose(dataDir, purpose = "source") {
+  const db = openWriteDb(dataDir);
+  try {
+    db.prepare(`
+      INSERT INTO app_state (key, value) VALUES ('automatic_purpose_cursor', ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run(purpose);
+  } finally {
+    db.close();
+  }
+}
+
 function setEnergy(dataDir, characterId, energy) {
   const db = openWriteDb(dataDir);
   try {
@@ -744,14 +757,17 @@ test("POL-SOURCE-AUTO-001 默认关闭不读取，开启后经心跳产生一次
     await authorizeDefault(page);
     assert.equal((await sourceState(page)).enabled, false);
 
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, 31 * 60 * 1000, 0.1);
     await delay(800);
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, 61 * 60 * 1000, 0.1);
     await delay(800);
     assert.equal(ctx.server.sourceRecords.length, 0, "默认关闭不得读取/请求来源");
     assert.equal(readDb(ctx.dataDir).memory.length, 0);
     assert.equal(readDb(ctx.dataDir).budget.length, 0);
 
+    setPurpose(ctx.dataDir, "source");
     await setAnalysis(page, true);
     await patchClock(app, 91 * 60 * 1000, 0.1);
     await waitFor(() => ctx.server.sourceRecords.length === 1, 15000, "开启后未产生来源请求");
@@ -805,7 +821,10 @@ test("POL-SOURCE-AUTO-001 默认关闭不读取，开启后经心跳产生一次
   }
 });
 
-async function triggerHeldSource(app, server, offsetMs, expectedCount) {
+async function triggerHeldSource(app, server, offsetMs, expectedCount, dataDir) {
+  if (dataDir) {
+    setPurpose(dataDir, "source");
+  }
   const hold = server.holdNext();
   await patchClock(app, offsetMs, 0.1);
   await waitFor(
@@ -828,7 +847,7 @@ test("POL-SOURCE-AUTO-002 关闭/撤销/聊天/锁屏取消迟到响应且不发
     await setAnalysis(page, true);
 
     // 关分析开关：迟到响应不发布。
-    const first = await triggerHeldSource(app, ctx.server, 31 * 60 * 1000, 1);
+    const first = await triggerHeldSource(app, ctx.server, 31 * 60 * 1000, 1, ctx.dataDir);
     await setAnalysis(page, false);
     first.release();
     await delay(600);
@@ -844,7 +863,7 @@ test("POL-SOURCE-AUTO-002 关闭/撤销/聊天/锁屏取消迟到响应且不发
     assert.equal(ctx.server.sourceRecords.length, afterReenable, "重新开启不得立即补抽");
 
     // 撤销授权：迟到响应不发布。
-    const second = await triggerHeldSource(app, ctx.server, 3 * 60 * 60 * 1000 + 6 * 60 * 1000, 2);
+    const second = await triggerHeldSource(app, ctx.server, 3 * 60 * 60 * 1000 + 6 * 60 * 1000, 2, ctx.dataDir);
     const grant = readDb(ctx.dataDir).grants.find(
       (item) => item.provider === "claude-code" && item.status === "active",
     );
@@ -864,7 +883,7 @@ test("POL-SOURCE-AUTO-002 关闭/撤销/聊天/锁屏取消迟到响应且不发
 
     // 重新授权后用聊天取消；显式聊天不消耗自动预算。
     await authorizeDefault(page);
-    const third = await triggerHeldSource(app, ctx.server, 5 * 60 * 60 * 1000 + 11 * 60 * 1000, 3);
+    const third = await triggerHeldSource(app, ctx.server, 5 * 60 * 60 * 1000 + 11 * 60 * 1000, 3, ctx.dataDir);
     const chatOpen = await page.evaluate(() => window.bayperChat.openChat("rin"));
     assert.equal(chatOpen.ok, true);
     third.release();
@@ -893,7 +912,7 @@ test("POL-SOURCE-AUTO-002 关闭/撤销/聊天/锁屏取消迟到响应且不发
     );
 
     // 锁屏取消；解锁后也不立即补抽。
-    const fourth = await triggerHeldSource(app, ctx.server, 7 * 60 * 60 * 1000 + 16 * 60 * 1000, 4);
+    const fourth = await triggerHeldSource(app, ctx.server, 7 * 60 * 60 * 1000 + 16 * 60 * 1000, 4, ctx.dataDir);
     await app.evaluate(({ powerMonitor }) => powerMonitor.emit("lock-screen"));
     fourth.release();
     await delay(600);
@@ -983,6 +1002,7 @@ test("POL-SOURCE-AUTO-002b 聊天中锁屏与解锁叠加，关闭聊天后才�
     const unlocked = await page.evaluate(() => window.bayper.getSystemStatus());
     assert.equal(unlocked.ok, true);
     assert.equal(unlocked.paused, false);
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, 31 * 60 * 1000, 0.1);
     await delay(1500);
     assert.equal(ctx.server.sourceRecords.length, 0, "解锁但仍在聊天时不得恢复来源机会");
@@ -996,6 +1016,7 @@ test("POL-SOURCE-AUTO-002b 聊天中锁屏与解锁叠加，关闭聊天后才�
     assert.equal(ctx.server.sourceRecords.length, afterCloseCount, "关闭聊天不得立即补抽");
 
     // 全部原因解除后从下一个机会窗口恢复，只处理一份来源。
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, 62 * 60 * 1000, 0.1);
     await waitFor(
       () => ctx.server.sourceRecords.length === 1,
@@ -1121,6 +1142,7 @@ test("POL-SOURCE-AUTO-002c 系统暂停取消在途聊天但保留会话与互�
     const unlockedSnapshot = await page.evaluate(() => window.bayper.getSnapshot());
     assert.equal(unlockedSnapshot.snapshot.companionship.interaction?.characterId, "rin");
     assert.equal(unlockedSnapshot.snapshot.companionship.current?.mode, "interacting");
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, 31 * 60 * 1000, 0.1);
     await delay(1500);
     assert.equal(ctx.server.sourceRecords.length, 0, "解锁但仍在聊天时不得恢复来源机会");
@@ -1138,6 +1160,7 @@ test("POL-SOURCE-AUTO-002c 系统暂停取消在途聊天但保留会话与互�
     await delay(900);
     assert.equal(ctx.server.sourceRecords.length, afterCloseCount, "关闭聊天不得立即补抽");
 
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, 62 * 60 * 1000, 0.1);
     await waitFor(
       () => ctx.server.sourceRecords.length === 1,
@@ -1203,6 +1226,7 @@ test("POL-SOURCE-AUTO-003 多目录轮转、删除/改写/坏文件与重启保�
       (minutes) => minutes * 60 * 1000,
     );
     for (let index = 0; index < offsets.length; index += 1) {
+      setPurpose(ctx.dataDir, "source");
       await patchClock(app, offsets[index], 0.1);
       await waitFor(
         () => ctx.server.sourceRecords.length >= index + 1,
@@ -1227,6 +1251,7 @@ test("POL-SOURCE-AUTO-003 多目录轮转、删除/改写/坏文件与重启保�
     await deleteMemoryByMarker(page, deletedMarker);
     const deletedFile = markerByFile[deletedMarker];
     setCursor(ctx.dataDir, activeGrantId(ctx.dataDir, deletedFile.provider), deletedFile.relativePath);
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, offsets[3] + 2 * 60 * 60 * 1000 + 5 * 60 * 1000, 0.1);
     await delay(1500);
     assert.equal(ctx.server.sourceRecords.length, 4, "删除后的同源不得重新请求");
@@ -1250,6 +1275,7 @@ test("POL-SOURCE-AUTO-003 多目录轮转、删除/改写/坏文件与重启保�
       })}\n`,
     );
     setCursor(ctx.dataDir, activeGrantId(ctx.dataDir, editedFile.provider), editedFile.relativePath);
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, offsets[3] + 4 * 60 * 60 * 1000 + 10 * 60 * 1000, 0.1);
     await delay(1500);
     assert.equal(ctx.server.sourceRecords.length, 4, "改写区域不得重新请求");
@@ -1260,11 +1286,13 @@ test("POL-SOURCE-AUTO-003 多目录轮转、删除/改写/坏文件与重启保�
     // 将游标放在 Codex 授权目录的最后一份文件，使下一份候选是 Claude 的坏文件。
     const codexGrant = activeGrantId(ctx.dataDir, "codex");
     setCursor(ctx.dataDir, codexGrant, codexFiles.R004.relativePath);
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, offsets[3] + 6 * 60 * 60 * 1000 + 15 * 60 * 1000, 0.1);
     await delay(1500);
     assert.equal(ctx.server.sourceRecords.length, 4, "坏文件不得发模型请求");
     const afterBadCursor = readDb(ctx.dataDir).cursor;
     assert.equal(afterBadCursor?.relativePath, "bad.jsonl", "坏文件应被选择并推进游标");
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, offsets[3] + 8 * 60 * 60 * 1000 + 20 * 60 * 1000, 0.1);
     await delay(1500);
     const nextCursor = readDb(ctx.dataDir).cursor;
@@ -1338,6 +1366,7 @@ test("POL-SOURCE-AUTO-005 满额目录不饿死后续目录，目录与文件游
 
     // 从满额目录第一份文件之后继续；旧聚合候选算法只会继续 A 的第二份。
     setCursor(ctx.dataDir, fullId, "full-000.jsonl");
+    setPurpose(ctx.dataDir, "source");
     await setAnalysis(page, true);
     await patchClock(app, 31 * 60 * 1000, 0.1);
     await waitFor(
@@ -1373,6 +1402,7 @@ test("POL-SOURCE-AUTO-005 满额目录不饿死后续目录，目录与文件游
     assert.equal(db.memory.length, 1);
 
     // 从 B 之后继续轮转回 A，并使用 A 自己的文件游标（不是重新从第一份开始）。
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, 3 * 60 * 60 * 1000 + 6 * 60 * 1000, 0.1);
     await waitFor(
       () => ctx.server.sourceRecords.length === 2,
@@ -1387,6 +1417,7 @@ test("POL-SOURCE-AUTO-005 满额目录不饿死后续目录，目录与文件游
     // 空目录也推进游标，不会永久停在空目录或阻止后续目录。
     const filesBeforeEmpty = readDb(ctx.dataDir).cursor.files;
     setCursor(ctx.dataDir, emptyId, "", filesBeforeEmpty);
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, 5 * 60 * 60 * 1000 + 11 * 60 * 1000, 0.1);
     await waitFor(
       () => readDb(ctx.dataDir).cursor?.directoryId !== emptyId,
@@ -1422,6 +1453,7 @@ test("POL-SOURCE-AUTO-004a 模型凭据失效时不发送", { timeout: 60000 }, 
     const { app, page } = launched;
     await authorizeDefault(page);
     await setAnalysis(page, true);
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, 31 * 60 * 1000, 0.1);
     await delay(1800);
     const db = readDb(ctx.dataDir);
@@ -1457,6 +1489,7 @@ test("POL-SOURCE-AUTO-004a2 模型配置缺失时不发送", { timeout: 60000 },
     const { app, page } = launched;
     await authorizeDefault(page);
     await setAnalysis(page, true);
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, 31 * 60 * 1000, 0.1);
     await delay(1800);
     assert.equal(ctx.server.sourceRecords.length, 0, "模型缺失不得读取或发送");
@@ -1487,6 +1520,7 @@ test("POL-SOURCE-AUTO-004b 模型 HTTP 失败只消耗一次已发送尝试且�
     await authorizeDefault(page);
     await setAnalysis(page, true);
     ctx.server.enqueueFailure();
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, 31 * 60 * 1000, 0.1);
     await waitFor(() => ctx.server.sourceRecords.length === 1, 15000, "失败请求未发出");
     await delay(1200);
@@ -1523,6 +1557,7 @@ test("POL-SOURCE-AUTO-004c 预算耗尽时不发送", { timeout: 60000 }, async 
     seedSentBudget(ctx.dataDir, "rin", Date.now() + 30 * 60 * 1000);
     launched = await launchApp(ctx, { onboarding: false });
     const { app, page } = launched;
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, 31 * 60 * 1000, 0.1);
     await delay(1800);
     assert.equal(ctx.server.sourceRecords.length, 0, "预算耗尽不得发模型请求");
@@ -1558,6 +1593,7 @@ test("POL-SOURCE-AUTO-004d 无合资格角色时不发送", { timeout: 60000 }, 
     setEnergy(ctx.dataDir, "rin", 10);
     launched = await launchApp(ctx, { onboarding: false });
     const { app, page } = launched;
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, 31 * 60 * 1000, 0.1);
     await delay(1800);
     assert.equal(ctx.server.sourceRecords.length, 0, "无合资格角色不得发模型请求");
@@ -1588,6 +1624,7 @@ test("POL-SOURCE-AUTO-004e 退出期间迟到 HTTP 不落库且有界退出", { 
     await authorizeDefault(page);
     await setAnalysis(page, true);
     const hold = ctx.server.holdNext();
+    setPurpose(ctx.dataDir, "source");
     await patchClock(app, 31 * 60 * 1000, 0.1);
     await waitFor(() => ctx.server.sourceRecords.length === 1, 15000, "退出前请求未发出");
     const exit = await closeApp(app);

@@ -1,8 +1,8 @@
 /* S04e 把已授权来源分析接入应用级自动机会。
    一个机会只选择一个授权目录中的一份会话并调用 source-analysis 一次；
    不扫描全部正文、不重试、不另建调度器。游标只保存目录 ID、相对路径与
-   各授权目录的最小文件位置，用于目录和目录内文件的边界轮转。 */
-const { createAutomaticOpportunities } = require("./automatic-opportunities.cjs");
+   各授权目录的最小文件位置，用于目录和目录内文件的边界轮转。
+   本模块只做来源用途执行器；30 分钟机会与用途轮转由 main 统一持有。 */
 const { AppError } = require("./errors.cjs");
 
 const MIN_ENERGY = 30;
@@ -17,8 +17,6 @@ function createSourceAutomation({
   analysis,
   isBlocked = () => false,
   isModelConfigured = () => true,
-  now = () => Date.now(),
-  random = () => Math.random(),
 } = {}) {
   if (
     !store ||
@@ -246,7 +244,7 @@ function createSourceAutomation({
     };
   }
 
-  async function runActivity({ characterId, requestId, isEligible: opportunityEligible }) {
+  async function executeActivity({ characterId, requestId, isEligible: opportunityEligible }) {
     if (disposed) {
       return { status: "skipped", reason: "DISPOSED" };
     }
@@ -287,39 +285,15 @@ function createSourceAutomation({
     };
   }
 
-  const opportunities = createAutomaticOpportunities({
-    store,
-    companionship,
-    now,
-    random,
-    runActivity: (payload) => {
-      const run = runActivity(payload);
-      activeRun = run;
-      return run.finally(() => {
-        if (activeRun === run) {
-          activeRun = null;
-        }
-      });
-    },
-    cancelActivity: () => {
-      analysis.cancel();
-    },
-  });
-
-  function evaluate() {
-    return opportunities.evaluate();
-  }
-
-  function pause() {
-    analysis.cancel();
-    return opportunities.pause();
-  }
-
-  function resume() {
-    if (blockedNow()) {
-      return false;
-    }
-    return opportunities.resume();
+  /* 自动机会仍是一机会一次来源分析；运行句柄只用于退出等待，不另建调度器。 */
+  function runActivity(payload) {
+    const run = executeActivity(payload);
+    activeRun = run;
+    return run.finally(() => {
+      if (activeRun === run) {
+        activeRun = null;
+      }
+    });
   }
 
   /* 关闭分析或撤销授权时取消当前在途分析；机会时间表不因开关变化重置。 */
@@ -332,7 +306,6 @@ function createSourceAutomation({
       return false;
     }
     disposed = true;
-    opportunities.dispose();
     analysis.cancel();
     analysis.dispose();
     if (activeRun) {
@@ -344,7 +317,7 @@ function createSourceAutomation({
     return true;
   }
 
-  return { evaluate, pause, resume, cancelActive, dispose, isEligible };
+  return { runActivity, cancelActive, dispose, isEligible };
 }
 
 module.exports = { createSourceAutomation, CURSOR_KEY };

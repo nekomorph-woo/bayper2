@@ -163,8 +163,37 @@ function buildDesktopPresentation(characterId, displayName) {
   }
 }
 
+/* 已发布活动动作的能力边界。候选素材未获 Codex 播放审查前不得在此标记可用，
+   否则会以 idle 或状态标签冒充正式日常/探索。 */
+const ACTIVITY_SUPPORT = Object.freeze({
+  daily: {
+    available: false,
+    reason: "ACTIVITY_ACTION_UNAVAILABLE",
+    candidate: "stretch-pixel-v2",
+    note: "日常正式动作素材未发布，自动日常暂不启动。",
+  },
+  exploration: {
+    available: true,
+    degraded: true,
+    reason: "DEPARTURE_ANIMATION_MISSING",
+    note: "探索出发/返回动作素材未发布，当前直接切换同屏并保留进度。",
+  },
+});
+
+function getActivitySupport(characterId, kind) {
+  const support = ACTIVITY_SUPPORT[kind];
+  if (!support) {
+    return { available: false, reason: "INVALID_ACTIVITY_KIND", note: "未知活动类型。" };
+  }
+  return {
+    ...support,
+    candidate: support.candidate && characterId === "rin" ? support.candidate : null,
+  };
+}
+
 module.exports = {
   buildDesktopPresentation,
+  getActivitySupport,
   getRinAnimations,
   getHuAnimations,
   BODY_TARGET_PT,
