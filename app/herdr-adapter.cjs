@@ -95,6 +95,7 @@ function normalizeSnapshot(snapshot) {
 function createHerdrAdapter({
   registration, ledger,
   requestTimeoutMs = 3000, setTimer = setTimeout, clearTimer = clearTimeout,
+  verifyEndpoint = null,
 } = {}) {
   if (!registration || typeof registration !== "object") throw invalid("需要已校验的登记对象。");
   const instanceId = requiredText(registration.instanceId, "instanceId");
@@ -110,6 +111,9 @@ function createHerdrAdapter({
   }
   if (typeof setTimer !== "function" || typeof clearTimer !== "function") {
     throw invalid("需要显式定时器。");
+  }
+  if (verifyEndpoint !== null && typeof verifyEndpoint !== "function") {
+    throw invalid("verifyEndpoint 必须是函数或空值。");
   }
   const io = createHerdrTransport({ socketPath, requestTimeoutMs });
   const appRunId = requiredText(ledger.appRunId, "ledger.appRunId");
@@ -254,6 +258,7 @@ function createHerdrAdapter({
   }
 
   async function openSubscription() {
+    await assertEndpoint();
     const subscriptionPanes = panes.slice();
     const subscriptions = [];
     const meta = [];
@@ -308,6 +313,7 @@ function createHerdrAdapter({
   }
 
   async function fetchSnapshot() {
+    await assertEndpoint();
     snapshotController = new AbortController();
     try {
       const response = await io.request("session.snapshot", {}, {
@@ -449,6 +455,19 @@ function createHerdrAdapter({
     noteDisconnected();
   }
 
+  async function assertEndpoint() {
+    if (!verifyEndpoint) return;
+    let current = false;
+    try {
+      current = await verifyEndpoint();
+    } catch {
+      current = false;
+    }
+    if (!current) {
+      throw new AppError("HERDR_STALE_ENDPOINT", "Herdr 端点身份已变化。");
+    }
+  }
+
   async function connect(reconnecting) {
     if (disposed) return { started: false, reason: "DISPOSED" };
     if (connecting) return { started: false, reason: "BUSY" };
@@ -472,6 +491,7 @@ function createHerdrAdapter({
         return { started: false, reason: "STOPPED_RUN" };
       }
       try {
+        await assertEndpoint();
         await io.request("ping", {}, { timeoutMs: requestTimeoutMs });
         if (disposed) return { started: false, reason: "DISPOSED" };
         /* 断联重连先取一次无订阅窗口的初始快照，失败时不登记，避免退避尝试
