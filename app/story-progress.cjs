@@ -580,7 +580,11 @@ function createStoryProgress({ db, catalog, now = () => new Date() }) {
     return progressPublic(statements.getProgress.get(key));
   }
 
-  return { selectNextStories, recordNode, getProgress };
+  function listProgress() {
+    return statements.listProgress.all().map(progressPublic);
+  }
+
+  return { selectNextStories, recordNode, getProgress, listProgress };
 }
 
 module.exports = { createStoryProgress };
