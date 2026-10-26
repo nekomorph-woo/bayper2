@@ -628,6 +628,71 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     return input.inTransaction === true ? applyForget() : store.transaction(applyForget);
   }
 
+  /* 用户明确“这件事只让你记得”：保留选中角色当前持有内容，清除其他持有者
+     同一事实键的正文与索引，并以无正文控制阻止旧来源重学、历史转告与再次分享。
+     保留者只递增版本使在途操作失效，不改动来源与讲述链；因此原本只是听说的
+     记忆在原始持有者被清除后，仍能说明最初来源和直接讲述者。 */
+  function keepExclusive(input = {}) {
+    const characterId = characterIdOf(input.characterId);
+    const nowMs = resolveNow(input.nowMs);
+    const applyKeepExclusive = () => {
+      if (input.entryId === undefined) {
+        throw new MemoryError("INVALID_INPUT", "必须指定选中的记忆。");
+      }
+      const { factKey } = factForSelectedChange(input, characterId);
+      const held = store.getEntryByFact(characterId, factKey);
+      if (!held) {
+        throw new MemoryError("FACT_NOT_HELD", "当前角色没有该事实。");
+      }
+      const hash = factKeyHash(factKey);
+      const others = store
+        .listEntriesByFact(factKey)
+        .filter((entry) => entry.characterId !== characterId);
+
+      // 已只剩保留者且禁分享已生效：重复确认幂等，不制造新版本或新控制。
+      if (others.length === 0 && store.hasShareControl(hash)) {
+        return {
+          factKeyHash: hash,
+          retainedEntryId: held.id,
+          retainedCharacterId: characterId,
+          version: held.version,
+          cleared: 0,
+          clearedCharacters: [],
+          alreadyExclusive: true,
+          blockedSharing: true,
+          contextVersions: {},
+        };
+      }
+
+      for (const entry of others) {
+        store.deleteEntry(entry.id);
+        store.addSourceControl(entry.characterId, sourceIdHash(entry.sourceId), nowMs);
+        store.addForgetControl(entry.characterId, hash, nowMs);
+      }
+      const retained = { ...held, version: held.version + 1, updatedAt: nowMs };
+      store.updateEntry(retained, tokenizeForIndex(retained.body));
+      store.addShareControl(hash, nowMs);
+
+      const affected = new Set([characterId, ...others.map((entry) => entry.characterId)]);
+      const contextVersions = {};
+      for (const holder of [...affected].sort()) {
+        contextVersions[holder] = store.bumpContextVersion(holder, nowMs);
+      }
+      return {
+        factKeyHash: hash,
+        retainedEntryId: retained.id,
+        retainedCharacterId: characterId,
+        version: retained.version,
+        cleared: others.length,
+        clearedCharacters: [...new Set(others.map((entry) => entry.characterId))].sort(),
+        alreadyExclusive: false,
+        blockedSharing: true,
+        contextVersions,
+      };
+    };
+    return store.transaction(applyKeepExclusive);
+  }
+
   /* 指定分享只复制明确列出的条目，保留原讲述者与派生链；
      B 再转发 A 的派生内容会被 origin/derived 检查拒绝。用户明确转告属于 S03b
      的独立业务入口，不与这里的自动/派生分享权限混用。
@@ -948,6 +1013,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     searchMemories,
     correct,
     forget,
+    keepExclusive,
     share,
     relay,
     restrictSharing,

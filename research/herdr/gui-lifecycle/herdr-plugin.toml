@@ -5,7 +5,7 @@
 # version 与根目录 VERSION 保持同步，仅为实验产物的版本标注。
 id = "bayper.research.gui"
 name = "Bayper Research GUI Lifecycle"
-version = "0.1.155"
+version = "0.1.156"
 description = "只用于 Bayper 隔离技术实验的 GUI startup/action fixture"
 min_herdr_version = "0.9.5"
 platforms = ["macos"]
