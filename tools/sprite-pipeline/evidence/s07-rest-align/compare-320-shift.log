@@ -1,0 +1,12 @@
+# 对照: 旧 320x384 sit-pixel-v2 与新 256x384 逐帧按整体平移 (-32,+6) 比较
+ground old/new = {'x': 160, 'y': 370} {'x': 128, 'y': 376} shift = (-32, 6)
+frame 0: diff_pixels=0 diff_bbox=None same=True
+frame 1: diff_pixels=0 diff_bbox=None same=True
+frame 2: diff_pixels=0 diff_bbox=None same=True
+frame 3: diff_pixels=0 diff_bbox=None same=True
+frame 4: diff_pixels=0 diff_bbox=None same=True
+frame 5: diff_pixels=0 diff_bbox=None same=True
+frame 6: diff_pixels=0 diff_bbox=None same=True
+frame 7: diff_pixels=0 diff_bbox=None same=True
+ALL_FRAMES_PURE_SHIFT = True
+# exit=0

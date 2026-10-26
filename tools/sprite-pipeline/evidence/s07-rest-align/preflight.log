@@ -1,0 +1,23 @@
+# 命令: python3 -B - <<PY  (只读调用既有 sprite_pipeline 函数，不写素材)
+# 预算：frame-size=256x384, padding=2, neutral-height=298, regions 原样
+source_sha256 = d395234de2392ed9184bbb9745a307a41b4c2e9e9e67caa17576f8ee0c5d06b5
+regions_sha256 = a7696d50f784d767e69c17db57311129ac95776add5e6dc5c6e0d0ab4498f1bd
+frame0_source_height = 427
+scale_exact = 0.6978922716627635 scale_6 = 0.697892
+max_left/right/above/below = 130 170 426 9
+padding=2 capacities = (126, 126, 380)
+scaled extents = left 90.726 right 118.642 vertical 303.583
+explicit_layout anchor = {'x': 128, 'y': 376}
+expected anchor = {x: 128, y: 376} -> True
+formula: round(384 - 2 - 9 * 0.697892) = 376
+per-frame predicted paste bounds at padding=2:
+ frame 0: scaled=179x298 paste=(57,79) right=236 bottom=377 inside=True
+ frame 1: scaled=183x280 paste=(51,96) right=234 bottom=376 inside=True
+ frame 2: scaled=188x264 paste=(46,114) right=234 bottom=378 inside=True
+ frame 3: scaled=183x221 paste=(44,156) right=227 bottom=377 inside=True
+ frame 4: scaled=195x232 paste=(52,150) right=247 bottom=382 inside=True
+ frame 5: scaled=198x229 paste=(48,151) right=246 bottom=380 inside=True
+ frame 6: scaled=197x228 paste=(40,152) right=237 bottom=380 inside=True
+ frame 7: scaled=192x223 paste=(37,155) right=229 bottom=378 inside=True
+ALL_FRAMES_FIT = True
+# exit=0

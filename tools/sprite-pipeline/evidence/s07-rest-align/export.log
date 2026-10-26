@@ -1,0 +1,15 @@
+# 命令:
+python3 -B tools/sprite-pipeline/sprite_pipeline.py \
+  --source assets/characters/rin/source/sit-pixel-v2.png \
+  --columns 4 --rows 2 \
+  --regions-json tools/sprite-pipeline/data/rin-sit-v2-regions.json \
+  --frame-size 256x384 --alpha-threshold 16 --padding 2 \
+  --neutral-height 298 \
+  --durations-ms 300,150,160,180,180,180,200,600 \
+  --no-loop \
+  --output assets/characters/rin/animations/sit-pixel-v2-canvas256
+# 开始:
+UTC 2026-10-26T22:52:14Z
+已导出 8 帧，统一缩放 0.697892，输出目录 assets/characters/rin/animations/sit-pixel-v2-canvas256
+# exit=0
+UTC 2026-10-26T22:52:15Z

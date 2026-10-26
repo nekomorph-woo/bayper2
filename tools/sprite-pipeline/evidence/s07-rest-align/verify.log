@@ -1,0 +1,107 @@
+# 命令: python3 -B - <<PY (只读校验，输出 verify.json)
+PASS 帧数 :: 8
+PASS 画布 :: {'width': 256, 'height': 384}
+PASS padding :: 2
+PASS 地面锚 :: {'x': 128, 'y': 376}
+PASS neutral-height :: 298
+PASS 统一缩放字段 :: 0.697892
+PASS nearest :: nearest
+PASS loop=false :: False
+PASS 时长 :: [300, 150, 160, 180, 180, 180, 200, 600]
+PASS atlas 尺寸 :: {'file': 'atlas.png', 'columns': 4, 'rows': 2, 'frame_size': {'width': 256, 'height': 384}}
+PASS 源 SHA 未变 :: d395234de2392ed9184bbb9745a307a41b4c2e9e9e67caa17576f8ee0c5d06b5
+PASS manifest 源 SHA 一致 :: d395234de2392ed9184bbb9745a307a41b4c2e9e9e67caa17576f8ee0c5d06b5
+PASS regions sourceSha 一致 :: d395234de2392ed9184bbb9745a307a41b4c2e9e9e67caa17576f8ee0c5d06b5
+PASS regions 配置 SHA 一致 :: a7696d50f784d767e69c17db57311129ac95776add5e6dc5c6e0d0ab4498f1bd
+PASS frame 0 源 bbox :: {'x': 90, 'y': 86, 'width': 257, 'height': 427} vs {'x': 90, 'y': 86, 'width': 257, 'height': 427}
+PASS frame 0 源 anchor :: {'x': 192, 'y': 512} vs {'x': 192, 'y': 512}
+PASS frame 0 源区域不触边 :: region bbox=(90, 86, 347, 513), region=384x576
+PASS frame 1 源 bbox :: {'x': 466, 'y': 111, 'width': 262, 'height': 401} vs {'x': 466, 'y': 111, 'width': 262, 'height': 401}
+PASS frame 1 源 anchor :: {'x': 576, 'y': 512} vs {'x': 576, 'y': 512}
+PASS frame 1 源区域不触边 :: region bbox=(82, 111, 344, 512), region=384x576
+PASS frame 2 源 bbox :: {'x': 842, 'y': 136, 'width': 270, 'height': 378} vs {'x': 842, 'y': 136, 'width': 270, 'height': 378}
+PASS frame 2 源 anchor :: {'x': 960, 'y': 512} vs {'x': 960, 'y': 512}
+PASS frame 2 源区域不触边 :: region bbox=(74, 136, 344, 514), region=384x576
+PASS frame 3 源 bbox :: {'x': 1223, 'y': 197, 'width': 262, 'height': 317} vs {'x': 1223, 'y': 197, 'width': 262, 'height': 317}
+PASS frame 3 源 anchor :: {'x': 1344, 'y': 512} vs {'x': 1344, 'y': 512}
+PASS frame 3 源区域不触边 :: region bbox=(71, 197, 333, 514), region=384x576
+PASS frame 4 源 bbox :: {'x': 83, 'y': 638, 'width': 279, 'height': 333} vs {'x': 83, 'y': 638, 'width': 279, 'height': 333}
+PASS frame 4 源 anchor :: {'x': 192, 'y': 962} vs {'x': 192, 'y': 962}
+PASS frame 4 源区域不触边 :: region bbox=(83, 62, 362, 395), region=384x448
+PASS frame 5 源 bbox :: {'x': 461, 'y': 640, 'width': 284, 'height': 328} vs {'x': 461, 'y': 640, 'width': 284, 'height': 328}
+PASS frame 5 源 anchor :: {'x': 576, 'y': 962} vs {'x': 576, 'y': 962}
+PASS frame 5 源区域不触边 :: region bbox=(77, 64, 361, 392), region=384x448
+PASS frame 6 源 bbox :: {'x': 834, 'y': 641, 'width': 282, 'height': 327} vs {'x': 834, 'y': 641, 'width': 282, 'height': 327}
+PASS frame 6 源 anchor :: {'x': 960, 'y': 962} vs {'x': 960, 'y': 962}
+PASS frame 6 源区域不触边 :: region bbox=(66, 65, 348, 392), region=384x448
+PASS frame 7 源 bbox :: {'x': 1214, 'y': 645, 'width': 275, 'height': 319} vs {'x': 1214, 'y': 645, 'width': 275, 'height': 319}
+PASS frame 7 源 anchor :: {'x': 1344, 'y': 962} vs {'x': 1344, 'y': 962}
+PASS frame 7 源区域不触边 :: region bbox=(62, 69, 337, 388), region=384x448
+PASS scale=298/第0帧高 :: 427 * 0.697892 = 297.999884
+PASS frame 0 画布 :: 256x384
+PASS frame 0 共用缩放尺寸 :: {'width': 179, 'height': 298} vs 179x298
+PASS frame 0 地面锚映射 :: {'x': 57, 'y': 79} vs {'x': 57, 'y': 79}
+PASS frame 0 输出地面一致 :: {'x': 128, 'y': 376}
+PASS frame 0 可见 alpha 无裁切 :: bbox=(57, 79, 236, 377), 剩余边距 L57/T79/R20/B7
+PASS frame 0 alpha 在 manifest 缩放框内 :: alpha=(57, 79, 236, 377), scaled=(57, 79, 236, 377)
+PASS frame 1 画布 :: 256x384
+PASS frame 1 共用缩放尺寸 :: {'width': 183, 'height': 280} vs 183x280
+PASS frame 1 地面锚映射 :: {'x': 51, 'y': 96} vs {'x': 51, 'y': 96}
+PASS frame 1 输出地面一致 :: {'x': 128, 'y': 376}
+PASS frame 1 可见 alpha 无裁切 :: bbox=(51, 96, 234, 376), 剩余边距 L51/T96/R22/B8
+PASS frame 1 alpha 在 manifest 缩放框内 :: alpha=(51, 96, 234, 376), scaled=(51, 96, 234, 376)
+PASS frame 2 画布 :: 256x384
+PASS frame 2 共用缩放尺寸 :: {'width': 188, 'height': 264} vs 188x264
+PASS frame 2 地面锚映射 :: {'x': 46, 'y': 114} vs {'x': 46, 'y': 114}
+PASS frame 2 输出地面一致 :: {'x': 128, 'y': 376}
+PASS frame 2 可见 alpha 无裁切 :: bbox=(46, 114, 234, 378), 剩余边距 L46/T114/R22/B6
+PASS frame 2 alpha 在 manifest 缩放框内 :: alpha=(46, 114, 234, 378), scaled=(46, 114, 234, 378)
+PASS frame 3 画布 :: 256x384
+PASS frame 3 共用缩放尺寸 :: {'width': 183, 'height': 221} vs 183x221
+PASS frame 3 地面锚映射 :: {'x': 44, 'y': 156} vs {'x': 44, 'y': 156}
+PASS frame 3 输出地面一致 :: {'x': 128, 'y': 376}
+PASS frame 3 可见 alpha 无裁切 :: bbox=(44, 156, 227, 377), 剩余边距 L44/T156/R29/B7
+PASS frame 3 alpha 在 manifest 缩放框内 :: alpha=(44, 156, 227, 377), scaled=(44, 156, 227, 377)
+PASS frame 4 画布 :: 256x384
+PASS frame 4 共用缩放尺寸 :: {'width': 195, 'height': 232} vs 195x232
+PASS frame 4 地面锚映射 :: {'x': 52, 'y': 150} vs {'x': 52, 'y': 150}
+PASS frame 4 输出地面一致 :: {'x': 128, 'y': 376}
+PASS frame 4 可见 alpha 无裁切 :: bbox=(52, 150, 247, 382), 剩余边距 L52/T150/R9/B2
+PASS frame 4 alpha 在 manifest 缩放框内 :: alpha=(52, 150, 247, 382), scaled=(52, 150, 247, 382)
+PASS frame 5 画布 :: 256x384
+PASS frame 5 共用缩放尺寸 :: {'width': 198, 'height': 229} vs 198x229
+PASS frame 5 地面锚映射 :: {'x': 48, 'y': 151} vs {'x': 48, 'y': 151}
+PASS frame 5 输出地面一致 :: {'x': 128, 'y': 376}
+PASS frame 5 可见 alpha 无裁切 :: bbox=(48, 151, 246, 380), 剩余边距 L48/T151/R10/B4
+PASS frame 5 alpha 在 manifest 缩放框内 :: alpha=(48, 151, 246, 380), scaled=(48, 151, 246, 380)
+PASS frame 6 画布 :: 256x384
+PASS frame 6 共用缩放尺寸 :: {'width': 197, 'height': 228} vs 197x228
+PASS frame 6 地面锚映射 :: {'x': 40, 'y': 152} vs {'x': 40, 'y': 152}
+PASS frame 6 输出地面一致 :: {'x': 128, 'y': 376}
+PASS frame 6 可见 alpha 无裁切 :: bbox=(40, 152, 237, 380), 剩余边距 L40/T152/R19/B4
+PASS frame 6 alpha 在 manifest 缩放框内 :: alpha=(40, 152, 237, 380), scaled=(40, 152, 237, 380)
+PASS frame 7 画布 :: 256x384
+PASS frame 7 共用缩放尺寸 :: {'width': 192, 'height': 223} vs 192x223
+PASS frame 7 地面锚映射 :: {'x': 37, 'y': 155} vs {'x': 37, 'y': 155}
+PASS frame 7 输出地面一致 :: {'x': 128, 'y': 376}
+PASS frame 7 可见 alpha 无裁切 :: bbox=(37, 155, 229, 378), 剩余边距 L37/T155/R27/B6
+PASS frame 7 alpha 在 manifest 缩放框内 :: alpha=(37, 155, 229, 378), scaled=(37, 155, 229, 378)
+PASS idle 画布 256x384 :: manifest=256x384, png=256x384
+PASS idle neutral=298 且首帧高 298 :: neutral=298, frame0=298
+PASS idle 地面/脚锚统一为 128,376 :: uniform=True, anchors=[{'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}]
+PASS wave 画布 256x384 :: manifest=256x384, png=256x384
+PASS wave neutral=298 且首帧高 298 :: neutral=298, frame0=298
+PASS wave 地面/脚锚统一为 128,376 :: uniform=True, anchors=[{'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}]
+PASS stretch 画布 256x384 :: manifest=256x384, png=256x384
+PASS stretch neutral=298 且首帧高 298 :: neutral=298, frame0=298
+PASS stretch 地面/脚锚统一为 128,376 :: uniform=True, anchors=[{'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}, {'x': 128, 'y': 376}]
+PASS 四动作共同可见框非空 :: (39, 79, 235, 376)
+PASS 四动作并集可见框在 256x384 内 :: (32, 68, 247, 382)
+PASS 四动作地面均为 y=376 :: sit ground=(128,376); base anchors=(128,376)
+PASS 128pt 中性身高比例 :: display-scale=128/298=0.429530, 298px=128.0000pt
+
+四动作共同可见框 px = {'x': 39, 'y': 79, 'width': 196, 'height': 297}
+四动作并集可见框 px = {'x': 32, 'y': 68, 'width': 215, 'height': 314}
+display-scale=128/298=0.429530, canvas=109.9597x164.9396 pt
+FAILURES = 0
+# exit=0

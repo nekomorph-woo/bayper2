@@ -1,0 +1,59 @@
+{
+  "old": "assets/characters/rin/animations/sit-pixel-v2",
+  "new": "assets/characters/rin/animations/sit-pixel-v2-canvas256",
+  "shift": {
+    "dx": -32,
+    "dy": 6
+  },
+  "frames": [
+    {
+      "frame": 0,
+      "diff_bbox": null,
+      "diff_pixels": 0,
+      "same": true
+    },
+    {
+      "frame": 1,
+      "diff_bbox": null,
+      "diff_pixels": 0,
+      "same": true
+    },
+    {
+      "frame": 2,
+      "diff_bbox": null,
+      "diff_pixels": 0,
+      "same": true
+    },
+    {
+      "frame": 3,
+      "diff_bbox": null,
+      "diff_pixels": 0,
+      "same": true
+    },
+    {
+      "frame": 4,
+      "diff_bbox": null,
+      "diff_pixels": 0,
+      "same": true
+    },
+    {
+      "frame": 5,
+      "diff_bbox": null,
+      "diff_pixels": 0,
+      "same": true
+    },
+    {
+      "frame": 6,
+      "diff_bbox": null,
+      "diff_pixels": 0,
+      "same": true
+    },
+    {
+      "frame": 7,
+      "diff_bbox": null,
+      "diff_pixels": 0,
+      "same": true
+    }
+  ],
+  "all_pure_shift": true
+}

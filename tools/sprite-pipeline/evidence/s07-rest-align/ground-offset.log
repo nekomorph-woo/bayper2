@@ -1,0 +1,12 @@
+# 修正并补充 ground 偏移口径：区分“bbox 排他底边”和“实际可见行”
+frame  last_visible_row  rows_below_ground  below_x_range  below_pixel_count
+  0        376                 0                 None          0
+  1        375                 0                 None          0
+  2        377                 1                 [136, 153]          18
+  3        376                 0                 None          0
+  4        381                 5                 [143, 187]          77
+  5        379                 3                 [170, 189]          49
+  6        379                 3                 [162, 179]          47
+  7        377                 1                 [170, 179]          10
+updated: tools/sprite-pipeline/evidence/s07-rest-align/verify.json
+# exit=0

@@ -1,0 +1,10 @@
+# 锚点线 y=376 以下实际可见像素统计（alpha>16）
+frame 0: count=33, x=(97, 159), y=(376, 376)
+frame 1: count=0, x=None, y=None
+frame 2: count=63, x=(105, 156), y=(376, 377)
+frame 3: count=18, x=(124, 141), y=(376, 376)
+frame 4: count=108, x=(142, 187), y=(376, 381)
+frame 5: count=75, x=(166, 191), y=(376, 379)
+frame 6: count=71, x=(158, 181), y=(376, 379)
+frame 7: count=28, x=(165, 182), y=(376, 377)
+# exit=0

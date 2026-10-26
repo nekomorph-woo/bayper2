@@ -1,0 +1,21 @@
+# 重复导出哈希对照（第一次 attempt1 vs 第二次 export）
+IDENTICAL: 两次导出逐字节一致
+# 导出后源与配置哈希
+d395234de2392ed9184bbb9745a307a41b4c2e9e9e67caa17576f8ee0c5d06b5  assets/characters/rin/source/sit-pixel-v2.png
+a7696d50f784d767e69c17db57311129ac95776add5e6dc5c6e0d0ab4498f1bd  tools/sprite-pipeline/data/rin-sit-v2-regions.json
+# 产物
+total 5488
+drwxr-xr-x@ 14 chaooswoo  staff     448 Oct 27 06:52 .
+drwxr-xr-x@ 16 chaooswoo  staff     512 Oct 27 06:52 ..
+-rw-r--r--@  1 chaooswoo  staff  600603 Oct 27 06:52 atlas.png
+-rw-r--r--@  1 chaooswoo  staff  508323 Oct 27 06:52 contact-sheet-dark.png
+-rw-r--r--@  1 chaooswoo  staff  522307 Oct 27 06:52 contact-sheet-light.png
+-rw-r--r--@  1 chaooswoo  staff   81045 Oct 27 06:52 frame-00.png
+-rw-r--r--@  1 chaooswoo  staff   77524 Oct 27 06:52 frame-01.png
+-rw-r--r--@  1 chaooswoo  staff   76245 Oct 27 06:52 frame-02.png
+-rw-r--r--@  1 chaooswoo  staff   70609 Oct 27 06:52 frame-03.png
+-rw-r--r--@  1 chaooswoo  staff   75368 Oct 27 06:52 frame-04.png
+-rw-r--r--@  1 chaooswoo  staff   74916 Oct 27 06:52 frame-05.png
+-rw-r--r--@  1 chaooswoo  staff   74392 Oct 27 06:52 frame-06.png
+-rw-r--r--@  1 chaooswoo  staff   73563 Oct 27 06:52 frame-07.png
+-rw-r--r--@  1 chaooswoo  staff    8396 Oct 27 06:52 manifest.json
