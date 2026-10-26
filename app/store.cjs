@@ -7,6 +7,9 @@ const { createCompanionStore } = require("./companion-store.cjs");
 const { createMemoryService } = require("./memory.cjs");
 const { createChatService } = require("./chat.cjs");
 const { createExternalSources } = require("./external-sources.cjs");
+const { createAutomaticBudget } = require("./automatic-budget.cjs");
+const { createSessionSourceReader } = require("./session-sources.cjs");
+const { createSourceAnalysis } = require("./source-analysis.cjs");
 
 const DB_FILE_NAME = "bayper.sqlite3";
 
@@ -51,6 +54,8 @@ function createStore(dataDir, options = {}) {
   const dbPath = path.join(dataDir, DB_FILE_NAME);
   const db = new DatabaseSync(dbPath);
   db.exec("PRAGMA foreign_keys = ON");
+  // 工具有时会短暂打开同一 SQLite 读取；等待其释放锁，超时仍返回真实错误。
+  db.exec("PRAGMA busy_timeout = 2000");
   db.exec(SCHEMA);
   const clock = typeof options.now === "function" ? options.now : () => Date.now();
   const now = () => {
@@ -78,6 +83,24 @@ function createStore(dataDir, options = {}) {
     candidates: options.sources?.candidates ?? [],
     now,
   });
+  // S04e 只在主进程提供分析依赖时组装；不把 db、Key 或许可暴露给 renderer。
+  let automaticBudget = null;
+  let sessionSources = null;
+  let sourceAnalysis = null;
+  if (options.sourceAnalysis) {
+    automaticBudget = createAutomaticBudget({ db, now });
+    sessionSources = createSessionSourceReader({ permissions: externalSources });
+    sourceAnalysis = createSourceAnalysis({
+      db,
+      memory,
+      permissions: externalSources,
+      reader: sessionSources,
+      budget: automaticBudget,
+      getCredentials: options.sourceAnalysis.getCredentials,
+      isEligible: options.sourceAnalysis.isEligible,
+      now,
+    });
+  }
 
   const statements = {
     getModel: db.prepare(
@@ -201,6 +224,9 @@ function createStore(dataDir, options = {}) {
     memory,
     chat,
     externalSources,
+    automaticBudget,
+    sessionSources,
+    sourceAnalysis,
     getModelConfig,
     saveModelConfig,
     getRelationship,

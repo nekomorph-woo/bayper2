@@ -126,6 +126,7 @@ function createSourceSettings({
   dialog,
   getWindow = () => null,
   isRequestActive = () => true,
+  onAccessChanged = () => {},
 } = {}) {
   if (
     !permissions ||
@@ -230,9 +231,10 @@ function createSourceSettings({
       cancelId: 0,
       noLink: true,
       title: "确认目录授权",
-      message: `允许 ${definition.label} 分析这个目录？`,
+      message: `允许 Bayper 分析指定的 ${definition.label} 会话目录？`,
       detail: [
         `来源：${definition.label}`,
+        `执行主体：Bayper`,
         `目录：${before.displayPath}`,
         ...(before.canonicalPath !== before.displayPath
           ? [`实际位置：${before.canonicalPath}`]
@@ -295,17 +297,29 @@ function createSourceSettings({
     return confirmAndGrant(definition, result.filePaths[0]);
   }
 
+  function notifyAccessChanged(reason) {
+    try {
+      onAccessChanged(reason);
+    } catch {
+      // 取消通知失败不能回滚已提交的开关/撤销事实。
+    }
+  }
+
   function setEnabled(enabled) {
     if (typeof enabled !== "boolean") {
       throw new AppError("INVALID_INPUT", "分析开关必须是布尔值。");
     }
     permissions.setEnabled(enabled);
+    if (!enabled) {
+      notifyAccessChanged({ type: "analysis_disabled" });
+    }
     return getState();
   }
 
   function revokeDirectory(grantId) {
     const id = contract(grantId, "授权ID", ID_LIMIT);
     permissions.revokeDirectory(id);
+    notifyAccessChanged({ type: "grant_revoked", grantId: id });
     return getState();
   }
 

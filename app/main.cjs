@@ -18,6 +18,7 @@ const { createOnboardingService, readStoredModelCredentials } = require("./onboa
 const { createCompanionshipService } = require("./companionship.cjs");
 const { createDesktopHost } = require("./desktop-host.cjs");
 const { createSourceSettings, buildDefaultSourceCandidates } = require("./source-settings.cjs");
+const { createSourceAutomation } = require("./source-automation.cjs");
 const { buildDesktopPresentation } = require("./desktop-assets.cjs");
 const { createAppTray } = require("./app-tray.cjs");
 const { createSystemLifecycle } = require("./system-lifecycle.cjs");
@@ -47,6 +48,7 @@ let store = null;
 let onboardingService = null;
 let companionship = null;
 let sourceSettings = null;
+let sourceAutomation = null;
 let desktopHost = null;
 let tray = null;
 let heartbeatTimer = null;
@@ -98,6 +100,10 @@ function startApplication() {
   });
   store = createStore(app.getPath("userData"), {
     sources: { candidates: sourceCandidates },
+    sourceAnalysis: {
+      getCredentials: () => readStoredModelCredentials({ store, safeStorage }),
+      isEligible: (characterId) => sourceAutomation?.isEligible(characterId) ?? false,
+    },
     chat: {
       // 只在应用启动边界恢复崩溃遗留请求；凭据按请求从安全存储解密。
       recoverInterrupted: true,
@@ -116,6 +122,7 @@ function startApplication() {
       Boolean(mainWindow) &&
       !mainWindow.isDestroyed() &&
       mainWindow.isVisible(),
+    onAccessChanged: () => sourceAutomation?.cancelActive(),
   });
 
   onboardingService = createOnboardingService({
@@ -134,6 +141,18 @@ function startApplication() {
   } catch (error) {
     console.error("启动清理互动锁失败：", error?.message ?? error);
   }
+
+  sourceAutomation = createSourceAutomation({
+    store,
+    companionship,
+    permissions: store.externalSources,
+    reader: store.sessionSources,
+    analysis: store.sourceAnalysis,
+    isBlocked: () => Boolean(activeChat) || systemPaused || quitting,
+    isModelConfigured: () => Boolean(store.getModelConfig()),
+    now: () => Date.now(),
+    random: () => Math.random(),
+  });
 
   desktopHost = createDesktopHost({
     dataDir: app.getPath("userData"),
@@ -496,6 +515,9 @@ function startHeartbeat() {
       syncDesktop();
       pushSnapshot();
       tray?.refresh();
+      sourceAutomation?.evaluate().catch((error) => {
+        console.error("自动来源分析失败：", error?.message ?? error);
+      });
     } catch (error) {
       console.error("陪伴心跳失败：", error?.message ?? error);
     }
@@ -507,16 +529,35 @@ function pauseForSystem() {
     return;
   }
   systemPaused = true;
+  sourceAutomation?.pause();
   if (fallbackNodeTimer) {
     clearTimeout(fallbackNodeTimer);
     fallbackNodeTimer = null;
   }
   try {
-    closeActiveChat({ refresh: false, notifyRenderer: true });
+    // 系统暂停保留聊天会话与互动，但取消在途请求；暂停期间的 send/retry 另行拒绝。
+    cancelActiveChatRequest();
     companionship.markClosed();
     pushSnapshot();
   } catch (error) {
     console.error("系统暂停结算失败：", error?.message ?? error);
+  }
+}
+
+/* 只取消当前聊天请求，不关闭会话、不结束互动；复用聊天服务的取消语义。 */
+function cancelActiveChatRequest() {
+  const chat = activeChat;
+  if (!chat?.requestId) {
+    return { cancelled: false };
+  }
+  try {
+    return store.chat.cancelRequest({
+      characterId: chat.characterId,
+      requestId: chat.requestId,
+    });
+  } catch (error) {
+    console.error("系统暂停取消聊天请求失败：", error?.message ?? error);
+    return { cancelled: false, error };
   }
 }
 
@@ -531,6 +572,9 @@ function resumeFromSystem() {
     syncDesktop();
     ensurePendingRotationCompletion();
     pushSnapshot();
+    if (!activeChat) {
+      sourceAutomation?.resume();
+    }
     tray?.refresh();
   } catch (error) {
     console.error("系统恢复结算失败：", error?.message ?? error);
@@ -553,7 +597,8 @@ function acceptedCompanions() {
   return companionship?.getSnapshot().characters ?? [];
 }
 
-/* 管理窗、系统暂停与退出共用的聊天收尾：取消在途、关闭会话、结束陪伴互动。
+/* 管理窗与退出共用的聊天收尾：取消在途、关闭会话、结束陪伴互动。
+   系统暂停不强制关闭聊天；聊天与锁屏作为独立原因分别解除。
    普通关闭必须在持久状态收尾成功后才清 activeChat；失败保留协调状态并返回错误。
    退出可 bestEffort，由下一次启动的互动恢复兜底。 */
 function closeActiveChat({
@@ -604,10 +649,11 @@ function closeActiveChat({
       conversationId: current.conversationId,
     });
   }
-  if (refresh && !quitting && !degraded) {
+  if (refresh && !quitting && !systemPaused && !degraded) {
     syncDesktop();
     pushSnapshot();
     ensurePendingRotationCompletion();
+    sourceAutomation?.resume();
     tray?.refresh();
   }
   return {
@@ -626,6 +672,7 @@ function startChat(characterId) {
   if (!character) {
     throw new AppError("INVALID_CHARACTER", "这个角色不在已结识名单中。");
   }
+  sourceAutomation?.pause();
   const history = store.chat.listConversations({ characterId, limit: 10 });
   closeActiveChat({ refresh: false });
   const interaction = companionship.startInteraction(characterId);
@@ -652,6 +699,9 @@ function ensureChatConversation() {
 }
 
 async function sendChatMessage({ characterId, text, requestId } = {}) {
+  if (systemPaused) {
+    throw new AppError("SYSTEM_PAUSED", "系统暂停中，暂时不能发送聊天消息。");
+  }
   if (!activeChat || activeChat.characterId !== characterId) {
     throw new AppError("CHAT_NOT_OPEN", "聊天面板没有打开或角色已切换。");
   }
@@ -691,6 +741,9 @@ function cancelChatMessage({ characterId, requestId } = {}) {
 }
 
 async function retryChatMessage({ characterId, requestId } = {}) {
+  if (systemPaused) {
+    throw new AppError("SYSTEM_PAUSED", "系统暂停中，暂时不能重试聊天消息。");
+  }
   if (!activeChat || activeChat.characterId !== characterId || activeChat.requestId !== requestId) {
     throw new AppError("REQUEST_NOT_FOUND", "没有可重试的聊天请求。");
   }
@@ -1025,6 +1078,14 @@ async function cleanup() {
     tray = null;
   }
   closeActiveChat({ refresh: false, bestEffort: true });
+  if (sourceAutomation) {
+    try {
+      await sourceAutomation.dispose();
+    } catch (error) {
+      console.error("退出时结束来源分析失败：", error?.message ?? error);
+    }
+    sourceAutomation = null;
+  }
   if (companionship) {
     try {
       companionship.markClosed();

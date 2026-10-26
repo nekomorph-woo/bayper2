@@ -822,7 +822,10 @@ function assertConfirmDetail(call, label, directory) {
   assert.equal(call.defaultId, 0);
   assert.equal(call.cancelId, 0);
   assert.match(call.message, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(call.message, /Bayper/);
+  assert.match(call.message, /指定的/);
   assert.ok(call.detail.includes(`来源：${label}`));
+  assert.ok(call.detail.includes("执行主体：Bayper"));
   assert.ok(call.detail.includes(`目录：${directory}`));
   assert.ok(
     call.detail.includes(
