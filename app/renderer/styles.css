@@ -1725,6 +1725,37 @@ select:focus {
   color: var(--muted);
 }
 
+.memory-dirty-note {
+  color: var(--danger);
+}
+
+.memory-share-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.memory-share-row label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.memory-share-row select {
+  min-width: 0;
+}
+
+.memory-limit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.memory-limit-row .memory-scope-note {
+  flex: 1 1 180px;
+}
+
 .memory-scope {
   display: flex;
   flex-wrap: wrap;
@@ -1747,7 +1778,25 @@ select:focus {
 
 .memory-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+/* 矮窗优先保证转告/限制/保存等主要控件单屏可达，仅列表局部滚动。 */
+@media (max-height: 720px) {
+  .memory-dialog {
+    max-height: calc(100vh - 16px);
+  }
+
+  .memory-list {
+    min-height: 72px;
+  }
+
+  .memory-editor {
+    gap: 6px;
+    padding-top: 7px;
+    padding-bottom: 9px;
+  }
 }
 
 /* ---------- 窄窗与矮窗适配 ---------- */

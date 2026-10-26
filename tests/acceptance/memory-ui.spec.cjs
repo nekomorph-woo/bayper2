@@ -146,7 +146,10 @@ async function setWindowSize(app, width, height) {
 }
 
 function openDb(dataDir, readOnly = false) {
-  return new DatabaseSync(path.join(dataDir, DB_FILE), { readOnly });
+  const db = new DatabaseSync(path.join(dataDir, DB_FILE), { readOnly });
+  // 主进程事务提交期间的只读核对等待短暂写锁，避免把锁竞争误报为业务失败。
+  db.exec("PRAGMA busy_timeout = 2000");
+  return db;
 }
 
 function readMemoryRows(dataDir, characterId) {
@@ -463,10 +466,13 @@ test("POL-MEMUI-001 GUI 角色归属、200+分页与两尺寸操作", { timeout:
       hasIpcRenderer: "ipcRenderer" in window,
     }));
     assert.deepEqual(surface.keys, [
+      "allowMemorySharing",
       "correctMemory",
       "forgetMemory",
       "listMemories",
       "onMemoryChanged",
+      "relayMemory",
+      "restrictMemorySharing",
     ]);
     assert.equal(surface.hasIpcRenderer, false);
     const before = await readSnapshot(page);
@@ -481,7 +487,9 @@ test("POL-MEMUI-001 GUI 角色归属、200+分页与两尺寸操作", { timeout:
       "derived",
       "id",
       "kind",
+      "narratorCharacterId",
       "originCharacterId",
+      "sharingRestricted",
       "trust",
       "version",
     ]);

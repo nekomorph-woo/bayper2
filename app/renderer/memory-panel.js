@@ -1,5 +1,6 @@
 /* S03c 本地记忆面板：按已结识角色查看有效记忆，显式纠正或删除。
-   只通过 preload 的具名接口读写；不接触文件、数据库、通用 SQL 或来源控制。 */
+   S03e 增加明确转告与事实级分享限制；仍只通过 preload 的具名接口读写，
+   不接触文件、数据库、通用 SQL 或来源控制。 */
 (function () {
   "use strict";
 
@@ -36,8 +37,25 @@
               <p id="memory-editor-meta" class="status-text"></p>
             </div>
             <textarea id="memory-body" rows="3" maxlength="2000" aria-label="记忆正文"></textarea>
+            <p id="memory-dirty-note" class="memory-scope-note memory-dirty-note" hidden>
+              有未保存的正文修改；转告只会使用已保存的内容。
+            </p>
+            <div class="memory-share-row">
+              <label for="memory-relay-target">告诉谁</label>
+              <select id="memory-relay-target" aria-label="选择转告对象"></select>
+              <button id="memory-relay" class="btn btn-ghost btn-small" type="button">转告</button>
+            </div>
+            <p id="memory-relay-note" class="memory-scope-note"></p>
+            <div class="memory-limit-row">
+              <button id="memory-sharing-toggle" class="btn btn-ghost btn-small" type="button">
+                禁止分享这件事
+              </button>
+              <span id="memory-sharing-note" class="memory-scope-note">
+                只阻止以后分享，不会撤回已有记忆。
+              </span>
+            </div>
             <p class="memory-scope-note">
-              保存会更新所有知道这条记忆的角色；删除默认会移除所有知道这条记忆的角色及派生记录。
+              保存会更新所有知道它的角色；删除默认移除这些角色及派生记录。
             </p>
             <div class="memory-scope" role="radiogroup" aria-label="删除范围">
               <label><input type="radio" name="memory-scope" value="all" checked /> 所有知道的角色</label>
@@ -45,6 +63,9 @@
             </div>
             <div class="memory-actions">
               <button id="memory-save" class="btn btn-primary btn-small" type="button">保存修改</button>
+              <button id="memory-revert" class="btn btn-ghost btn-small" type="button" hidden>
+                取消修改
+              </button>
               <button id="memory-delete" class="btn btn-ghost btn-small" type="button">删除记忆</button>
             </div>
             <div id="memory-error" class="alert" role="alert" hidden></div>
@@ -82,9 +103,64 @@
 
     function sourceLabel(entry) {
       if (entry.derived || entry.originCharacterId !== state.characterId) {
-        return `听${characterName(entry.originCharacterId)}说过`;
+        const origin = characterName(entry.originCharacterId);
+        if (!entry.narratorCharacterId) {
+          return `转述，最初来自${origin}`;
+        }
+        const narrator = characterName(entry.narratorCharacterId);
+        return entry.narratorCharacterId === entry.originCharacterId
+          ? `听${narrator}说过`
+          : `听${narrator}说过，最初来自${origin}`;
       }
       return entry.trust === "inferred" ? "初步了解" : "本人直接告知";
+    }
+
+    function entryMeta(entry) {
+      const kind = KIND_LABELS[entry.kind] ?? entry.kind;
+      return `${kind} · ${sourceLabel(entry)}${entry.sharingRestricted ? " · 已禁止分享" : ""}`;
+    }
+
+    function relayTargets() {
+      return characters().filter((character) => character.characterId !== state.characterId);
+    }
+
+    function isDirty() {
+      return Boolean(state.selected && byId("memory-body").value !== state.selected.body);
+    }
+
+    function renderRelayTargets() {
+      const select = byId("memory-relay-target");
+      const targets = relayTargets();
+      const previous = select.value;
+      select.replaceChildren();
+      if (targets.length === 0) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "没有其他已结识角色";
+        select.append(option);
+      } else {
+        select.append(
+          ...targets.map((character) => {
+            const option = document.createElement("option");
+            option.value = character.characterId;
+            option.textContent = character.displayName;
+            return option;
+          }),
+        );
+        select.value = targets.some((character) => character.characterId === previous)
+          ? previous
+          : targets[0].characterId;
+      }
+      byId("memory-relay-note").textContent =
+        targets.length === 0 ? "还没有其他已结识角色，暂时不能转告。" : "";
+    }
+
+    function renderSharingState() {
+      const restricted = Boolean(state.selected?.sharingRestricted);
+      byId("memory-sharing-toggle").textContent = restricted ? "允许分享" : "禁止分享这件事";
+      byId("memory-sharing-note").textContent = restricted
+        ? "已禁止分享这件事；已有角色保留原副本。"
+        : "只阻止以后分享，不会撤回已有记忆。";
     }
 
     function setNotice(text, stateName = "") {
@@ -99,12 +175,21 @@
 
     function updateControls() {
       const blocked = state.busy || state.loading;
+      const hasSelection = Boolean(state.selected) && !state.stale;
+      const dirty = isDirty();
+      const hasTargets = relayTargets().length > 0;
       byId("memory-character").disabled = blocked || characters().length === 0;
       byId("memory-prev").disabled = blocked || state.page <= 0;
       byId("memory-next").disabled = blocked || !state.hasMore;
-      byId("memory-save").disabled = blocked || !state.selected || state.stale;
-      byId("memory-delete").disabled = blocked || !state.selected || state.stale;
-      byId("memory-body").disabled = blocked || !state.selected || state.stale;
+      byId("memory-save").disabled = blocked || !hasSelection;
+      byId("memory-delete").disabled = blocked || !hasSelection;
+      byId("memory-body").disabled = blocked || !hasSelection;
+      byId("memory-revert").hidden = !hasSelection || !dirty;
+      byId("memory-revert").disabled = blocked || !dirty;
+      byId("memory-relay-target").disabled = blocked || !hasSelection || !hasTargets;
+      byId("memory-relay").disabled = blocked || !hasSelection || !hasTargets || dirty;
+      byId("memory-sharing-toggle").disabled = blocked || !hasSelection;
+      byId("memory-dirty-note").hidden = !hasSelection || !dirty;
     }
 
     function renderCharacters() {
@@ -145,7 +230,7 @@
           body.textContent = entry.body;
           const meta = document.createElement("span");
           meta.className = "memory-entry-meta";
-          meta.textContent = `${KIND_LABELS[entry.kind] ?? entry.kind} · ${sourceLabel(entry)}`;
+          meta.textContent = entryMeta(entry);
           button.append(body, meta);
           button.addEventListener("click", () => selectEntry(entry.id));
           return button;
@@ -163,8 +248,9 @@
     function renderEditor() {
       const visible = Boolean(state.selected || state.stale);
       byId("memory-editor").hidden = !visible;
-      updateControls();
       if (!visible) {
+        renderSharingState();
+        updateControls();
         return;
       }
       if (state.stale) {
@@ -172,8 +258,10 @@
         byId("memory-editor-meta").textContent = "请从上方重新选择条目后再编辑。";
       } else {
         byId("memory-editor-title").textContent = "编辑这条记忆";
-        byId("memory-editor-meta").textContent = `${KIND_LABELS[state.selected.kind] ?? state.selected.kind} · ${sourceLabel(state.selected)}`;
+        byId("memory-editor-meta").textContent = entryMeta(state.selected);
       }
+      renderSharingState();
+      updateControls();
     }
 
     function selectEntry(entryId) {
@@ -235,6 +323,7 @@
       state.stale = false;
       state.busy = false;
       byId("memory-body").value = "";
+      renderRelayTargets();
       clearActionError();
       renderList();
       renderEditor();
@@ -337,6 +426,137 @@
       );
     }
 
+    async function handleMutationFailure(error, label, samePanel) {
+      if (error?.code === "MEMORY_CHANGED" || error?.code === "ENTRY_NOT_FOUND") {
+        state.stale = true;
+        await loadPage(0, { keepEditor: true });
+        if (!samePanel()) {
+          return;
+        }
+        state.stale = true;
+        renderEditor();
+        showAlert(byId("memory-error"), error);
+        setNotice("记忆已变化，请重新选择条目后提交。", "error");
+        return;
+      }
+      showAlert(byId("memory-error"), error);
+      setNotice(`${label}失败，输入已保留。`, "error");
+      updateControls();
+    }
+
+    /* 转告只使用已保存正文与当前版本；未保存草稿先要求保存或取消。 */
+    async function submitRelay() {
+      if (!state.selected || state.busy || state.stale) {
+        return;
+      }
+      if (isDirty()) {
+        showAlert(byId("memory-error"), {
+          code: "UNSAVED_EDIT",
+          message: "请先保存或取消正文修改，再转告已保存的内容。",
+        });
+        setNotice("有未保存修改，尚未转告。", "error");
+        byId("memory-body").focus();
+        return;
+      }
+      const targetId = byId("memory-relay-target").value;
+      const target = relayTargets().find((character) => character.characterId === targetId);
+      if (!target) {
+        setNotice("还没有其他已结识角色，暂时不能转告。", "error");
+        return;
+      }
+      const entry = state.selected;
+      const openEpoch = state.openEpoch;
+      const characterId = state.characterId;
+      const samePanel = () =>
+        state.open && openEpoch === state.openEpoch && state.characterId === characterId;
+      state.busy = true;
+      clearActionError();
+      setNotice(`正在转告给${target.displayName}…`);
+      updateControls();
+      const result = await callApi("relayMemory", {
+        fromCharacterId: characterId,
+        toCharacterId: target.characterId,
+        entryId: entry.id,
+        expectedVersion: entry.version,
+      });
+      if (!samePanel()) {
+        return;
+      }
+      state.busy = false;
+      if (!result.ok) {
+        await handleMutationFailure(result.error, "转告", samePanel);
+        return;
+      }
+      setNotice(
+        result.alreadyHeld
+          ? `${target.displayName}已经知道这件事，没有重复添加。`
+          : `已转告给${target.displayName}。`,
+      );
+      updateControls();
+    }
+
+    async function submitSharingToggle() {
+      if (!state.selected || state.busy || state.stale) {
+        return;
+      }
+      const entry = state.selected;
+      const restrict = !entry.sharingRestricted;
+      const openEpoch = state.openEpoch;
+      const characterId = state.characterId;
+      const samePanel = () =>
+        state.open && openEpoch === state.openEpoch && state.characterId === characterId;
+      state.busy = true;
+      clearActionError();
+      setNotice(restrict ? "正在禁止分享…" : "正在允许分享…");
+      updateControls();
+      const result = await callApi(
+        restrict ? "restrictMemorySharing" : "allowMemorySharing",
+        {
+          characterId,
+          entryId: entry.id,
+          expectedVersion: entry.version,
+        },
+      );
+      if (!samePanel()) {
+        return;
+      }
+      state.busy = false;
+      if (!result.ok) {
+        await handleMutationFailure(
+          result.error,
+          restrict ? "禁止分享" : "允许分享",
+          samePanel,
+        );
+        return;
+      }
+      state.entries = state.entries.map((item) =>
+        item.id === entry.id ? { ...item, sharingRestricted: restrict } : item,
+      );
+      state.selected = { ...state.selected, sharingRestricted: restrict };
+      renderList();
+      renderEditor();
+      setNotice(
+        restrict
+          ? result.alreadyRestricted
+            ? "这件事已经禁止分享。"
+            : "已禁止分享这件事。已有角色保留原副本。"
+          : result.lifted
+            ? "已允许分享。"
+            : "这件事本来就可以分享。",
+      );
+    }
+
+    function revertEdit() {
+      if (!state.selected) {
+        return;
+      }
+      byId("memory-body").value = state.selected.body;
+      clearActionError();
+      setNotice("");
+      updateControls();
+      byId("memory-body").focus();
+    }
+
     function handleMemoryChanged(payload) {
       if (
         !state.open ||
@@ -403,6 +623,7 @@
       clearActionError();
       setNotice("");
       renderCharacters();
+      renderRelayTargets();
       renderList();
       renderEditor();
       byId("memory-overlay").hidden = false;
@@ -434,6 +655,10 @@
       byId("memory-next").addEventListener("click", () => changePage(1));
       byId("memory-save").addEventListener("click", submitCorrect);
       byId("memory-delete").addEventListener("click", submitDelete);
+      byId("memory-revert").addEventListener("click", revertEdit);
+      byId("memory-relay").addEventListener("click", submitRelay);
+      byId("memory-sharing-toggle").addEventListener("click", submitSharingToggle);
+      byId("memory-body").addEventListener("input", updateControls);
       byId("memory-overlay").addEventListener("click", (event) => {
         if (event.target === byId("memory-overlay")) {
           close();

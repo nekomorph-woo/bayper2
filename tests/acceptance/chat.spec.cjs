@@ -643,7 +643,7 @@ test("POL-CHAT-004/005 在途纠正与删除使迟到回复失效", async (t) =>
     (message) => message.role === "system",
   )[1].content;
   assert.ok(huMemory.includes("转述"));
-  assert.ok(huMemory.includes("听rin说"));
+  assert.ok(huMemory.includes("听凛(rin)说"));
   assert.ok(huBody.includes("用户喜欢新茶"));
   assert.equal(huBody.includes("用户喜欢旧茶"), false);
 
@@ -1262,4 +1262,51 @@ test("POL-CHAT-001 旧消息表补 seq 后保持原插入顺序", async (t) => {
     messages.map((message) => message.seq),
     [1, 2],
   );
+});
+
+test("POL-CHAT-006 旧派生记录未知直接讲述者时不猜成最初来源", async (t) => {
+  const ctx = await setupChatTest(t);
+  const { store, server } = ctx;
+  const db = new DatabaseSync(store.dbPath);
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    db.prepare(`
+      INSERT INTO memory_entries (
+        id, character_id, fact_key, origin_character_id, derived_from_entry_id,
+        kind, body, trust, importance, expires_at, source_id, source_version,
+        version, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, NULL, 'preference', ?, 'stated', 60, NULL, ?, 1, 1, ?, ?)
+    `).run(
+      "legacy-derived",
+      "hu",
+      "pref.legacy-tea",
+      "rin",
+      "用户喜欢陈茶",
+      "legacy:source",
+      START,
+      START,
+    );
+    db.prepare(`
+      INSERT INTO memory_derivations (
+        entry_id, parent_entry_id, origin_character_id, narrator_character_id,
+        source_id, source_version, created_at
+      ) VALUES (?, ?, ?, NULL, ?, 1, ?)
+    `).run("legacy-derived", "missing-parent", "rin", "legacy:source", START);
+  } finally {
+    db.close();
+  }
+
+  const conversation = store.chat.openConversation({ characterId: "hu" }).conversation;
+  server.enqueue(({ res }) => sendEnvelope(res, { reply: "我记不清是谁说的。", memoryCandidates: [] }));
+  const result = await store.chat.sendMessage({
+    characterId: "hu",
+    conversationId: conversation.id,
+    text: "我喝什么茶？",
+  });
+  assert.equal(result.status, "completed");
+  const memoryPrompt = server.requests[0].messages.find(
+    (message) => message.role === "system" && message.content.includes("本轮可用的记忆"),
+  )?.content;
+  assert.match(memoryPrompt, /转述，最初来自凛\(rin\)，直接讲述者未知/u);
+  assert.equal(memoryPrompt.includes("听凛(rin)说"), false);
 });

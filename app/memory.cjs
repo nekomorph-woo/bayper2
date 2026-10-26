@@ -350,7 +350,8 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
   }
 
   /* 管理界面使用有界页大小；稳定性由 SQL 的 importance/updated_at/id 排序保证。
-     pageSize + 1 只用于判断 hasMore，不改变现有 listMemories 的 200 条兼容行为。 */
+     pageSize + 1 只用于判断 hasMore，不改变现有 listMemories 的 200 条兼容行为。
+     分享限制是事实级状态，由服务随条目投影给管理界面，主进程不另拼记忆 SQL。 */
   function listMemoriesPage(characterIdInput, options = {}) {
     const characterId = characterIdOf(characterIdInput);
     const nowMs = resolveNow(options.nowMs);
@@ -366,7 +367,10 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       page * pageSize,
     );
     return {
-      entries: rows.slice(0, pageSize),
+      entries: rows.slice(0, pageSize).map((entry) => ({
+        ...entry,
+        sharingRestricted: store.hasShareControl(factKeyHash(entry.factKey)),
+      })),
       page,
       pageSize,
       hasMore: rows.length > pageSize,

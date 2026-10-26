@@ -550,7 +550,7 @@ function snapshotForRenderer() {
   };
 }
 
-/* 管理界面只需展示正文、类别和来源语义；factKey、来源哈希与检索分数不越过 IPC。 */
+/* 管理界面只需展示正文、类别、来源语义与分享限制；factKey、来源哈希与检索分数不越过 IPC。 */
 function memoryEntryForRenderer(entry) {
   return {
     id: entry.id,
@@ -559,7 +559,9 @@ function memoryEntryForRenderer(entry) {
     kind: entry.kind,
     trust: entry.trust,
     originCharacterId: entry.originCharacterId,
+    narratorCharacterId: entry.narratorCharacterId ?? null,
     derived: entry.derived,
+    sharingRestricted: entry.sharingRestricted === true,
   };
 }
 
@@ -1292,6 +1294,59 @@ function registerIpcHandlers() {
       });
       notifyMemoryChanged(result.affectedCharacters);
       return { ok: true, ...result };
+    } catch (error) {
+      return memoryFailureResult(error);
+    }
+  });
+
+  /* 用户明确转告只接收一条、一个已结识接收者；条目归属与版本由记忆服务核对。
+     投递成功后接收者上下文失效，沿既有记忆变更事件刷新当前可控旧回复。 */
+  ipcMain.handle("bayper:memory:relay", (event, payload) => {
+    try {
+      assertTrustedSender(event);
+      const result = store.memory.relay({
+        fromCharacterId: payload?.fromCharacterId,
+        toCharacterId: payload?.toCharacterId,
+        entries: [
+          { entryId: payload?.entryId, expectedVersion: payload?.expectedVersion },
+        ],
+      });
+      if (result.contextVersion !== null) {
+        notifyMemoryChanged([result.toCharacterId]);
+      }
+      return {
+        ok: true,
+        toCharacterId: result.toCharacterId,
+        alreadyHeld: result.shared[0]?.alreadyHeld === true,
+      };
+    } catch (error) {
+      return memoryFailureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:memory:restrict-sharing", (event, payload) => {
+    try {
+      assertTrustedSender(event);
+      const result = store.memory.restrictSharing({
+        characterId: payload?.characterId,
+        entryId: payload?.entryId,
+        expectedVersion: payload?.expectedVersion,
+      });
+      return { ok: true, alreadyRestricted: result.alreadyRestricted };
+    } catch (error) {
+      return memoryFailureResult(error);
+    }
+  });
+
+  ipcMain.handle("bayper:memory:allow-sharing", (event, payload) => {
+    try {
+      assertTrustedSender(event);
+      const result = store.memory.allowSharing({
+        characterId: payload?.characterId,
+        entryId: payload?.entryId,
+        expectedVersion: payload?.expectedVersion,
+      });
+      return { ok: true, lifted: result.lifted };
     } catch (error) {
       return memoryFailureResult(error);
     }

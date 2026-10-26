@@ -149,6 +149,14 @@ function createChatService({
     };
   }
 
+  /* 模型上下文同时保留稳定角色ID和人类可读名称：昵称来自既有关系表，
+     默认名称来自现有角色资料；不另建昵称或人格来源。 */
+  function identityLabel(characterId) {
+    const nickname = store.getNickname(characterId);
+    const name = nickname || contentById.get(characterId)?.name || characterId;
+    return name === characterId ? characterId : `${name}(${characterId})`;
+  }
+
   function memoryText(context) {
     const labels = { core: "核心设定", preferences: "重要偏好", experiences: "相关经历" };
     const kindLabels = {
@@ -164,11 +172,17 @@ function createChatService({
       }
       lines.push(`${labels[section] ?? section}:`);
       for (const entry of entries) {
-        const source = entry.derived
-          ? `转述，听${entry.originCharacterId}说，不是用户直接对本角色说`
-          : entry.trust === "stated"
-            ? "用户明确告知"
-            : "推断，不是用户原话";
+        let source;
+        if (!entry.derived) {
+          source = entry.trust === "stated" ? "用户明确告知" : "推断，不是用户原话";
+        } else if (!entry.narratorCharacterId) {
+          // 旧派生记录可能没有直接讲述者；只保留可确定的原始来源，不猜讲述者。
+          source = `转述，最初来自${identityLabel(entry.originCharacterId)}，直接讲述者未知，不是用户直接对本角色说`;
+        } else if (entry.narratorCharacterId === entry.originCharacterId) {
+          source = `转述，听${identityLabel(entry.narratorCharacterId)}说，不是用户直接对本角色说`;
+        } else {
+          source = `转述，听${identityLabel(entry.narratorCharacterId)}说，最初来自${identityLabel(entry.originCharacterId)}，不是用户直接对本角色说`;
+        }
         lines.push(
           `- [${kindLabels[entry.kind] ?? entry.kind}] ${entry.body}（来源:${source}；引用:${entry.sourceId}）`,
         );

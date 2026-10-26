@@ -44,6 +44,11 @@ contextBridge.exposeInMainWorld(
     listMemories: (payload) => ipcRenderer.invoke("bayper:memory:list", payload),
     correctMemory: (payload) => ipcRenderer.invoke("bayper:memory:correct", payload),
     forgetMemory: (payload) => ipcRenderer.invoke("bayper:memory:forget", payload),
+    relayMemory: (payload) => ipcRenderer.invoke("bayper:memory:relay", payload),
+    restrictMemorySharing: (payload) =>
+      ipcRenderer.invoke("bayper:memory:restrict-sharing", payload),
+    allowMemorySharing: (payload) =>
+      ipcRenderer.invoke("bayper:memory:allow-sharing", payload),
     onMemoryChanged: (callback) => {
       ipcRenderer.on("bayper:memory-changed", (_event, payload) => callback(payload));
     },
