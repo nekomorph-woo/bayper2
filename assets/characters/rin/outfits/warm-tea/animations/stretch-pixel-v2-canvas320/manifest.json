@@ -1,0 +1,290 @@
+{
+  "tool": "sprite-pipeline",
+  "source": {
+    "path": "assets/characters/rin/outfits/warm-tea/source/stretch-pixel-v2.png",
+    "sha256": "f752ce35790764857a06c42fd651f15d9b2d90315cd5ecb2c7b165c94b1cacf8",
+    "size": {
+      "width": 1536,
+      "height": 1024
+    }
+  },
+  "spec": {
+    "columns": 4,
+    "rows": 2,
+    "cell_size": {
+      "width": 384,
+      "height": 512
+    },
+    "frame_size": {
+      "width": 320,
+      "height": 384
+    },
+    "alpha_threshold": 16,
+    "scale": 0.613169,
+    "neutral_height": 298,
+    "resample": "nearest",
+    "alignment": "foot-bottom-center",
+    "padding": 8,
+    "foot_band_ratio": 0.12,
+    "anchor_mode": "standing-foot-band",
+    "anchor_note": "站立素材底部12%区域alpha范围的中点；尾巴低垂、趴卧或道具低于脚不适用"
+  },
+  "loop": false,
+  "frame_durations_ms": [
+    240,
+    140,
+    160,
+    200,
+    500,
+    180,
+    160,
+    260
+  ],
+  "atlas": {
+    "file": "atlas.png",
+    "columns": 4,
+    "rows": 2,
+    "frame_size": {
+      "width": 320,
+      "height": 384
+    }
+  },
+  "contact_sheets": {
+    "light": "contact-sheet-light.png",
+    "dark": "contact-sheet-dark.png"
+  },
+  "frames": [
+    {
+      "index": 0,
+      "row": 0,
+      "column": 0,
+      "file": "frame-00.png",
+      "duration_ms": 240,
+      "source_bbox": {
+        "x": 74,
+        "y": 19,
+        "width": 299,
+        "height": 486
+      },
+      "source_foot_anchor": {
+        "x": 202.5,
+        "y": 505
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 183,
+        "height": 298
+      },
+      "paste": {
+        "x": 81,
+        "y": 78
+      }
+    },
+    {
+      "index": 1,
+      "row": 0,
+      "column": 1,
+      "file": "frame-01.png",
+      "duration_ms": 140,
+      "source_bbox": {
+        "x": 58,
+        "y": 17,
+        "width": 305,
+        "height": 488
+      },
+      "source_foot_anchor": {
+        "x": 192.0,
+        "y": 505
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 187,
+        "height": 299
+      },
+      "paste": {
+        "x": 78,
+        "y": 77
+      }
+    },
+    {
+      "index": 2,
+      "row": 0,
+      "column": 2,
+      "file": "frame-02.png",
+      "duration_ms": 160,
+      "source_bbox": {
+        "x": 15,
+        "y": 17,
+        "width": 314,
+        "height": 488
+      },
+      "source_foot_anchor": {
+        "x": 161.0,
+        "y": 505
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 193,
+        "height": 299
+      },
+      "paste": {
+        "x": 70,
+        "y": 77
+      }
+    },
+    {
+      "index": 3,
+      "row": 0,
+      "column": 3,
+      "file": "frame-03.png",
+      "duration_ms": 200,
+      "source_bbox": {
+        "x": 3,
+        "y": 15,
+        "width": 323,
+        "height": 490
+      },
+      "source_foot_anchor": {
+        "x": 154.0,
+        "y": 505
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 198,
+        "height": 300
+      },
+      "paste": {
+        "x": 67,
+        "y": 76
+      }
+    },
+    {
+      "index": 4,
+      "row": 1,
+      "column": 0,
+      "file": "frame-04.png",
+      "duration_ms": 500,
+      "source_bbox": {
+        "x": 55,
+        "y": 5,
+        "width": 318,
+        "height": 494
+      },
+      "source_foot_anchor": {
+        "x": 203.0,
+        "y": 499
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 195,
+        "height": 303
+      },
+      "paste": {
+        "x": 69,
+        "y": 73
+      }
+    },
+    {
+      "index": 5,
+      "row": 1,
+      "column": 1,
+      "file": "frame-05.png",
+      "duration_ms": 180,
+      "source_bbox": {
+        "x": 46,
+        "y": 14,
+        "width": 317,
+        "height": 485
+      },
+      "source_foot_anchor": {
+        "x": 192.0,
+        "y": 499
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 194,
+        "height": 297
+      },
+      "paste": {
+        "x": 70,
+        "y": 79
+      }
+    },
+    {
+      "index": 6,
+      "row": 1,
+      "column": 2,
+      "file": "frame-06.png",
+      "duration_ms": 160,
+      "source_bbox": {
+        "x": 22,
+        "y": 14,
+        "width": 313,
+        "height": 485
+      },
+      "source_foot_anchor": {
+        "x": 162.0,
+        "y": 499
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 192,
+        "height": 297
+      },
+      "paste": {
+        "x": 74,
+        "y": 79
+      }
+    },
+    {
+      "index": 7,
+      "row": 1,
+      "column": 3,
+      "file": "frame-07.png",
+      "duration_ms": 260,
+      "source_bbox": {
+        "x": 42,
+        "y": 15,
+        "width": 297,
+        "height": 484
+      },
+      "source_foot_anchor": {
+        "x": 172.5,
+        "y": 499
+      },
+      "output_foot_anchor": {
+        "x": 160,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 182,
+        "height": 297
+      },
+      "paste": {
+        "x": 80,
+        "y": 79
+      }
+    }
+  ]
+}
