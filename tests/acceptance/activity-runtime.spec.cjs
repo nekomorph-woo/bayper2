@@ -11,6 +11,7 @@ const { DatabaseSync } = require("node:sqlite");
 const { _electron: electron } = require("playwright");
 const electronPath = require("electron");
 const { createStore } = require("../../app/store.cjs");
+const { getRinAnimations } = require("../../app/desktop-assets.cjs");
 
 const repoRoot = path.resolve(__dirname, "..", "..");
 const DB_FILE = "bayper.sqlite3";
@@ -40,6 +41,9 @@ fs.writeFileSync(
 
 const SLOTS = ["fixed", "random_1", "random_2", "random_3", "random_4"];
 const SOURCE_SECRET = "S06D-CONSTRUCTED-SOURCE";
+// 正式陪伴模式的基础精力速率；用于把正常时间结算从活动扣费中分离出来。
+const COMPANION_ENERGY_PER_HOUR = -6;
+let notificationSequence = 0;
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -204,12 +208,28 @@ function readDb(dataDir) {
         .all(),
       stats: db.prepare("SELECT character_id, energy FROM character_stats ORDER BY character_id").all(),
       runtime: db
-        .prepare("SELECT character_id, mode, exploring FROM character_runtime ORDER BY character_id")
+        .prepare("SELECT character_id, mode, exploring, last_settled_at FROM character_runtime ORDER BY character_id")
+        .all(),
+      moments: db
+        .prepare(`
+          SELECT s.character_id, s.energy, r.last_settled_at, r.mode
+          FROM character_stats s JOIN character_runtime r USING (character_id)
+          ORDER BY s.character_id
+        `)
         .all(),
       budget: db
         .prepare("SELECT id, status, sent FROM automatic_budget_attempts ORDER BY created_at, id")
         .all(),
       memory: db.prepare("SELECT id, body FROM memory_entries").all(),
+      notificationItems: db
+        .prepare(`
+          SELECT p.channel, p.slot, p.state, i.event_id
+          FROM notification_presentation_items i
+          JOIN notification_presentations p ON p.presentation_id = i.presentation_id
+          WHERE p.state IN ('offered', 'visible')
+          ORDER BY p.channel, p.slot, i.position
+        `)
+        .all(),
       events: Number(
         db.prepare("SELECT COUNT(*) AS count FROM relationship_events").get()?.count ?? 0,
       ),
@@ -233,10 +253,127 @@ function readDb(dataDir) {
   }
 }
 
-async function launchApp(dataDir) {
+/* 构造独立仓库副本，仅复制画布实际加载的素材；用于在不改动正式源文件的前提下
+   验证缺帧时能力门保持关闭。 */
+function buildAssetFixtureRepo({ missingFrame = null } = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "bayper-asset-repo-"));
+  fs.writeFileSync(
+    path.join(root, "package.json"),
+    JSON.stringify({ name: "bayper-asset-fixture", private: true, main: "app/main.cjs" }),
+  );
+  fs.cpSync(path.join(repoRoot, "app"), path.join(root, "app"), { recursive: true });
+  const rinDir = path.join(root, "assets", "characters", "rin", "animations");
+  for (const name of ["idle-pixel-v2", "wave-pixel-v1", "stretch-pixel-v2-canvas256"]) {
+    fs.cpSync(
+      path.join(repoRoot, "assets", "characters", "rin", "animations", name),
+      path.join(rinDir, name),
+      { recursive: true },
+    );
+  }
+  const trayDir = path.join(rinDir, "idle-v3");
+  fs.mkdirSync(trayDir, { recursive: true });
+  fs.copyFileSync(
+    path.join(repoRoot, "assets", "characters", "rin", "animations", "idle-v3", "frame-00.png"),
+    path.join(trayDir, "frame-00.png"),
+  );
+  if (missingFrame) {
+    fs.rmSync(path.join(rinDir, "stretch-pixel-v2-canvas256", missingFrame));
+  }
+  return root;
+}
+
+/* 正常时间结算的明确基线：用同一行的 last_settled_at 差值核对，避免把陪伴消耗
+   与活动扣费混在一条宽松不等式里。 */
+function momentOf(db, characterId) {
+  return db.moments.find((row) => row.character_id === characterId) ?? null;
+}
+
+function expectedEnergy(previous, next) {
+  const hours = (Number(next.last_settled_at) - Number(previous.last_settled_at)) / 3600000;
+  return Number(previous.energy) + COMPANION_ENERGY_PER_HOUR * hours;
+}
+
+/* 直接写入正式 connector_events 的受控通知事实；ticker/呈现/子进程仍是正式链路。 */
+function seedNotification(dataDir, { priority, instanceId = "runtime-notify" }) {
+  const now = Date.now();
+  const db = openDb(dataDir);
+  try {
+    db.exec("PRAGMA busy_timeout = 2000");
+    db.prepare(`
+      INSERT OR IGNORE INTO connector_instances (instance_id, label, created_at)
+      VALUES (?, ?, ?)
+    `).run(instanceId, "通知 fixture", now);
+    notificationSequence += 1;
+    const state = priority === 0 ? "failed" : "working";
+    const result = db.prepare(`
+      INSERT INTO connector_events
+        (app_run_id, instance_id, run_id, agent_id, kind, state, sequence,
+         priority, original_priority, notification_status, occurred_at, received_at)
+      VALUES ('runtime-app', ?, 'runtime-run', ?, 'state', ?, ?, ?, ?, 'pending', ?, ?)
+    `).run(
+      instanceId,
+      `agent-${notificationSequence}`,
+      state,
+      notificationSequence,
+      priority,
+      priority,
+      now,
+      now,
+    );
+    return Number(result.lastInsertRowid);
+  } finally {
+    db.close();
+  }
+}
+
+function notificationChannels(snapshot) {
+  return (snapshot.desktop?.notifications?.panels ?? []).map((panel) => panel.channel);
+}
+
+function stretchFrameIndex(snapshot) {
+  const match = /stretch-pixel-v2-canvas256\/frame-(\d+)\.png/.exec(
+    snapshot.desktop?.displayedFrame ?? "",
+  );
+  return match ? Number(match[1]) : null;
+}
+
+async function firstStretchFrameIndex(page, timeout = 3000) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    const index = stretchFrameIndex(await getSnapshot(page));
+    if (index !== null) {
+      return index;
+    }
+    await delay(15);
+  }
+  return null;
+}
+
+/* 冷启动时管理页 preload 可能尚未就绪；静默轮询实际画布帧。 */
+async function firstStretchFrameIndexQuiet(page, timeout = 8000) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    try {
+      const result = await page.evaluate(() => window.bayper?.getSnapshot?.());
+      if (result?.ok) {
+        const index = stretchFrameIndex(result.snapshot);
+        if (index !== null) {
+          return index;
+        }
+      }
+    } catch {
+      // 页面尚未完成桥接，继续等待。
+    }
+    await delay(15);
+  }
+  return null;
+}
+
+async function launchApp(dataDir, options = {}) {
+  const appRoot = options.appRoot ?? repoRoot;
   const app = await electron.launch({
     executablePath: electronPath,
-    args: [repoRoot, `--data-dir=${dataDir}`],
+    args: [appRoot, `--data-dir=${dataDir}`],
     env: {
       ...process.env,
       BAYPER_HEARTBEAT_MS: "400",
@@ -253,20 +390,25 @@ async function launchApp(dataDir) {
   page.on("console", (message) => consoleLines.push(`[${message.type()}] ${message.text()}`));
   page.on("pageerror", (error) => consoleLines.push(`[pageerror] ${error?.stack || error}`));
   await page.waitForLoadState("domcontentloaded");
-  await page.locator('[data-step="home"]').waitFor({ state: "visible", timeout: 20000 });
-  await waitFor(
-    async () => {
-      const result = await page.evaluate(() => window.bayper.getSnapshot());
-      return (
-        result.ok === true &&
-        result.snapshot.desktop?.state === "running" &&
-        result.snapshot.desktop?.assetState === "ready" &&
-        result.snapshot.desktop?.lastNode === "idle-loop"
-      );
-    },
-    20000,
-    "正式桌面画布未就绪",
-  );
+  if (options.waitHome !== false) {
+    await page.locator('[data-step="home"]').waitFor({ state: "visible", timeout: 20000 });
+  }
+  if (options.waitDesktop !== false) {
+    const requireIdleNode = options.requireIdleNode !== false;
+    await waitFor(
+      async () => {
+        const result = await page.evaluate(() => window.bayper.getSnapshot());
+        return (
+          result.ok === true &&
+          result.snapshot.desktop?.state === "running" &&
+          result.snapshot.desktop?.assetState === "ready" &&
+          (!requireIdleNode || result.snapshot.desktop?.lastNode === "idle-loop")
+        );
+      },
+      20000,
+      "正式桌面画布未就绪",
+    );
+  }
   return { app, page, logs, consoleLines };
 }
 
@@ -473,7 +615,7 @@ async function cleanupResources({ caseName, launched, dataDirs, failure, facts, 
   }
 }
 
-test("POL-ACTIVITY-RUNTIME-001 daily 正式动作未发布：不启动不扣费，播放验收 NOT_COVERED", { timeout: 90000 }, async () => {
+test("POL-ACTIVITY-RUNTIME-001 凛日常真实伸展：scheduled 不扣费、节点一次 -2、动作与时长后收束", { timeout: 120000 }, async () => {
   const dataDir = seedDataDir({ purpose: "daily" });
   let launched = null;
   let failure = null;
@@ -483,35 +625,211 @@ test("POL-ACTIVITY-RUNTIME-001 daily 正式动作未发布：不启动不扣费�
     launched = await launchApp(dataDir);
     const { app, page } = launched;
     const before = readDb(dataDir);
+    const beforeRin = momentOf(before, "rin");
     await triggerOpportunity(app, page, dataDir, "daily", 31 * 60 * 1000);
-    await delay(1600);
 
-    const after = readDb(dataDir);
-    assert.equal(after.activities.length, 0, "daily 动作未发布时不得建立 scheduled 或运行活动");
-    assert.equal(after.purpose, "exploration", "跳过的 daily 用途仍应只消费一次并推进游标");
-    assert.equal(after.memory.length, 0);
-    assert.equal(after.budget.length, 0);
+    await waitFor(
+      () => readDb(dataDir).activities.some((activity) => activity.status === "scheduled"),
+      5000,
+      "心跳未建立待开始日常",
+    );
+    const scheduled = readDb(dataDir);
+    const scheduledRow = scheduled.activities[0];
+    const scheduledRin = momentOf(scheduled, "rin");
+    assert.equal(scheduledRow.kind, "daily");
+    assert.equal(scheduledRow.started_at, null, "scheduled 阶段不得开始计时");
+    assert.equal(scheduledRow.action_completed_at, null);
+    assert.equal(scheduledRow.action_frame, 0);
+    const scheduledEnergy = scheduled.energyOf("rin");
+    // 先核对包含正常陪伴结算的基线，再确认 scheduled 没有额外活动扣费。
     assert.ok(
-      after.energyOf("rin") <= before.energyOf("rin") + 0.02,
-      "跳过的 daily 不得扣除 -2 活动精力",
+      scheduledRin.last_settled_at > beforeRin.last_settled_at,
+      "推进时钟后应发生正常时间结算",
+    );
+    assert.ok(
+      Math.abs(scheduledEnergy - expectedEnergy(beforeRin, scheduledRin)) < 0.02,
+      `scheduled 只应有正常结算：预期 ${expectedEnergy(beforeRin, scheduledRin)}，实际 ${scheduledEnergy}`,
+    );
+    facts.scheduled = {
+      activity: scheduledRow,
+      energy: scheduledEnergy,
+      normalSettlement: expectedEnergy(beforeRin, scheduledRin),
+      mode: (await getSnapshot(page)).companionship.current.mode,
+    };
+
+    await waitFor(
+      () => readDb(dataDir).activities[0]?.status === "running",
+      10000,
+      "自然节点未开始日常",
+    );
+    const started = readDb(dataDir);
+    const startedRow = started.activities[0];
+    const activityId = startedRow.activity_id;
+    const startedRin = momentOf(started, "rin");
+    const startedEnergy = started.energyOf("rin");
+    assert.equal(startedRow.kind, "daily");
+    assert.notEqual(startedRow.started_at, null);
+    const expectedStarted = expectedEnergy(scheduledRin, startedRin) - 2;
+    assert.ok(
+      Math.abs(startedEnergy - expectedStarted) < 0.02,
+      `节点开始应只扣一次 -2：预期 ${expectedStarted}，实际 ${startedEnergy}`,
+    );
+
+    // 日常播放期间插入普通与 P0 通知事实，走正式 ticker/呈现/气泡链路。
+    const ordinaryEventId = seedNotification(dataDir, {
+      priority: 1,
+      instanceId: "runtime-notify-ordinary",
+    });
+    const urgentEventId = seedNotification(dataDir, {
+      priority: 0,
+      instanceId: "runtime-notify-urgent",
+    });
+    const notifyChannels = new Set();
+    const collectChannels = (snapshot) => {
+      for (const channel of notificationChannels(snapshot)) notifyChannels.add(channel);
+    };
+
+    // 真实帧序列：从渲染器逐帧上报的文件核对伸展素材，而不是只看状态徽标。
+    const stretchFrames = new Set();
+    let stretchShot = null;
+    let peakShot = null;
+    const frameDeadline = Date.now() + 2600;
+    while (Date.now() < frameDeadline) {
+      const snapshot = await getSnapshot(page);
+      collectChannels(snapshot);
+      const frame = snapshot.desktop?.displayedFrame ?? "";
+      if (frame.includes("/stretch-pixel-v2-canvas256/frame-")) {
+        stretchFrames.add(frame);
+        if (!stretchShot) {
+          stretchShot = captureDesktop(snapshot, "runtime-001-daily-stretch");
+          if (stretchShot) screenshots.push(stretchShot);
+        }
+        // 举臂峰值帧单独留证，供与待机脚位、本体尺寸对照。
+        if (!peakShot && /frame-0[4-7]\.png$/.test(frame)) {
+          peakShot = captureDesktop(snapshot, "runtime-001-daily-stretch-peak");
+          if (peakShot) screenshots.push(peakShot);
+        }
+      }
+      await delay(40);
+    }
+    assert.ok(
+      stretchFrames.size >= 4,
+      `实际只观察到 ${stretchFrames.size} 个伸展帧：${[...stretchFrames].join(",")}`,
+    );
+    assert.ok(
+      [...stretchFrames].every((frame) => frame.includes("stretch-pixel-v2-canvas256")),
+      "日常帧不得借用其他动作或角色素材",
+    );
+
+    // 通知到达期间动作与活动保持不变；普通/加急均进入正式呈现事实。
+    await waitFor(
+      async () => {
+        const snapshot = await getSnapshot(page);
+        collectChannels(snapshot);
+        return notifyChannels.has("ordinary") && notifyChannels.has("urgent");
+      },
+      5000,
+      "普通/P0 通知未进入呈现",
+    );
+    const notified = await getSnapshot(page);
+    await waitFor(
+      async () => (await getSnapshot(page)).desktop?.notifications?.window?.visible === true,
+      5000,
+      "通知气泡未实际显示",
+    );
+    const notifiedWindow = await getSnapshot(page);
+    const notifiedDb = readDb(dataDir);
+    assert.equal(notifiedWindow.desktop.notifications.visible, true);
+    assert.equal(notifiedWindow.desktop.notifications.window.visible, true);
+    assert.equal(notifiedWindow.desktop.activity?.activityId, activityId);
+    assert.equal(notifiedWindow.desktop.activity?.status, "running");
+    assert.equal(notifiedDb.activities[0].status, "running");
+    assert.equal(notifiedDb.activities[0].activity_id, activityId);
+    assert.ok(Math.abs(notifiedDb.energyOf("rin") - startedEnergy) < 0.02);
+    const ordinaryPanel = notified.desktop.notifications.panels.find(
+      (panel) => panel.channel === "ordinary",
+    );
+    const urgentPanel = notified.desktop.notifications.panels.find(
+      (panel) => panel.channel === "urgent",
+    );
+    assert.ok(ordinaryPanel?.eventIds.includes(ordinaryEventId));
+    assert.ok(urgentPanel?.eventIds.includes(urgentEventId));
+    const ordinaryItem = notifiedDb.notificationItems.find(
+      (item) => item.event_id === ordinaryEventId,
+    );
+    const urgentItem = notifiedDb.notificationItems.find(
+      (item) => item.event_id === urgentEventId,
+    );
+    assert.equal(ordinaryItem?.channel, "ordinary");
+    assert.equal(urgentItem?.channel, "urgent");
+    facts.notifications = {
+      ordinaryEventId,
+      urgentEventId,
+      channels: [...notifyChannels],
+      activityId,
+      status: notifiedDb.activities[0].status,
+      energy: notifiedDb.energyOf("rin"),
+      windowVisible: notifiedWindow.desktop.notifications.window.visible,
+    };
+
+    await waitFor(
+      () => readDb(dataDir).activities[0]?.action_completed_at !== null,
+      5000,
+      "真实伸展完成未持久化",
+    );
+    await waitFor(
+      async () => (await getSnapshot(page)).desktop?.lastNode === "daily-action-complete",
+      5000,
+      "桌面未上报伸展完成节点",
+    );
+    const afterAction = readDb(dataDir);
+    assert.equal(afterAction.activities[0].status, "running", "动作完成但时长未满不得提前收束");
+    assert.equal(afterAction.activities[0].action_frame, 8);
+    assert.ok(Math.abs(afterAction.energyOf("rin") - startedEnergy) < 0.02);
+
+    await patchClockAt(app, startedRow.started_at + 11 * 1000);
+    await waitFor(
+      () => readDb(dataDir).activities[0]?.status === "completed",
+      7000,
+      "动作与有效时长都满足后未在自然节点收束",
+    );
+    const completed = readDb(dataDir);
+    const completedRow = completed.activities[0];
+    assert.equal(completedRow.active_elapsed_ms, 10000);
+    assert.equal(completedRow.action_frame, 8);
+    assert.ok(
+      Math.abs(completed.energyOf("rin") - startedEnergy) < 0.02,
+      "完成时不得重复扣费",
     );
     const snapshot = await getSnapshot(page);
     assert.equal(snapshot.companionship.current.mode, "companion");
     assert.equal(snapshot.companionship.current.activity ?? null, null);
-    assert.equal(snapshot.desktop.mode, "companion");
     assert.equal(snapshot.desktop.activity ?? null, null);
-    const logs = [...launched.consoleLines, ...launched.logs].join("\n");
-    assert.match(logs, /ACTIVITY_ACTION_UNAVAILABLE/, "应明确记录日常正式动作缺失");
-    facts.dailyUnavailable = {
-      activities: after.activities.length,
-      purpose: after.purpose,
-      energyBefore: before.energyOf("rin"),
-      energyAfter: after.energyOf("rin"),
-      currentMode: snapshot.companionship.current.mode,
-      desktopActivity: snapshot.desktop.activity ?? null,
-      notCovered: "daily 正式动作素材未发布；实际播放验收 NOT_COVERED",
+    const plan = getRinAnimations().display;
+    assert.equal(snapshot.desktop.bounds.width, plan.windowWidth);
+    assert.equal(snapshot.desktop.bounds.height, plan.windowHeight);
+    assert.ok(plan.windowWidth <= 128 && plan.windowHeight <= 128);
+    assert.ok(Math.abs(plan.footAnchor.y - plan.windowHeight) < 1, "脚锚应在窗口底部");
+    assert.match(snapshot.desktop.displayedFrame, /idle-pixel-v2\/frame-/);
+    facts.completed = {
+      activity: completedRow,
+      frames: [...stretchFrames].map((frame) => frame.split("/").slice(-2).join("/")),
+      bounds: snapshot.desktop.bounds,
+      energy: completed.energyOf("rin"),
     };
-    screenshots.push(await capture(page, "runtime-001-daily-unavailable"));
+    screenshots.push(await capture(page, "runtime-001-daily-completed"));
+    const idleShot = captureDesktop(snapshot, "runtime-001-daily-idle-after");
+    if (idleShot) screenshots.push(idleShot);
+
+    // 同一滚动小时内再次抽中 daily：不得启动第二个活动或再扣一次。
+    setPurpose(dataDir, "daily");
+    await patchClock(app, 62 * 60 * 1000, 0.1);
+    await delay(1600);
+    const quota = readDb(dataDir);
+    assert.equal(quota.activities.length, 1, "额度内的后续机会不得再启动日常");
+    assert.equal(quota.activities[0].activity_id, activityId);
+    assert.equal(quota.purpose, "exploration");
+    facts.quota = { activities: quota.activities.length, purpose: quota.purpose };
   } catch (error) {
     failure = error;
     throw error;
@@ -840,11 +1158,360 @@ test("POL-ACTIVITY-RUNTIME-003 探索聊天/锁屏与多原因恢复，沿持久
   }
 });
 
-test("POL-ACTIVITY-RUNTIME-004 单一用途不双发；预算耗尽仍可本地探索；daily 未发布不启动", { timeout: 150000 }, async () => {
+test("POL-ACTIVITY-RUNTIME-003 daily 聊天/切人/锁屏/重开沿同 ID 恢复，动作完成后收束", { timeout: 180000 }, async () => {
+  const dataDir = seedDataDir({ purpose: "daily" });
+  let launched = null;
+  let failure = null;
+  const facts = {};
+  const screenshots = [];
+  try {
+    launched = await launchApp(dataDir);
+    let { app, page } = launched;
+    await triggerOpportunity(app, page, dataDir, "daily", 31 * 60 * 1000);
+    await waitFor(
+      () => readDb(dataDir).activities.some((activity) => activity.status === "scheduled"),
+      5000,
+      "待开始日常未建立",
+    );
+    await waitFor(
+      () => readDb(dataDir).activities[0]?.status === "running",
+      10000,
+      "日常未开始",
+    );
+    const started = readDb(dataDir);
+    const row = started.activities[0];
+    const activityId = row.activity_id;
+    const startedAt = row.started_at;
+    const energyAfterStart = started.energyOf("rin");
+
+    // 伸展途中锁屏：动作在暂停期间真实播完，完成事实仍要记录，恢复后不得卡住。
+    await app.evaluate(({ powerMonitor }) => powerMonitor.emit("lock-screen"));
+    await waitFor(
+      () => readDb(dataDir).activities[0]?.status === "paused",
+      3000,
+      "锁屏未暂停日常",
+    );
+    await waitFor(
+      () => readDb(dataDir).activities[0]?.action_completed_at !== null,
+      6000,
+      "暂停期间真实完成的伸展未记录",
+    );
+    assert.equal(readDb(dataDir).activities[0].active_elapsed_ms, 0);
+    facts.pauseDuringAction = readDb(dataDir).activities[0];
+    await app.evaluate(({ powerMonitor }) => powerMonitor.emit("unlock-screen"));
+    await waitFor(
+      () =>
+        readDb(dataDir).activities[0]?.status === "running" &&
+        readDb(dataDir).activities[0]?.activity_id === activityId,
+      5000,
+      "解锁未恢复同 ID 日常",
+    );
+    assert.equal(readDb(dataDir).activities[0].action_completed_at !== null, true);
+
+    await patchClockAt(app, startedAt + 2000);
+    await delay(500);
+    assert.equal(readDb(dataDir).activities[0].active_elapsed_ms, 2000);
+
+    // 聊天暂停：同 ID、有效进度保留。
+    const chatOpen = await page.evaluate(() => window.bayperChat.openChat("rin"));
+    assert.equal(chatOpen.ok, true, JSON.stringify(chatOpen));
+    await waitFor(
+      () => readDb(dataDir).activities[0]?.status === "paused",
+      3000,
+      "聊天未暂停日常",
+    );
+    const paused = readDb(dataDir).activities[0];
+    assert.equal(paused.activity_id, activityId);
+    assert.equal(paused.active_elapsed_ms, 2000);
+
+    // 聊天期间锁屏再解锁：仍被聊天阻止，不恢复、不推进。
+    await patchClockAt(app, startedAt + 5 * 60 * 1000);
+    await app.evaluate(({ powerMonitor }) => powerMonitor.emit("lock-screen"));
+    await delay(300);
+    await app.evaluate(({ powerMonitor }) => powerMonitor.emit("unlock-screen"));
+    await delay(500);
+    assert.equal(readDb(dataDir).activities[0].status, "paused", "聊天未结束不得恢复");
+    assert.equal(readDb(dataDir).activities[0].active_elapsed_ms, 2000);
+
+    const closeResult = await page.evaluate(() => window.bayperChat.closeChat());
+    assert.equal(closeResult.ok, true, JSON.stringify(closeResult));
+    assert.equal(closeResult.closed, true);
+    await waitFor(
+      () =>
+        readDb(dataDir).activities[0]?.status === "running" &&
+        readDb(dataDir).activities[0]?.activity_id === activityId,
+      5000,
+      "关闭聊天后未恢复同 ID 日常",
+    );
+    assert.equal(readDb(dataDir).activities[0].active_elapsed_ms, 2000);
+
+    // 手动切人暂停；切回后恢复同 ID，且暂停区间不推进有效时间。
+    const switched = await page.evaluate(() => window.bayper.switchCompanion("hu"));
+    assert.equal(switched.ok, true, JSON.stringify(switched));
+    await waitFor(
+      () => readDb(dataDir).activities[0]?.status === "paused",
+      5000,
+      "切换角色未暂停日常",
+    );
+    assert.equal(readDb(dataDir).activities[0].active_elapsed_ms, 2000);
+    await patchClockAt(app, startedAt + 10 * 60 * 1000);
+    await delay(500);
+    assert.equal(readDb(dataDir).activities[0].active_elapsed_ms, 2000);
+
+    const switchedBack = await page.evaluate(() => window.bayper.switchCompanion("rin"));
+    assert.equal(switchedBack.ok, true, JSON.stringify(switchedBack));
+    await waitFor(
+      () =>
+        readDb(dataDir).activities[0]?.status === "running" &&
+        readDb(dataDir).activities[0]?.activity_id === activityId,
+      6000,
+      "切回后未恢复同 ID 日常",
+    );
+    assert.equal(readDb(dataDir).activities[0].active_elapsed_ms, 2000);
+    await waitFor(
+      async () => {
+        const state = await getSnapshot(page);
+        return !String(state.desktop?.displayedFrame).includes("stretch-pixel-v2-canvas256");
+      },
+      3000,
+      "切回已完成动作的角色不应重播伸展",
+    );
+
+    // 运行中锁屏暂停，解锁恢复同 ID；离线墙钟不计入有效活动时间。
+    await app.evaluate(({ powerMonitor }) => powerMonitor.emit("lock-screen"));
+    await waitFor(
+      () => readDb(dataDir).activities[0]?.status === "paused",
+      3000,
+      "锁屏未暂停日常",
+    );
+    const lockedActive = readDb(dataDir).activities[0].active_elapsed_ms;
+    await patchClockAt(app, startedAt + 15 * 60 * 1000);
+    await delay(500);
+    assert.equal(readDb(dataDir).activities[0].active_elapsed_ms, lockedActive);
+    await app.evaluate(({ powerMonitor }) => powerMonitor.emit("unlock-screen"));
+    await waitFor(
+      () =>
+        readDb(dataDir).activities[0]?.status === "running" &&
+        readDb(dataDir).activities[0]?.activity_id === activityId,
+      5000,
+      "解锁未恢复同 ID 日常",
+    );
+    assert.equal(readDb(dataDir).activities[0].active_elapsed_ms, lockedActive);
+    facts.pauseStack = readDb(dataDir).activities[0];
+
+    // 退出重开：退出暂停并保留事实，重开沿同 ID 恢复，不补离线、不重复扣。
+    launched.exit = await closeApp(launched.app);
+    const exited = readDb(dataDir).activities[0];
+    assert.equal(exited.activity_id, activityId);
+    assert.equal(exited.status, "paused");
+    launched = await launchApp(dataDir);
+    ({ app, page } = launched);
+    await waitFor(
+      () =>
+        readDb(dataDir).activities[0]?.status === "running" &&
+        readDb(dataDir).activities[0]?.activity_id === activityId,
+      10000,
+      "重开后未恢复同 ID 日常",
+    );
+    const reopened = readDb(dataDir).activities[0];
+    assert.ok(
+      reopened.active_elapsed_ms >= lockedActive &&
+        reopened.active_elapsed_ms < lockedActive + 30 * 1000,
+      "重开只应推进恢复后的在线时间",
+    );
+    await waitFor(
+      async () => {
+        const state = await getSnapshot(page);
+        return !String(state.desktop?.displayedFrame).includes("stretch-pixel-v2-canvas256");
+      },
+      5000,
+      "已完成动作重开后不应重播",
+    );
+    assert.equal(
+      (await getSnapshot(page)).desktop.activity?.actionComplete,
+      true,
+      "已完成事实应在重开后保持",
+    );
+
+    // 动作已完成，补足有效时长后在自然节点收束。
+    await patchClockAt(app, startedAt + 20 * 60 * 1000);
+    await waitFor(
+      () => readDb(dataDir).activities[0]?.status === "completed",
+      8000,
+      "重开后动作与时长满足仍未收束",
+    );
+    const completed = readDb(dataDir).activities[0];
+    assert.equal(completed.activity_id, activityId);
+    assert.equal(completed.active_elapsed_ms, 10000);
+    assert.ok(
+      readDb(dataDir).energyOf("rin") >= energyAfterStart - 0.05,
+      "暂停/重开期间不得重复扣除 -2",
+    );
+    const snapshot = await getSnapshot(page);
+    assert.equal(snapshot.companionship.current.characterId, "rin");
+    assert.equal(snapshot.companionship.current.mode, "companion");
+    assert.equal(snapshot.companionship.current.activity ?? null, null);
+    facts.completed = {
+      activity: completed,
+      energy: readDb(dataDir).energyOf("rin"),
+    };
+    screenshots.push(await capture(page, "runtime-003-daily-completed"));
+  } catch (error) {
+    failure = error;
+    throw error;
+  } finally {
+    await cleanupResources({
+      caseName: "activity-runtime-003-daily",
+      launched,
+      dataDirs: [dataDir],
+      failure,
+      facts,
+      screenshots,
+    });
+  }
+});
+
+test("POL-ACTIVITY-RUNTIME-003 daily 连续两次中断与退出重开按已完成帧续播", { timeout: 180000 }, async () => {
+  const dataDir = seedDataDir({ purpose: "daily" });
+  let launched = null;
+  let failure = null;
+  const facts = {};
+  const screenshots = [];
+  try {
+    launched = await launchApp(dataDir);
+    let { app, page } = launched;
+    await triggerOpportunity(app, page, dataDir, "daily", 31 * 60 * 1000);
+    await waitFor(
+      () => readDb(dataDir).activities.some((activity) => activity.status === "scheduled"),
+      5000,
+      "待开始日常未建立",
+    );
+    await waitFor(
+      () => readDb(dataDir).activities[0]?.status === "running",
+      10000,
+      "日常未开始",
+    );
+    const started = readDb(dataDir).activities[0];
+    const activityId = started.activity_id;
+    const energyAfterStart = readDb(dataDir).energyOf("rin");
+
+    await waitFor(
+      () => Number(readDb(dataDir).activities[0]?.action_frame) >= 2,
+      6000,
+      "真实播放进度未记录",
+    );
+    const chat1 = await page.evaluate(() => window.bayperChat.openChat("rin"));
+    assert.equal(chat1.ok, true, JSON.stringify(chat1));
+    await waitFor(
+      () => readDb(dataDir).activities[0]?.status === "paused",
+      3000,
+      "首次中断未暂停",
+    );
+    const paused1 = readDb(dataDir).activities[0];
+    assert.ok(paused1.action_frame >= 2);
+    assert.equal(paused1.action_completed_at, null);
+    await page.evaluate(() => window.bayperChat.closeChat());
+    await waitFor(
+      () =>
+        readDb(dataDir).activities[0]?.status === "running" &&
+        readDb(dataDir).activities[0]?.activity_id === activityId,
+      5000,
+      "首次恢复未回到同 ID",
+    );
+    const firstResume = await firstStretchFrameIndex(page, 3000);
+    assert.notEqual(firstResume, null, "首次恢复后未观察到续播帧");
+    assert.ok(
+      firstResume >= paused1.action_frame && firstResume > 0,
+      `首次恢复应从已完成帧续播：进度 ${paused1.action_frame}，实际首帧 ${firstResume}`,
+    );
+
+    // 第二次中断紧接恢复；暂停期间退出，重开后仍应从持久进度续播。
+    const chat2 = await page.evaluate(() => window.bayperChat.openChat("rin"));
+    assert.equal(chat2.ok, true, JSON.stringify(chat2));
+    await waitFor(
+      () => readDb(dataDir).activities[0]?.status === "paused",
+      3000,
+      "第二次中断未暂停",
+    );
+    const paused2 = readDb(dataDir).activities[0];
+    assert.equal(paused2.activity_id, activityId);
+    assert.ok(paused2.action_frame > 0 && paused2.action_frame < 8);
+    assert.equal(paused2.action_completed_at, null);
+
+    launched.exit = await closeApp(launched.app);
+    const exited = readDb(dataDir).activities[0];
+    assert.equal(exited.activity_id, activityId);
+    assert.equal(exited.status, "paused");
+    const resumeProgress = exited.action_frame;
+    assert.ok(resumeProgress > 0 && resumeProgress < 8);
+
+    launched = await launchApp(dataDir, {
+      waitHome: false,
+      waitDesktop: false,
+    });
+    ({ app, page } = launched);
+    const restartFrame = await firstStretchFrameIndexQuiet(page, 10000);
+    assert.notEqual(restartFrame, null, "重开后未观察到续播帧");
+    assert.ok(
+      restartFrame >= resumeProgress && restartFrame > 0,
+      `重开应从持久进度续播：进度 ${resumeProgress}，实际首帧 ${restartFrame}`,
+    );
+    await waitFor(
+      () =>
+        readDb(dataDir).activities[0]?.status === "running" &&
+        readDb(dataDir).activities[0]?.activity_id === activityId,
+      10000,
+      "重开后未恢复同 ID 日常",
+    );
+
+    await patchClockAt(app, exited.started_at + 20 * 60 * 1000);
+    await waitFor(
+      () => readDb(dataDir).activities[0]?.status === "completed",
+      8000,
+      "续播完成后未收束",
+    );
+    const completed = readDb(dataDir).activities[0];
+    assert.equal(completed.activity_id, activityId);
+    assert.equal(completed.active_elapsed_ms, 10000);
+    assert.equal(completed.action_frame, 8);
+    assert.ok(
+      readDb(dataDir).energyOf("rin") >= energyAfterStart - 0.05,
+      "中断与重开不得重复扣除 -2",
+    );
+    facts.resume = {
+      paused1,
+      firstResume,
+      paused2,
+      resumeProgress,
+      restartFrame,
+      completed,
+    };
+    screenshots.push(await capture(page, "runtime-003-daily-progress-resume"));
+  } catch (error) {
+    failure = error;
+    throw error;
+  } finally {
+    await cleanupResources({
+      caseName: "activity-runtime-003-daily-progress",
+      launched,
+      dataDirs: [dataDir],
+      failure,
+      facts,
+      screenshots,
+    });
+  }
+});
+
+test("POL-ACTIVITY-RUNTIME-004 单一用途不双发；预算耗尽仍可本地探索；其他角色/缺帧/不可见 daily 不启动", { timeout: 180000 }, async () => {
   const sourceDir = seedDataDir({ purpose: "source", source: true });
   const hiddenDir = seedDataDir({ purpose: "daily", desktopVisible: false });
+  const huDir = seedDataDir({ purpose: "daily", roster: ["hu", "rin"], currentId: "hu" });
+  const assetDir = seedDataDir({ purpose: "daily" });
+  let fixtureRoot = null;
   let sourceLaunched = null;
   let hiddenLaunched = null;
+  let huLaunched = null;
+  let assetLaunched = null;
   let failure = null;
   const facts = {};
   const screenshots = [];
@@ -869,29 +1536,13 @@ test("POL-ACTIVITY-RUNTIME-004 单一用途不双发；预算耗尽仍可本地�
       purpose: afterSource.purpose,
     };
 
-    // daily 正式动作未发布：后续机会只记录跳过，不建立活动、不扣费、不换用途。
-    await triggerOpportunity(sourceLaunched.app, sourceLaunched.page, sourceDir, "daily", 62 * 60 * 1000);
-    await delay(1600);
-    const afterDaily = readDb(sourceDir);
-    assert.equal(afterDaily.activities.length, 0, "daily 动作未发布时不得建立活动");
-    assert.equal(afterDaily.purpose, "exploration");
-    assert.equal(afterDaily.budget.filter((row) => row.sent === 1).length, 1);
-    const afterDailyLogs = [...sourceLaunched.consoleLines, ...sourceLaunched.logs].join("\n");
-    assert.match(afterDailyLogs, /ACTIVITY_ACTION_UNAVAILABLE/);
-    facts.dailyUnavailable = {
-      activities: afterDaily.activities.length,
-      purpose: afterDaily.purpose,
-      energy: afterDaily.energyOf("rin"),
-      notCovered: "daily 正式动作未发布",
-    };
-
     // 预算仍耗尽，但下一次机会可执行纯本地探索。
     await triggerOpportunity(
       sourceLaunched.app,
       sourceLaunched.page,
       sourceDir,
       "exploration",
-      93 * 60 * 1000,
+      62 * 60 * 1000,
     );
     await waitFor(
       () => readDb(sourceDir).activities.some((activity) => activity.status === "running"),
@@ -915,6 +1566,72 @@ test("POL-ACTIVITY-RUNTIME-004 单一用途不双发；预算耗尽仍可本地�
     );
     assert.equal(exitedActivity.status, "paused", "退出应暂停运行活动并保留事实");
     facts.exit = { appExit: exitResult, activity: exitedActivity };
+
+    // 其他角色没有已发布的日常动作：不得借用凛素材，也不建立活动。
+    huLaunched = await launchApp(huDir);
+    const huBefore = readDb(huDir);
+    await triggerOpportunity(huLaunched.app, huLaunched.page, huDir, "daily", 31 * 60 * 1000);
+    await delay(1600);
+    const huAfter = readDb(huDir);
+    assert.equal(huAfter.activities.length, 0, "其他角色 daily 不得建立活动");
+    assert.equal(huAfter.purpose, "exploration");
+    assert.ok(
+      huAfter.energyOf("hu") > huBefore.energyOf("hu") - 4,
+      "其他角色 daily 不得扣除 -2 活动精力",
+    );
+    const huLogs = [...huLaunched.consoleLines, ...huLaunched.logs].join("\n");
+    assert.match(huLogs, /ACTIVITY_ACTION_UNAVAILABLE/);
+    const huSnapshot = await getSnapshot(huLaunched.page);
+    assert.equal(huSnapshot.desktop.characterId, "hu");
+    assert.equal(huSnapshot.desktop.activity ?? null, null);
+    facts.otherCharacterDaily = {
+      activities: huAfter.activities.length,
+      purpose: huAfter.purpose,
+      energyBefore: huBefore.energyOf("hu"),
+      energyAfter: huAfter.energyOf("hu"),
+    };
+    screenshots.push(await capture(huLaunched.page, "runtime-004-other-character"));
+    huLaunched.exit = await closeApp(huLaunched.app);
+
+    // 正式源文件不动：使用独立仓库副本缺失一帧伸展，能力门保持关闭且不扣费。
+    fixtureRoot = buildAssetFixtureRepo({ missingFrame: "frame-04.png" });
+    assetLaunched = await launchApp(assetDir, {
+      appRoot: fixtureRoot,
+      waitDesktop: false,
+    });
+    await waitFor(
+      async () => {
+        const result = await assetLaunched.page.evaluate(() => window.bayper.getSnapshot());
+        return (
+          result.ok === true &&
+          result.snapshot.desktop?.assetState === "error" &&
+          result.snapshot.desktop?.state === "running"
+        );
+      },
+      15000,
+      "缺帧时画布未进入明确错误状态",
+    );
+    const assetBefore = readDb(assetDir);
+    setPurpose(assetDir, "daily");
+    await patchClock(assetLaunched.app, 31 * 60 * 1000, 0.1);
+    await delay(1600);
+    const assetAfter = readDb(assetDir);
+    assert.equal(assetAfter.activities.length, 0, "缺帧时不得建立日常或扣费");
+    assert.equal(assetAfter.purpose, "exploration");
+    assert.ok(
+      assetAfter.energyOf("rin") > assetBefore.energyOf("rin") - 4,
+      "缺帧的日常不得扣除 -2 活动精力",
+    );
+    const assetSnapshot = await getSnapshot(assetLaunched.page);
+    assert.equal(assetSnapshot.desktop.activity ?? null, null);
+    facts.missingFrame = {
+      assetState: assetSnapshot.desktop.assetState,
+      activities: assetAfter.activities.length,
+      energyBefore: assetBefore.energyOf("rin"),
+      energyAfter: assetAfter.energyOf("rin"),
+    };
+    screenshots.push(await capture(assetLaunched.page, "runtime-004-missing-frame"));
+    assetLaunched.exit = await closeApp(assetLaunched.app);
 
     hiddenLaunched = await launchApp(hiddenDir);
     const hiddenBefore = readDb(hiddenDir);
@@ -940,10 +1657,14 @@ test("POL-ACTIVITY-RUNTIME-004 单一用途不双发；预算耗尽仍可本地�
     await cleanupResources({
       caseName: "activity-runtime-004",
       launched:
-        [hiddenLaunched, sourceLaunched].find((item) => item && !item.exit) ??
+        [assetLaunched, huLaunched, hiddenLaunched, sourceLaunched].find(
+          (item) => item && !item.exit,
+        ) ??
         sourceLaunched ??
-        hiddenLaunched,
-      dataDirs: [sourceDir, hiddenDir],
+        hiddenLaunched ??
+        huLaunched ??
+        assetLaunched,
+      dataDirs: [sourceDir, hiddenDir, huDir, assetDir, ...(fixtureRoot ? [fixtureRoot] : [])],
       failure,
       facts,
       screenshots,

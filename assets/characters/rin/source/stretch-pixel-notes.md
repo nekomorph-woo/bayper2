@@ -15,3 +15,7 @@ Repair this exact 8-frame Rin stretch sprite sheet ONLY for layout and safe marg
 ## 256宽兼容导出
 
 2026-10-27 使用既有sprite-pipeline从同一v2源导出animations/stretch-pixel-v2-canvas256，frame-size256×384，neutral-height298及原时序不变。Codex逐帧比较：新8帧与原320宽导出去除左右各32个全透明列后的RGBA逐字节一致，原两侧alpha确为空；源SHA、scale0.707838、时长一致，脚锚统一128/376，与现行idle/wave一致。实际浅棋盘复查完整，未改变角色像素、缩放或动作。后续S06h优先使用本兼容候选；仍待正式桌面连续播放及衔接验收，不因尺寸兼容就发布。日志完整交付evidence/rin-stretch-pixel-v2-canvas256-export.log。
+
+## 正式日常集成接受（S06h）
+
+2026-10-27 Codex受托接受stretch-pixel-v2-canvas256作为凛当前正式日常动作。独立正式Electron/SQLite活动6/6、桌面11/11、真实Herdr通知1/1、unit+领域28/28；证据与边界见完整交付/s06h-review.md。实际88×128桌面窗、8帧文件序列与伸展前/举臂峰值/回idle原生截屏对照：透明完整、脚位尺度稳定、动作阶段清楚。暂停同ID从已完成帧恢复，重开不补离线/不重复扣费；动作与10秒有效活动均满足才自然收束，动作不反复循环。该接受不是用户亲自长期体验确认，也不发布旧320画布版本、其他角色或其他候选动作。

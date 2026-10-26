@@ -302,7 +302,11 @@ test("POL-DESKTOP-001/004 真实画布、管理窗口输入、关闭隐藏与退
     const page = first.page;
     await completeOnboarding(page, ctx.server.baseUrl);
 
-    const rinPlan = manifestDisplayPlan("rin", ["idle-pixel-v2", "wave-pixel-v1"]);
+    const rinPlan = manifestDisplayPlan("rin", [
+      "idle-pixel-v2",
+      "wave-pixel-v1",
+      "stretch-pixel-v2-canvas256",
+    ]);
     const snapshot = await waitForSnapshot(
       page,
       (value) =>
@@ -1082,7 +1086,11 @@ test("POL-DESKTOP-007 真实画布 DOM 按共同包围裁切，点击招呼回�
       { timeout: 10000 },
     );
 
-    const rinPlan = manifestDisplayPlan("rin", ["idle-pixel-v2", "wave-pixel-v1"]);
+    const rinPlan = manifestDisplayPlan("rin", [
+      "idle-pixel-v2",
+      "wave-pixel-v1",
+      "stretch-pixel-v2-canvas256",
+    ]);
     const rinDom = await readCanvasDom(page);
     assert.equal(rinDom.windowWidth, rinPlan.windowWidth);
     assert.equal(rinDom.windowHeight, rinPlan.windowHeight);
@@ -1114,6 +1122,121 @@ test("POL-DESKTOP-007 真实画布 DOM 按共同包围裁切，点击招呼回�
     await waitFor(
       () => outputLines.join("").includes('"node":"wave"'),
       3000,
+    );
+
+    /* S06h 真实 renderer：同角色旧日常尚未播完时换成新活动 ID。
+       旧轮计时器必须被停止，旧回调不得给新 ID 写进度或完成。 */
+    const dailyOld = {
+      activityId: "dom-daily-old",
+      characterId: "rin",
+      kind: "daily",
+      status: "running",
+      durationMs: 10000,
+      activeElapsedMs: 0,
+      actionComplete: false,
+      actionProgress: 0,
+    };
+    const dailyNew = { ...dailyOld, activityId: "dom-daily-new" };
+    stdin.write(
+      `${JSON.stringify({ ...rinState, mode: "daily", activity: dailyOld })}\n`,
+    );
+    await page.waitForFunction(
+      () => document.getElementById("sprite")?.src.includes("/stretch-pixel-v2-canvas256/frame-"),
+      null,
+      { timeout: 5000 },
+    );
+    await waitFor(
+      () =>
+        outputLines.join("").includes('"activityId":"dom-daily-old"') &&
+        outputLines.join("").endsWith("\n"),
+      5000,
+    );
+    stdin.write(
+      `${JSON.stringify({ ...rinState, mode: "daily", activity: dailyNew })}\n`,
+    );
+    await waitFor(
+      () => {
+        const text = outputLines.join("");
+        return (
+          text.includes('"activityId":"dom-daily-new"') &&
+          text.includes('"type":"node-complete"') &&
+          text.includes('"node":"daily-action-complete"')
+        );
+      },
+      6000,
+    );
+    stdin.write(
+      `${JSON.stringify({
+        ...rinState,
+        mode: "daily",
+        activity: { ...dailyNew, actionComplete: true, actionProgress: 8 },
+      })}\n`,
+    );
+    await page.waitForFunction(
+      () => document.getElementById("sprite")?.src.includes("idle-pixel-v2"),
+      null,
+      { timeout: 5000 },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const canvasMessages = outputLines
+      .join("")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+    const firstNew = canvasMessages.findIndex(
+      (message) => message.activityId === "dom-daily-new",
+    );
+    assert.notEqual(firstNew, -1, "新活动未上报进度或完成");
+    const afterNew = canvasMessages.slice(firstNew);
+    assert.equal(
+      afterNew.every((message) => message.activityId !== "dom-daily-old"),
+      true,
+      "旧活动回调不得在新活动开始后继续写进度或完成",
+    );
+    const newProgress = afterNew
+      .filter(
+        (message) =>
+          message.type === "activity-progress" &&
+          message.activityId === "dom-daily-new",
+      )
+      .map((message) => message.progress);
+    assert.deepEqual(
+      newProgress,
+      [1, 2, 3, 4, 5, 6, 7, 8],
+      `新活动应从第 1 帧重新计进度，实际 ${JSON.stringify(newProgress)}`,
+    );
+    const newCompletions = afterNew.filter(
+      (message) =>
+        message.type === "node-complete" &&
+        message.node === "daily-action-complete",
+    );
+    assert.ok(newCompletions.length >= 1);
+    assert.equal(
+      newCompletions.every((message) => message.activityId === "dom-daily-new"),
+      true,
+      "完成回报必须来自新活动身份",
+    );
+    assert.equal(
+      canvasMessages.some(
+        (message) =>
+          message.type === "node-complete" &&
+          message.node === "daily-action-complete" &&
+          message.activityId === "dom-daily-old",
+      ),
+      false,
+      "旧活动计时器未停止时会错误上报完成",
+    );
+    assert.match(
+      await page.evaluate(() => document.getElementById("sprite")?.src ?? ""),
+      /idle-pixel-v2\/frame-/,
+      "已确认完成的活动不得重播伸展",
     );
 
     const hu = buildDesktopPresentation("hu", "琥珀");

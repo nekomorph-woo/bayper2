@@ -4,6 +4,7 @@ const path = require("node:path");
 const readline = require("node:readline");
 const { app, BrowserWindow, ipcMain, screen, session } = require("electron");
 const { acceptsNotificationIpc } = require("./notification-ipc.cjs");
+const { acceptsCanvasIpc } = require("./canvas-ipc.cjs");
 
 const profileDir = process.env.BAYPER_DESKTOP_PROFILE;
 const DEFAULT_WINDOW_SIZE = Object.freeze({ width: 128, height: 128 });
@@ -434,11 +435,29 @@ function handleParentLine(line) {
 }
 
 function registerIpc() {
-  ipcMain.on("canvas:node-complete", (_event, payload) => {
+  ipcMain.on("canvas:node-complete", (event, payload) => {
+    if (!acceptsCanvasIpc({ sender: event.sender, window })) {
+      return;
+    }
     const node = typeof payload?.node === "string" ? payload.node : "unknown";
     send({
       type: "node-complete",
       node,
+      displayKey: typeof payload?.displayKey === "string" ? payload.displayKey : "",
+      generation: Number.isInteger(payload?.generation) ? payload.generation : null,
+      activityId: typeof payload?.activityId === "string" ? payload.activityId : "",
+      characterId: typeof payload?.characterId === "string" ? payload.characterId : "",
+    });
+  });
+  ipcMain.on("canvas:activity-progress", (event, payload) => {
+    if (!acceptsCanvasIpc({ sender: event.sender, window })) {
+      return;
+    }
+    send({
+      type: "activity-progress",
+      activityId: typeof payload?.activityId === "string" ? payload.activityId : "",
+      characterId: typeof payload?.characterId === "string" ? payload.characterId : "",
+      progress: Number.isInteger(payload?.progress) ? payload.progress : -1,
       displayKey: typeof payload?.displayKey === "string" ? payload.displayKey : "",
       generation: Number.isInteger(payload?.generation) ? payload.generation : null,
     });

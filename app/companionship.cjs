@@ -363,10 +363,13 @@ function createCompanionshipService({
     }
     return {
       activityId: activity.activityId,
+      characterId: activity.characterId,
       kind: activity.kind,
       status: activity.status,
       durationMs: activity.durationMs,
       activeElapsedMs: activity.activeElapsedMs,
+      actionComplete: activity.actionCompletedAt !== null,
+      actionProgress: activity.actionFrame,
     };
   }
 
@@ -497,8 +500,8 @@ function createCompanionshipService({
     });
   }
 
-  /* 运行中的活动按真实时间推进；完成点先按零耗时模式结算，再切回真实模式，
-     使完成后的余下时间按真实模式恢复。 */
+  /* 运行中的活动按真实时间推进；daily 到达有效时长后仍须真实动作完成，
+     不能在计时器上直接宣称完成。探索保持原有时长完成规则。 */
   function advanceActivityLifecycle(nowMs) {
     const running = store.activities.listRunning();
     const completions = [];
@@ -511,6 +514,11 @@ function createCompanionshipService({
       const elapsed = nowMs - last;
       if (elapsed < remaining) {
         store.activities.advance(activity.activityId, elapsed, nowMs);
+        continue;
+      }
+      if (activity.kind === "daily") {
+        // 有效时长封顶，等待真实动作完成和自然节点；不追加运行时间。
+        store.activities.advance(activity.activityId, Math.max(0, remaining), nowMs);
         continue;
       }
       completions.push({ activity, completionAt: last + Math.max(0, remaining) });
@@ -529,6 +537,81 @@ function createCompanionshipService({
         touchActive(completionAt);
       });
     }
+  }
+
+  /* 真实伸展播放完成后调用；完成后是否收束仍取决于有效时长与自然节点。
+     回报必须带活动 ID；旧/取消/已完成活动或角色不符时只返回未接受，不串写。 */
+  function completeDailyAction(activityId, { characterId: expectedCharacterId } = {}) {
+    ensureStarted();
+    const id = activityText(activityId, "活动 ID");
+    const nowDate = now();
+    const nowMs = nowDate.getTime();
+    prepare(nowDate);
+    const activity = store.activities.get(id);
+    if (!activity) {
+      return { completed: false, reason: "ACTIVITY_NOT_FOUND", activity: null };
+    }
+    if (
+      activity.kind !== "daily" ||
+      !["running", "paused"].includes(activity.status) ||
+      (expectedCharacterId && activity.characterId !== expectedCharacterId)
+    ) {
+      return {
+        completed: false,
+        reason: "STALE_ACTIVITY",
+        activity: activityPublic(activity),
+      };
+    }
+    if (activity.actionCompletedAt === null) {
+      store.activities.markActionComplete(id, nowMs);
+    }
+    return { completed: true, activity: activityPublic(store.activities.get(id)) };
+  }
+
+  /* 只持久化真实已播放帧数；不推进活动时间，也不因恢复而从 0 重来。 */
+  function recordDailyActionProgress(activityId, frame, { characterId: expectedCharacterId } = {}) {
+    ensureStarted();
+    const id = activityText(activityId, "活动 ID");
+    if (!Number.isInteger(frame) || frame < 0 || frame > 1000) {
+      throw new AppError("INVALID_INPUT", "动作进度必须是非负整数。");
+    }
+    const activity = store.activities.get(id);
+    if (
+      !activity ||
+      activity.kind !== "daily" ||
+      !["running", "paused"].includes(activity.status) ||
+      activity.actionCompletedAt !== null ||
+      (expectedCharacterId && activity.characterId !== expectedCharacterId)
+    ) {
+      return { recorded: false, reason: "STALE_ACTIVITY", activity: activityPublic(activity) };
+    }
+    const nowMs = now().getTime();
+    return {
+      recorded: true,
+      activity: activityPublic(store.activities.recordActionProgress(id, frame, nowMs)),
+    };
+  }
+
+  /* 仅当真实动作与有效时长都满足时在自然节点收束。 */
+  function completeReadyDaily(nowMs) {
+    const ready = store.activities
+      .listRunning()
+      .filter(
+        (activity) =>
+          activity.kind === "daily" &&
+          activity.actionCompletedAt !== null &&
+          activity.activeElapsedMs >= activity.durationMs,
+      );
+    for (const activity of ready) {
+      store.runInTransaction(() => {
+        settleAllWork(nowMs);
+        store.activities.complete(activity.activityId, nowMs);
+        store.setMode(activity.characterId, realModeFor(activity.characterId));
+        store.setLastSettled(activity.characterId, nowMs);
+        touchActive(nowMs);
+      });
+    }
+    return ready.length;
   }
 
   function pauseActivitiesOutsideRoster(roster, nowMs) {
@@ -995,19 +1078,27 @@ function createCompanionshipService({
     ensureStarted();
     const nowDate = now();
     const { nowMs, roster } = prepare(nowDate);
+    // daily 的真实动作与有效时长都满足后，只在这里（自然节点）收束。
+    const completedDaily = completeReadyDaily(nowMs);
     const pending = pendingReason();
     if (pending) {
       if (store.getInteraction()) {
-        return { switched: false, pending: true, deferred: true, pendingReason: pending };
+        return {
+          switched: false,
+          pending: true,
+          deferred: true,
+          pendingReason: pending,
+          completedDaily,
+        };
       }
       const rotation = attemptHandoff(nowDate, nowMs, roster);
       touchActive(nowMs);
-      return rotation;
+      return { ...rotation, completedDaily };
     }
 
     const scheduled = store.activities.getScheduled();
     if (!scheduled) {
-      return { switched: false, pending: false, reason: "no-pending" };
+      return { switched: false, pending: false, reason: "no-pending", completedDaily };
     }
     if (store.getInteraction()) {
       return {
@@ -1016,9 +1107,10 @@ function createCompanionshipService({
         deferred: true,
         reason: "INTERACTION",
         activity: activityPublic(scheduled),
+        completedDaily,
       };
     }
-    return startScheduledActivity(scheduled, nowMs, roster);
+    return { ...startScheduledActivity(scheduled, nowMs, roster), completedDaily };
   }
 
   function requestActivity({ activityId, characterId, kind } = {}) {
@@ -1086,6 +1178,12 @@ function createCompanionshipService({
   function hasScheduledActivity() {
     ensureStarted();
     return store.activities.getScheduled() !== null;
+  }
+
+  /* 日常运行中的自然节点还需核对真实动作完成；这里只做便宜的存在性判断。 */
+  function hasRunningDaily() {
+    ensureStarted();
+    return store.activities.listRunning().some((activity) => activity.kind === "daily");
   }
 
   function getActivity(activityId) {
@@ -1287,7 +1385,10 @@ function createCompanionshipService({
     endInteraction,
     requestAutoRotation,
     completeNaturalNode,
+    completeDailyAction,
+    recordDailyActionProgress,
     hasScheduledActivity,
+    hasRunningDaily,
     requestActivity,
     advanceActivities,
     getActivity,

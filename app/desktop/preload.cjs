@@ -7,8 +7,22 @@ contextBridge.exposeInMainWorld(
     onState: (callback) => {
       ipcRenderer.on("canvas:state", (_event, state) => callback(state));
     },
-    nodeComplete: (node, displayKey, generation) =>
-      ipcRenderer.send("canvas:node-complete", { node, displayKey, generation }),
+    nodeComplete: (node, displayKey, generation, activityId, characterId) =>
+      ipcRenderer.send("canvas:node-complete", {
+        node,
+        displayKey,
+        generation,
+        activityId,
+        characterId,
+      }),
+    activityProgress: (activityId, characterId, progress, displayKey, generation) =>
+      ipcRenderer.send("canvas:activity-progress", {
+        activityId,
+        characterId,
+        progress,
+        displayKey,
+        generation,
+      }),
     displayState: (kind, displayKey, generation, frame) =>
       ipcRenderer.send("canvas:display-state", { kind, displayKey, generation, frame }),
     assetError: (message) => ipcRenderer.send("canvas:asset-error", message),

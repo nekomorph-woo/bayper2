@@ -22,6 +22,8 @@ const SCHEMA = `
     started_at INTEGER,
     last_progress_at INTEGER,
     completed_at INTEGER,
+    action_completed_at INTEGER,
+    action_frame INTEGER NOT NULL DEFAULT 0 CHECK (action_frame >= 0),
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
@@ -38,6 +40,17 @@ function createCharacterActivities(db) {
   }
   db.exec("PRAGMA foreign_keys = ON");
   db.exec(SCHEMA);
+  // 旧库补列：daily 的真实动作完成与播放进度只增列，不另建活动系统。
+  const columns = db.prepare("PRAGMA table_info(character_activities)").all();
+  const columnNames = new Set(columns.map((column) => column.name));
+  if (!columnNames.has("action_completed_at")) {
+    db.exec("ALTER TABLE character_activities ADD COLUMN action_completed_at INTEGER");
+  }
+  if (!columnNames.has("action_frame")) {
+    db.exec(
+      "ALTER TABLE character_activities ADD COLUMN action_frame INTEGER NOT NULL DEFAULT 0",
+    );
+  }
 
   const statements = {
     get: db.prepare("SELECT * FROM character_activities WHERE activity_id = ?"),
@@ -89,6 +102,18 @@ function createCharacterActivities(db) {
       SET status = 'running', last_progress_at = ?, updated_at = ?
       WHERE activity_id = ? AND status = 'paused'
     `),
+    markActionComplete: db.prepare(`
+      UPDATE character_activities
+      SET action_completed_at = ?, updated_at = ?
+      WHERE activity_id = ? AND kind = 'daily' AND status IN ('running', 'paused')
+        AND action_completed_at IS NULL
+    `),
+    recordActionProgress: db.prepare(`
+      UPDATE character_activities
+      SET action_frame = MAX(action_frame, ?), updated_at = ?
+      WHERE activity_id = ? AND kind = 'daily' AND status IN ('running', 'paused')
+        AND action_completed_at IS NULL
+    `),
     complete: db.prepare(`
       UPDATE character_activities
       SET status = 'completed', active_elapsed_ms = duration_ms,
@@ -120,6 +145,9 @@ function createCharacterActivities(db) {
       startedAt: row.started_at === null ? null : Number(row.started_at),
       lastProgressAt: row.last_progress_at === null ? null : Number(row.last_progress_at),
       completedAt: row.completed_at === null ? null : Number(row.completed_at),
+      actionCompletedAt:
+        row.action_completed_at === null ? null : Number(row.action_completed_at),
+      actionFrame: Number(row.action_frame ?? 0),
       createdAt: Number(row.created_at),
       updatedAt: Number(row.updated_at),
     };
@@ -181,6 +209,18 @@ function createCharacterActivities(db) {
     return get(activityId);
   }
 
+  /* 只记录真实播放完成；是否收束仍由 companionship 同时核对有效时长与自然节点。 */
+  function markActionComplete(activityId, at) {
+    statements.markActionComplete.run(at, at, activityId);
+    return get(activityId);
+  }
+
+  /* 只记录已完成帧数，不按墙钟推导；MAX 保证迟到/重放消息不回退进度。 */
+  function recordActionProgress(activityId, frame, at) {
+    statements.recordActionProgress.run(frame, at, activityId);
+    return get(activityId);
+  }
+
   function complete(activityId, at) {
     statements.complete.run(at, at, activityId);
     return get(activityId);
@@ -208,6 +248,8 @@ function createCharacterActivities(db) {
     advance,
     pause,
     resume,
+    markActionComplete,
+    recordActionProgress,
     complete,
     cancel,
     pauseAllRunning,

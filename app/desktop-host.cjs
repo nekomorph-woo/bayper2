@@ -22,6 +22,20 @@ function nodeMatchesPresentation(displayKey, presentation) {
   return Boolean(displayKey) && displayKey === presentationAssetKey(presentation);
 }
 
+/* 活动回报必须同时匹配当前展示角色、当前显示代次和明确活动 ID；
+   不靠主进程“现在的”活动补身份。 */
+function validActivitySource(message, presentation, displayedGeneration) {
+  return Boolean(
+    presentation?.character?.id
+    && typeof message?.activityId === "string"
+    && message.activityId.length > 0
+    && message.characterId === presentation.character.id
+    && message.displayKey === presentationAssetKey(presentation)
+    && Number.isInteger(message.generation)
+    && message.generation === displayedGeneration,
+  );
+}
+
 function notificationPresentation(view, presentationId) {
   return view?.presentations.find((item) => item.presentationId === presentationId) ?? null;
 }
@@ -52,6 +66,7 @@ function createDesktopHost({
   dataDir,
   electronPath = process.execPath,
   onNodeComplete = () => {},
+  onActivityProgress = () => {},
   onAssetError = () => {},
   onPositionChange = () => {},
   onStatusChange = () => {},
@@ -75,6 +90,7 @@ function createDesktopHost({
   let rendererAssetError = false;
   let assetErrorMessage = null;
   let lastAssetKey = "";
+  let lastDisplayGeneration = null;
   const boundaryWaiters = new Set();
 
   /* 通知只走同一条子进程通道。父进程保存最近一次视图与 token；
@@ -232,6 +248,7 @@ function createDesktopHost({
     const key = presentationAssetKey(presentation);
     if (key !== lastAssetKey) {
       lastAssetKey = key;
+      lastDisplayGeneration = null;
       rendererAssetError = false;
       assetErrorMessage = null;
       status = {
@@ -256,6 +273,7 @@ function createDesktopHost({
     setStatus({ state: "starting", pid: null, ready: false, error: null });
     ready = false;
     channelReady = false;
+    lastDisplayGeneration = null;
 
     const env = {
       PATH: process.env.PATH || "/usr/bin:/bin:/usr/sbin:/sbin",
@@ -369,9 +387,35 @@ function createDesktopHost({
         // 旧展示的迟到节点不能完成新身份的自然节点。
         return;
       }
+      const activityId = typeof message.activityId === "string" ? message.activityId : "";
+      const characterId = typeof message.characterId === "string" ? message.characterId : "";
+      if (node === "daily-action-complete") {
+        // 动作完成必须来自当前展示角色、同一显示代次和明确活动 ID。
+        if (!validActivitySource(message, lastPresentation, lastDisplayGeneration)) {
+          return;
+        }
+      }
       status = { ...status, lastNode: node, lastNodeAt: Date.now() };
-      onNodeComplete(node);
+      onNodeComplete(node, { activityId, characterId, generation: message.generation });
       resolveBoundaries({ ok: true, node });
+      return;
+    }
+
+    if (message.type === "activity-progress") {
+      const progress = Number(message.progress);
+      if (
+        !validActivitySource(message, lastPresentation, lastDisplayGeneration)
+        || !Number.isInteger(progress)
+        || progress < 0
+        || progress > 64
+      ) {
+        return;
+      }
+      onActivityProgress({
+        activityId: message.activityId,
+        characterId: message.characterId,
+        progress,
+      });
       return;
     }
 
@@ -384,10 +428,16 @@ function createDesktopHost({
     }
 
     if (message.type === "display-state") {
+      const displayKey = typeof message.displayKey === "string" ? message.displayKey : "";
+      if (displayKey && displayKey === presentationAssetKey(lastPresentation)) {
+        lastDisplayGeneration = Number.isInteger(message.generation)
+          ? message.generation
+          : null;
+      }
       status = {
         ...status,
         displayedKind: message.kind === "character" ? "character" : "status",
-        displayedKey: typeof message.displayKey === "string" ? message.displayKey : "",
+        displayedKey: displayKey,
         displayedFrame: typeof message.frame === "string" ? message.frame : "",
         displayedAt: Date.now(),
       };
@@ -485,6 +535,7 @@ function createDesktopHost({
     child = null;
     ready = false;
     channelReady = false;
+    lastDisplayGeneration = null;
     notificationPanels.clear();
     setNotificationWindowFact({});
     clearReadyTimer();
@@ -775,6 +826,7 @@ module.exports = {
   createDesktopHost,
   presentationAssetKey,
   nodeMatchesPresentation,
+  validActivitySource,
   validateNotificationAck,
   validateNotificationClose,
 };

@@ -14,12 +14,19 @@ let displayKey = "";
 let displayGeneration = 0;
 let idle = null;
 let wave = null;
+let stretch = null;
 let animationTimer = null;
 let frameIndex = 0;
 let playingWave = false;
+let playingDaily = false;
+let dailyActivityKey = "";
+let dailyCharacterId = "";
+let dailyProgress = 0;
+let dailyActionReported = false;
+let dailyConfirmed = false;
+let activeDailyRun = null;
 let assetReady = false;
 let loadToken = 0;
-let announcedGeneration = -1;
 let drag = null;
 
 function stopAnimation() {
@@ -28,6 +35,8 @@ function stopAnimation() {
     animationTimer = null;
   }
   playingWave = false;
+  playingDaily = false;
+  activeDailyRun = null;
 }
 
 function showStatus(name, note) {
@@ -35,7 +44,6 @@ function showStatus(name, note) {
   statusNote.textContent = note || "";
   statusCard.hidden = false;
   sprite.hidden = true;
-  announcedGeneration = -1;
   if (desktopApi) {
     desktopApi.displayState("status", displayKey, displayGeneration, "");
   }
@@ -73,9 +81,70 @@ function sendNode(node, generation) {
   if (generation !== displayGeneration) {
     return;
   }
-  if (desktopApi) {
-    desktopApi.nodeComplete(node, displayKey, generation);
+  if (!desktopApi) {
+    return;
   }
+  // 全部帧已完成但完成事实未确认（例如一次写库失败）时，随待机节点有界重报；
+  // 仍以持久进度为据，不重新播放，也不把待机徽标当作完成。
+  if (
+    node === "idle-loop" &&
+    dailyActivityKey &&
+    dailyCharacterId &&
+    !dailyConfirmed &&
+    stretch &&
+    dailyProgress >= stretch.frames.length
+  ) {
+    desktopApi.nodeComplete(
+      "daily-action-complete",
+      displayKey,
+      generation,
+      dailyActivityKey,
+      dailyCharacterId,
+    );
+  }
+  desktopApi.nodeComplete(node, displayKey, generation, "", "");
+}
+
+/* 一轮日常播放的身份在开始时固定；回调只使用该闭包身份，不读会被后续状态
+   改写的全局活动 ID。活动换代时旧计时器已被停止，仍迟到的回调也核对失败。 */
+function isCurrentDailyRun(run) {
+  return Boolean(
+    run
+    && activeDailyRun === run
+    && run.generation === displayGeneration
+    && dailyActivityKey === run.activityId,
+  );
+}
+
+function reportDailyProgress(run, frame) {
+  if (!isCurrentDailyRun(run)) {
+    return;
+  }
+  run.progress = Math.max(run.progress, frame);
+  dailyProgress = Math.max(dailyProgress, run.progress);
+  if (desktopApi) {
+    desktopApi.activityProgress(
+      run.activityId,
+      run.characterId,
+      run.progress,
+      displayKey,
+      run.generation,
+    );
+  }
+}
+
+function sendDailyComplete(run) {
+  if (!isCurrentDailyRun(run) || dailyConfirmed || !desktopApi) {
+    return false;
+  }
+  desktopApi.nodeComplete(
+    "daily-action-complete",
+    displayKey,
+    run.generation,
+    run.activityId,
+    run.characterId,
+  );
+  return true;
 }
 
 function startIdle(generation) {
@@ -91,14 +160,14 @@ function startIdle(generation) {
   statusCard.hidden = true;
   frameIndex = 0;
   playFrames(idle, true, "idle-loop", () => startIdle(generation), generation);
-  if (announcedGeneration !== generation && desktopApi) {
+  // 动作结束回到待机时也要上报，避免主进程保留上一动作的最后一帧。
+  if (desktopApi) {
     desktopApi.displayState("character", displayKey, generation, sprite.src);
-    announcedGeneration = generation;
   }
 }
 
 function startWave() {
-  if (!assetReady || !wave || playingWave) {
+  if (!assetReady || !wave || playingWave || playingDaily) {
     return;
   }
   const generation = displayGeneration;
@@ -111,7 +180,113 @@ function startWave() {
   }, generation);
 }
 
-function playFrames(animation, loop, nodeName, onEnd, generation) {
+/* 日常伸展按已持久化的已完成帧数衔接；同 ID 反复暂停不会每次从第 0 帧重播。
+   全部帧已完成但完成回报丢失时，按真实进度补发一次完成，不重新播放。 */
+function startDailyStretch(progress) {
+  if (!assetReady || !stretch || !dailyActivityKey) {
+    return;
+  }
+  // 新一代开始前彻底停掉上一轮计时器，旧回调不能再写任何进度或完成。
+  stopAnimation();
+  const generation = displayGeneration;
+  const total = stretch.frames.length;
+  const start = Math.min(Math.max(0, Math.floor(progress) || 0), total);
+  const run = {
+    activityId: dailyActivityKey,
+    characterId: dailyCharacterId,
+    generation,
+    progress: start,
+  };
+  activeDailyRun = run;
+  dailyProgress = Math.max(dailyProgress, start);
+  dailyActionReported = false;
+  if (start >= total) {
+    dailyActionReported = true;
+    sendDailyComplete(run);
+    startIdle(generation);
+    return;
+  }
+  playingDaily = true;
+  sprite.hidden = false;
+  statusCard.hidden = true;
+  frameIndex = start;
+  playFrames(stretch, false, "daily-action-complete", () => {
+    if (!isCurrentDailyRun(run)) {
+      return;
+    }
+    dailyActionReported = true;
+    startIdle(generation);
+  }, generation, run);
+}
+
+function clearDailyAction({ restartIdle = false } = {}) {
+  dailyActivityKey = "";
+  dailyCharacterId = "";
+  dailyProgress = 0;
+  dailyActionReported = false;
+  dailyConfirmed = false;
+  activeDailyRun = null;
+  if (restartIdle && playingDaily) {
+    const generation = displayGeneration;
+    stopAnimation();
+    startIdle(generation);
+  }
+}
+
+function syncActivity(state) {
+  if (!assetReady) {
+    return;
+  }
+  const activity = state?.activity;
+  const valid =
+    activity?.kind === "daily" &&
+    ["running", "paused"].includes(activity.status) &&
+    Boolean(stretch);
+  if (!valid) {
+    if (dailyActivityKey) {
+      clearDailyAction({ restartIdle: true });
+    }
+    return;
+  }
+  if (dailyActivityKey !== activity.activityId) {
+    // 同角色换活动：先停掉上一轮计时器，再绑定新身份。
+    if (playingDaily || activeDailyRun) {
+      stopAnimation();
+    }
+    dailyActivityKey = activity.activityId;
+    dailyCharacterId = activity.characterId ?? state.character?.id ?? "";
+    dailyProgress = 0;
+    dailyActionReported = false;
+    dailyConfirmed = false;
+  }
+  dailyProgress = Math.max(
+    dailyProgress,
+    Number.isInteger(activity.actionProgress) ? activity.actionProgress : 0,
+  );
+  dailyConfirmed = activity.actionComplete === true;
+  if (activity.actionComplete) {
+    // 已完成动作只保持事实：切换/重启都不再重播。
+    dailyActionReported = true;
+    if (playingDaily) {
+      clearDailyAction({ restartIdle: true });
+    }
+    return;
+  }
+  if (activity.status === "paused") {
+    // 停住画面但保留同 ID 进度；恢复时从已完成帧续播，不清空活动身份。
+    if (playingDaily) {
+      const generation = displayGeneration;
+      stopAnimation();
+      startIdle(generation);
+    }
+    return;
+  }
+  if (!dailyActionReported && !playingDaily) {
+    startDailyStretch(dailyProgress);
+  }
+}
+
+function playFrames(animation, loop, nodeName, onEnd, generation, dailyRun = null) {
   if (generation !== displayGeneration) {
     return;
   }
@@ -122,12 +297,28 @@ function playFrames(animation, loop, nodeName, onEnd, generation) {
   }
 
   sprite.src = frames[frameIndex];
+  // 日常动作逐帧上报实际文件与闭包身份；待机仍按圈上报。
+  if (desktopApi && dailyRun) {
+    desktopApi.displayState("character", displayKey, generation, sprite.src);
+  }
   animationTimer = setTimeout(() => {
     if (generation !== displayGeneration) {
       return;
     }
     frameIndex += 1;
+    if (dailyRun) {
+      reportDailyProgress(dailyRun, frameIndex);
+    }
     if (frameIndex >= frames.length) {
+      if (dailyRun) {
+        if (!isCurrentDailyRun(dailyRun)) {
+          return;
+        }
+        dailyActionReported = true;
+        sendDailyComplete(dailyRun);
+        onEnd();
+        return;
+      }
       sendNode(nodeName, generation);
       if (loop) {
         frameIndex = 0;
@@ -137,7 +328,7 @@ function playFrames(animation, loop, nodeName, onEnd, generation) {
       }
       return;
     }
-    playFrames(animation, loop, nodeName, onEnd, generation);
+    playFrames(animation, loop, nodeName, onEnd, generation, dailyRun);
   }, Math.max(16, durations[frameIndex] ?? 180));
 }
 
@@ -146,6 +337,7 @@ function invalidateDisplay(nextKey) {
   displayKey = nextKey || "";
   loadToken += 1;
   loadingKey = "";
+  clearDailyAction();
   stopAnimation();
   assetReady = false;
   sprite.hidden = true;
@@ -172,12 +364,13 @@ async function applyState(state) {
     return;
   }
 
-  const key = `${state.character.id}:${state.animations.idle.frames.join("|")}:${state.animations.wave?.frames.join("|") ?? ""}`;
+  const key = `${state.character.id}:${state.animations.idle.frames.join("|")}:${state.animations.wave?.frames.join("|") ?? ""}:${state.animations.stretch?.frames.join("|") ?? ""}`;
   if (key === currentKey) {
     const nextDisplayKey = state.displayKey || displayKey;
     if (assetReady && !sprite.hidden && nextDisplayKey === displayKey) {
       displayKey = nextDisplayKey;
       applyDisplayPlan(state.animations.display);
+      syncActivity(state);
       return;
     }
     // 缓存身份仍是 A，但 A 的画面已被后续加载隐藏：重新激活 A 并作废该加载。
@@ -185,9 +378,11 @@ async function applyState(state) {
     currentKey = key;
     idle = state.animations.idle;
     wave = state.animations.wave ?? null;
+    stretch = state.animations.stretch ?? null;
     applyDisplayPlan(state.animations.display);
     sprite.alt = `${characterName}（桌面角色）`;
     startIdle(generation);
+    syncActivity(state);
     return;
   }
   if (key === loadingKey) {
@@ -206,6 +401,7 @@ async function applyState(state) {
   const allFrames = [
     ...state.animations.idle.frames,
     ...(state.animations.wave?.frames ?? []),
+    ...(state.animations.stretch?.frames ?? []),
   ];
   const loaded = await preloadFrames(allFrames);
   if (token !== loadToken || generation !== displayGeneration) {
@@ -226,9 +422,11 @@ async function applyState(state) {
   currentKey = key;
   idle = state.animations.idle;
   wave = state.animations.wave ?? null;
+  stretch = state.animations.stretch ?? null;
   applyDisplayPlan(state.animations.display);
   sprite.alt = `${characterName}（桌面角色）`;
   startIdle(generation);
+  syncActivity(state);
 }
 
 function beginDrag(event) {

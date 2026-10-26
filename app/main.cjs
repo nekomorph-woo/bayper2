@@ -200,6 +200,7 @@ function startApplication() {
   desktopHost = createDesktopHost({
     dataDir: app.getPath("userData"),
     onNodeComplete: handleCanvasNodeComplete,
+    onActivityProgress: handleCanvasActivityProgress,
     onAssetError: handleCanvasAssetError,
     onPositionChange: persistDesktopPosition,
     onStatusChange: handleDesktopStatusChange,
@@ -650,8 +651,27 @@ function handleCanvasAssetError(message) {
   pushSnapshot();
 }
 
-function handleCanvasNodeComplete(node) {
-  if (systemPaused || quitting || activeChat) {
+function handleCanvasNodeComplete(node, message = {}) {
+  if (quitting) {
+    return;
+  }
+  // 真实播放完成是已经发生的事实；即使此时因锁屏/聊天刚暂停，也要记录，
+  // 否则恢复后既不会再播完也不会收束，活动会卡住。
+  if (node === "daily-action-complete") {
+    try {
+      const activityId = typeof message?.activityId === "string" ? message.activityId : "";
+      const characterId = typeof message?.characterId === "string" ? message.characterId : "";
+      if (activityId && characterId) {
+        companionship.completeDailyAction(activityId, { characterId });
+        syncDesktop();
+        pushSnapshot();
+      }
+    } catch (error) {
+      console.error("日常动作完成记录失败：", error?.message ?? error);
+    }
+    return;
+  }
+  if (systemPaused || activeChat) {
     return;
   }
   if (desktopHost?.hasBoundaryWaiters()) {
@@ -661,7 +681,8 @@ function handleCanvasNodeComplete(node) {
   try {
     if (
       !rotationPending &&
-      companionship.hasScheduledActivity?.() !== true
+      companionship.hasScheduledActivity?.() !== true &&
+      companionship.hasRunningDaily?.() !== true
     ) {
       return;
     }
@@ -672,6 +693,21 @@ function handleCanvasNodeComplete(node) {
     ensurePendingRotationCompletion();
   } catch (error) {
     console.error(`角色节点 ${node} 收束失败：`, error?.message ?? error);
+  }
+}
+
+/* 画布逐帧上报的真实播放进度；只按活动 ID 记录已完成帧数。 */
+function handleCanvasActivityProgress({ activityId, characterId, progress } = {}) {
+  if (quitting) {
+    return;
+  }
+  try {
+    if (typeof activityId !== "string" || typeof characterId !== "string") {
+      return;
+    }
+    companionship.recordDailyActionProgress(activityId, progress, { characterId });
+  } catch (error) {
+    console.error("日常动作进度记录失败：", error?.message ?? error);
   }
 }
 

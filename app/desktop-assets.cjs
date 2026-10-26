@@ -92,10 +92,12 @@ function getAnimations(characterId) {
     if (characterId === "rin") {
       const idle = loadAnimation("rin", "idle-pixel-v2");
       const wave = loadAnimation("rin", "wave-pixel-v1");
+      const stretch = loadAnimation("rin", "stretch-pixel-v2-canvas256");
       animationCache.set(characterId, {
         idle: publicAnimation(idle),
-        wave: { ...publicAnimation(wave), candidate: true },
-        display: buildDisplayPlan([idle, wave], idle.public.frameSize),
+        wave: { ...publicAnimation(wave), candidate: false },
+        stretch: { ...publicAnimation(stretch), candidate: false },
+        display: buildDisplayPlan([idle, wave, stretch], idle.public.frameSize),
       });
     } else if (characterId === "hu") {
       const idle = loadAnimation("hu", "idle-v1");
@@ -147,7 +149,7 @@ function buildDesktopPresentation(characterId, displayName) {
       assetState: "ready",
       assetNote:
         characterId === "rin"
-          ? "凛 idle-pixel-v2；wave-pixel-v1 为明确招呼候选"
+          ? "凛 idle-pixel-v2；wave-pixel-v1 与 stretch-pixel-v2-canvas256 已通过播放验收"
           : "琥珀旧版 idle-v1 待机（新画风未完成）",
       assetLabel: characterId === "rin" ? "idle-pixel-v2" : "idle-v1",
     };
@@ -165,13 +167,13 @@ function buildDesktopPresentation(characterId, displayName) {
 
 /* 已发布活动动作的能力边界。候选素材未获 Codex 播放审查前不得在此标记可用，
    否则会以 idle 或状态标签冒充正式日常/探索。 */
+const DAILY_ACTION = Object.freeze({
+  characterId: "rin",
+  candidate: "stretch-pixel-v2-canvas256",
+  note: "凛 stretch-pixel-v2-canvas256 正式日常伸展已通过播放验收。",
+});
+
 const ACTIVITY_SUPPORT = Object.freeze({
-  daily: {
-    available: false,
-    reason: "ACTIVITY_ACTION_UNAVAILABLE",
-    candidate: "stretch-pixel-v2",
-    note: "日常正式动作素材未发布，自动日常暂不启动。",
-  },
   exploration: {
     available: true,
     degraded: true,
@@ -181,14 +183,25 @@ const ACTIVITY_SUPPORT = Object.freeze({
 });
 
 function getActivitySupport(characterId, kind) {
+  if (kind === "daily") {
+    if (characterId !== DAILY_ACTION.characterId) {
+      return {
+        available: false,
+        reason: "ACTIVITY_ACTION_UNAVAILABLE",
+        note: "该角色没有已接入的正式日常动作；不借用凛的素材。",
+      };
+    }
+    return {
+      available: true,
+      candidate: DAILY_ACTION.candidate,
+      note: DAILY_ACTION.note,
+    };
+  }
   const support = ACTIVITY_SUPPORT[kind];
   if (!support) {
     return { available: false, reason: "INVALID_ACTIVITY_KIND", note: "未知活动类型。" };
   }
-  return {
-    ...support,
-    candidate: support.candidate && characterId === "rin" ? support.candidate : null,
-  };
+  return { ...support };
 }
 
 module.exports = {

@@ -343,7 +343,21 @@ test("POL-ACTIVITY-002 日常零耗时执行、完成后回真实模式与滚动
   assert.equal(h.service.completeNaturalNode().reason, "no-pending");
   near(h.stats("a").energy, 95);
 
+  // 真实伸展完成只记录动作事实；有效时长未满仍不能收束。
+  assert.equal(h.service.completeDailyAction("daily-a-1").completed, true);
+  assert.equal(h.service.completeNaturalNode().completedDaily, 0);
+  assert.equal(h.activity("daily-a-1").status, "running");
+  assert.equal(h.snapshot().current.activity.actionComplete, true);
   h.advance(5 * 1000);
+  snap = h.snapshot();
+  assert.equal(snap.current.mode, "daily");
+  assert.equal(snap.current.activity.status, "running");
+  assert.equal(snap.current.activity.actionComplete, true);
+  assert.equal(snap.current.activity.activeElapsedMs, 10000);
+  near(h.stats("a").energy, 95);
+
+  // 动作与时长都满足后，才在自然节点收束。
+  assert.equal(h.service.completeNaturalNode().completedDaily, 1);
   snap = h.snapshot();
   assert.equal(snap.current.mode, "companion");
   assert.equal(h.activity("daily-a-1").status, "completed");
@@ -398,7 +412,10 @@ test("POL-ACTIVITY-002 日常零耗时执行、完成后回真实模式与滚动
     kind: "daily",
   });
   late.service.completeNaturalNode();
+  late.service.completeDailyAction("daily-late-1");
   late.setClock(new Date(2026, 9, 27, 0, 1, 0).getTime());
+  // 跨自然日仍在滚动小时内：先让已完成时长的日常在自然节点收束，额度不因日期变化清零。
+  assert.equal(late.service.completeNaturalNode().completedDaily, 1);
   late.snapshot();
   assert.equal(
     late.service.requestActivity({
@@ -748,7 +765,10 @@ test("POL-ACTIVITY-006 日常运行中切换或聊天必须真实暂停且不重
   const resumed = same.service.resumeActivity("daily-switch-self");
   assert.equal(resumed.resumed, true);
   near(same.stats("a").energy, 97);
+  assert.equal(same.service.completeDailyAction("daily-switch-self").completed, true);
   same.advance(7 * 1000);
+  const finished = same.service.completeNaturalNode();
+  assert.equal(finished.completedDaily, 1);
   snap = same.snapshot();
   row = same.activity("daily-switch-self");
   assert.equal(row.status, "completed");
@@ -796,6 +816,7 @@ test("POL-ACTIVITY-007 低精力轮换等待日常收束后有接班再交接", 
   assert.equal(h.service.completeNaturalNode().started, true);
   near(h.stats("a").energy, 30);
   h.advance(3 * 1000);
+  assert.equal(h.service.completeDailyAction("daily-auto-switch").completed, true);
 
   const rotation = h.service.requestAutoRotation();
   assert.equal(rotation.requested, true);
@@ -846,6 +867,7 @@ test("POL-ACTIVITY-007 低精力轮换等待日常收束后无接班则休息", 
   assert.equal(h.service.completeNaturalNode().started, true);
   near(h.stats("a").energy, 30);
   h.advance(3 * 1000);
+  assert.equal(h.service.completeDailyAction("daily-auto-rest").completed, true);
 
   const rotation = h.service.requestAutoRotation();
   assert.equal(rotation.requested, true);
@@ -976,4 +998,242 @@ test("POL-ACTIVITY-008 同角色暂停日常后探索请求同样被单一活动
   );
   near(h.stats("a").energy, beforeEnergy);
   assert.equal(h.startedCount("exploration", START - HOUR), 0);
+});
+
+test("POL-ACTIVITY-002 daily 有效时长先到但真实动作未到不收束", (t) => {
+  const h = makeHarness(t, { ids: ["a", "b"] });
+  h.snapshot();
+  assert.equal(
+    h.service.requestActivity({
+      activityId: "daily-duration-first",
+      characterId: "a",
+      kind: "daily",
+    }).requested,
+    true,
+  );
+  assert.equal(h.service.completeNaturalNode().started, true);
+  h.advance(10 * 1000);
+
+  let snap = h.snapshot();
+  let row = h.activity("daily-duration-first");
+  assert.equal(row.status, "running");
+  assert.equal(row.active_elapsed_ms, 10 * 1000);
+  assert.equal(row.action_completed_at, null);
+  assert.equal(row.action_frame, 0);
+  assert.equal(snap.current.mode, "daily");
+
+  // 计时已满但无真实动作：自然节点也不能宣称完成。
+  assert.equal(h.service.completeNaturalNode().completedDaily, 0);
+  assert.equal(h.activity("daily-duration-first").status, "running");
+
+  // 进度只记录播放事实；完成回报后才允许收束。
+  assert.equal(h.service.recordDailyActionProgress("daily-duration-first", 8).recorded, true);
+  assert.equal(h.activity("daily-duration-first").action_frame, 8);
+  assert.equal(h.activity("daily-duration-first").action_completed_at, null);
+  assert.equal(
+    h.service.completeDailyAction("daily-duration-first", { characterId: "a" }).completed,
+    true,
+  );
+  assert.equal(h.service.completeNaturalNode().completedDaily, 1);
+  snap = h.snapshot();
+  row = h.activity("daily-duration-first");
+  assert.equal(row.status, "completed");
+  assert.equal(row.active_elapsed_ms, 10 * 1000);
+  assert.equal(row.action_frame, 8);
+  assert.equal(snap.current.mode, "companion");
+});
+
+test("POL-ACTIVITY-002 daily 完成与暂停相邻两种顺序都保留真实完成事实", (t) => {
+  // 完成回报先到，随后暂停。
+  const first = makeHarness(t, { ids: ["a", "b"] });
+  first.snapshot();
+  first.service.requestActivity({
+    activityId: "daily-complete-then-pause",
+    characterId: "a",
+    kind: "daily",
+  });
+  assert.equal(first.service.completeNaturalNode().started, true);
+  first.advance(3 * 1000);
+  assert.equal(
+    first.service.completeDailyAction("daily-complete-then-pause", { characterId: "a" })
+      .completed,
+    true,
+  );
+  first.service.switchTo("b");
+  assert.equal(first.activity("daily-complete-then-pause").status, "paused");
+  assert.notEqual(first.activity("daily-complete-then-pause").action_completed_at, null);
+  assert.equal(first.service.switchTo("a").currentCharacterId, "a");
+  assert.equal(first.service.resumeActivity("daily-complete-then-pause").resumed, true);
+  first.advance(7 * 1000);
+  assert.equal(first.service.completeNaturalNode().completedDaily, 1);
+  assert.equal(first.activity("daily-complete-then-pause").status, "completed");
+
+  // 暂停回报先到，动作随后真实播完。
+  const second = makeHarness(t, { ids: ["a", "b"] });
+  second.snapshot();
+  second.service.requestActivity({
+    activityId: "daily-pause-then-complete",
+    characterId: "a",
+    kind: "daily",
+  });
+  assert.equal(second.service.completeNaturalNode().started, true);
+  second.advance(3 * 1000);
+  second.service.switchTo("b");
+  assert.equal(second.activity("daily-pause-then-complete").status, "paused");
+  assert.equal(
+    second.service.completeDailyAction("daily-pause-then-complete", { characterId: "a" })
+      .completed,
+    true,
+  );
+  assert.equal(second.activity("daily-pause-then-complete").status, "paused");
+  assert.notEqual(
+    second.activity("daily-pause-then-complete").action_completed_at,
+    null,
+  );
+  second.service.switchTo("a");
+  assert.equal(second.service.resumeActivity("daily-pause-then-complete").resumed, true);
+  second.advance(7 * 1000);
+  assert.equal(second.service.completeNaturalNode().completedDaily, 1);
+  assert.equal(second.activity("daily-pause-then-complete").status, "completed");
+});
+
+test("POL-ACTIVITY-002 daily 进度/完成回报按活动 ID 与角色归属，旧和取消活动不串写", (t) => {
+  const h = makeHarness(t, { ids: ["a", "b"] });
+  h.snapshot();
+  h.service.requestActivity({
+    activityId: "daily-identity",
+    characterId: "a",
+    kind: "daily",
+  });
+  assert.equal(h.service.completeNaturalNode().started, true);
+  h.advance(3 * 1000);
+
+  // 角色不符的迟到消息不得记录到当前活动。
+  assert.equal(
+    h.service.completeDailyAction("daily-identity", { characterId: "b" }).completed,
+    false,
+  );
+  assert.equal(
+    h.service.recordDailyActionProgress("daily-identity", 5, { characterId: "b" }).recorded,
+    false,
+  );
+  let row = h.activity("daily-identity");
+  assert.equal(row.action_completed_at, null);
+  assert.equal(row.action_frame, 0);
+
+  // 取消后的旧活动回报不得写到仍处于同角色的活动事实之外。
+  h.service.switchTo("b");
+  h.service.switchTo("a");
+  h.service.resumeActivity("daily-identity");
+  assert.equal(h.service.cancelActivity("daily-identity").cancelled, true);
+  assert.equal(
+    h.service.completeDailyAction("daily-identity", { characterId: "a" }).completed,
+    false,
+  );
+  assert.equal(
+    h.service.recordDailyActionProgress("daily-identity", 7, { characterId: "a" }).recorded,
+    false,
+  );
+  row = h.activity("daily-identity");
+  assert.equal(row.status, "cancelled");
+  assert.equal(row.action_completed_at, null);
+  assert.equal(row.action_frame, 0);
+
+  // 额度过期后启动新活动；旧 ID 的迟到回报不能完成或推进新活动。
+  h.advance(61 * MINUTE);
+  h.snapshot();
+  assert.equal(
+    h.service.requestActivity({
+      activityId: "daily-identity-next",
+      characterId: "a",
+      kind: "daily",
+    }).requested,
+    true,
+  );
+  assert.equal(h.service.completeNaturalNode().started, true);
+  assert.equal(
+    h.service.completeDailyAction("daily-identity", { characterId: "a" }).completed,
+    false,
+  );
+  assert.equal(
+    h.service.recordDailyActionProgress("daily-identity", 8, { characterId: "a" }).recorded,
+    false,
+  );
+  const next = h.activity("daily-identity-next");
+  assert.equal(next.status, "running");
+  assert.equal(next.action_completed_at, null);
+  assert.equal(next.action_frame, 0);
+});
+
+test("POL-ACTIVITY-002 daily 动作进度/完成保存失败不得假确认", (t) => {
+  const h = makeHarness(t, { ids: ["a", "b"] });
+  h.snapshot();
+  h.service.requestActivity({
+    activityId: "daily-write-failure",
+    characterId: "a",
+    kind: "daily",
+  });
+  assert.equal(h.service.completeNaturalNode().started, true);
+  h.advance(3 * 1000);
+
+  h.exec(`
+    CREATE TRIGGER fail_action_frame BEFORE UPDATE OF action_frame ON character_activities
+    BEGIN SELECT RAISE(ABORT, 'forced action frame failure'); END;
+  `);
+  assert.throws(
+    () => h.service.recordDailyActionProgress("daily-write-failure", 4),
+    /forced action frame failure/,
+  );
+  assert.equal(h.activity("daily-write-failure").action_frame, 0);
+
+  h.exec(`
+    CREATE TRIGGER fail_action_complete BEFORE UPDATE OF action_completed_at
+    ON character_activities
+    BEGIN SELECT RAISE(ABORT, 'forced action complete failure'); END;
+  `);
+  assert.throws(
+    () => h.service.completeDailyAction("daily-write-failure", { characterId: "a" }),
+    /forced action complete failure/,
+  );
+  assert.equal(h.activity("daily-write-failure").action_completed_at, null);
+  assert.equal(h.activity("daily-write-failure").status, "running");
+
+  h.exec("DROP TRIGGER fail_action_frame");
+  h.exec("DROP TRIGGER fail_action_complete");
+  assert.equal(h.service.recordDailyActionProgress("daily-write-failure", 4).recorded, true);
+  assert.equal(
+    h.service.completeDailyAction("daily-write-failure", { characterId: "a" }).completed,
+    true,
+  );
+  assert.equal(h.service.completeNaturalNode().completedDaily, 0, "时长未满仍不收束");
+  assert.equal(h.activity("daily-write-failure").action_frame, 4);
+  assert.notEqual(h.activity("daily-write-failure").action_completed_at, null);
+});
+
+test("POL-ACTIVITY-002 旧活动表缺动作列可原位迁移", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bayper-activity-migrate-"));
+  const dbFile = path.join(dir, "bayper.sqlite3");
+  try {
+    createStore(dir).close();
+    const seed = openDb(dbFile);
+    try {
+      seed.exec("ALTER TABLE character_activities DROP COLUMN action_completed_at");
+      seed.exec("ALTER TABLE character_activities DROP COLUMN action_frame");
+    } finally {
+      seed.close();
+    }
+    createStore(dir).close();
+    const check = openDb(dbFile, true);
+    try {
+      const names = new Set(
+        check.prepare("PRAGMA table_info(character_activities)").all().map((row) => row.name),
+      );
+      assert.equal(names.has("action_completed_at"), true);
+      assert.equal(names.has("action_frame"), true);
+    } finally {
+      check.close();
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
