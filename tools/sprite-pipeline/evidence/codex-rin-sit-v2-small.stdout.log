@@ -1,0 +1,13 @@
+[verify] OK window {"count":1,"bounds":{"x":920,"y":410,"width":720,"height":620},"userData":"/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-sprite-verify-UbxENF"}
+[verify] OK sandbox {"require":"undefined","process":"undefined","ipc":"undefined","frames":8}
+[verify] OK display-size {"scale":0.42953020134228187,"target":{"width":137.4496644295302,"height":164.93959731543623},"rendered":{"width":137.4375,"height":164.9375,"naturalWidth":320,"naturalHeight":384,"imageRendering":"pixelated"},"toleranceCssPx":0.015625}
+[verify] OK normal {"covered":true,"mode":"stop-at-end","status":"帧 8 / 8　循环 0","playLabel":"播放"}
+[verify] OK replay {"status":"帧 1 / 8　循环 0"}
+[verify] OK pause {"before":"帧 1 / 8　循环 0","pausedAt":"帧 1 / 8　循环 0","pausedLater":"帧 1 / 8　循环 0"}
+[verify] OK step {"before":1,"next":2,"prev":1}
+[verify] OK slow {"covered":true,"speed":"0.25","frame":1,"frameDurationMs":300,"expectedMs":1200,"probeMs":600,"sameAtProbe":true,"advancedMs":1230,"frameAfter":2}
+[verify] OK background {"dark":"dark","light":"","screenshots":["codex-rin-sit-v2-small-dark.png","codex-rin-sit-v2-small-light.png"]}
+[verify] OK navigation-block {"url":"file:///Volumes/Under_M2/morphiiouo/bayper/tools/sprite-pipeline/player.html","windows":1}
+[verify] OK cleanup {"path":"/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-sprite-verify-UbxENF","error":null}
+[verify] OK exit {"code":0}
+[verify] PASS evidence=/Volumes/Under_M2/morphiiouo/bayper/tools/sprite-pipeline/evidence/codex-rin-sit-v2-small.json

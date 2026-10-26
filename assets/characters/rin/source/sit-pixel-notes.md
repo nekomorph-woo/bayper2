@@ -17,3 +17,9 @@ Create an 8-frame NONLOOPING stand-to-sit animation sprite sheet of EXACT Rin fr
 v2原件exec-a8003338-d769-4e03-b33b-99950fef0c0d.png，已保存sit-pixel-v2.png。1536×1024 RGBA、alpha0～254。按4×2等分并以alpha>16只读核对：第0～3格bbox底边均达到512，第4/6/7格bbox顶边为0，说明首行像素仍跨界，判定等分切帧FAIL。版式比v1改善但没有满足安全留白，未运行切帧、不使用程序裁掉脚或逐帧fit掩盖错误。
 
 坐姿设计保持同角色黑裙/围裙、两耳单尾，基本站→屈膝→侧坐可辨；服装褶皱/第4到5姿势衔接及实际128pt像素可读性尚未验。下一轮需要更明确均匀网格或重排源图后再做接地锚检查；不能直接沿用站立脚带锚。此次仅保存可追溯失败候选，不据此通过D01、休息状态或正式素材库。生成使用Codex内置imagegen，无外部计费API，无项目代码代写。
+
+## 小尺寸播放器独立验收（2026-10-27）
+
+此前等分失败由显式区域与接地锚导出解决，见 `.hapilon/polaris/Bayper完整交付/s07-explicit-regions-plan.md` 与 `tools/sprite-pipeline/data/rin-sit-v2-regions.json`；没有裁掉角色或逐帧拉伸。Codex独占GUI以既有verify-player导入sit-pixel-v2，display-scale=128/298；证据`tools/sprite-pipeline/evidence/codex-rin-sit-v2-small.*`。8帧一次性动作停止于末帧、重播、暂停、逐帧、0.25倍速度、背景、导航拦截全部通过，退出0且自建目录删除，没有未覆盖播放项。画布实际137.4375×164.9375 CSS点，仍含透明留白；保持中性站姿参照比例，坐下不重新放大。
+
+Codex检查深浅背景实际第5帧截图：坐姿可辨、猫耳尾与双鞋完整，未看到白边底板或裁切，角色身份可辨。这是自动播放加关键帧视觉审查，不是人工连续体验；与idle的转入转出、休息业务和中断恢复尚待集成，保持候选。
