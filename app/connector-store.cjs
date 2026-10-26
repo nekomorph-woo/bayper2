@@ -30,7 +30,8 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS connector_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT, app_run_id TEXT NOT NULL, instance_id TEXT NOT NULL,
     run_id TEXT, agent_id TEXT, kind TEXT NOT NULL, state TEXT, raw_state TEXT, sequence INTEGER,
-    source_event_id TEXT, priority INTEGER, historical INTEGER NOT NULL DEFAULT 0,
+    source_event_id TEXT, priority INTEGER, original_priority INTEGER,
+    historical INTEGER NOT NULL DEFAULT 0,
     reconciled INTEGER NOT NULL DEFAULT 0, gapped INTEGER NOT NULL DEFAULT 0,
     notification_status TEXT NOT NULL DEFAULT 'none', linked_event_id INTEGER,
     observation_id TEXT, subscription_id TEXT, subscription_uuid TEXT, local_index INTEGER,
@@ -74,6 +75,7 @@ const OBSERVATION_COLUMNS = {
   source_tab_id: "TEXT",
   attribution: "TEXT",
   linked_observation_id: "TEXT",
+  original_priority: "INTEGER",
 };
 
 function ensureObservationColumns(db) {
@@ -85,6 +87,11 @@ function ensureObservationColumns(db) {
       db.exec(`ALTER TABLE connector_events ADD COLUMN ${name} ${type}`);
     }
   }
+  /* 旧事件只有当前 priority；尽量保留原值，无法还原的降级历史由后续新事件准确记录。 */
+  db.prepare(`
+    UPDATE connector_events SET original_priority = priority
+    WHERE original_priority IS NULL AND priority IS NOT NULL
+  `).run();
 }
 
 function createConnectorStore({ db, appRunId }) {
@@ -145,11 +152,12 @@ function createConnectorStore({ db, appRunId }) {
     addEvent: db.prepare(`
       INSERT INTO connector_events (
         app_run_id, instance_id, run_id, agent_id, kind, state, raw_state, sequence,
-        source_event_id, priority, historical, reconciled, gapped, notification_status,
-        linked_event_id, observation_id, subscription_id, subscription_uuid, local_index,
+        source_event_id, priority, original_priority, historical, reconciled, gapped,
+        notification_status, linked_event_id, observation_id, subscription_id,
+        subscription_uuid, local_index,
         source_pane_id, source_terminal_id, source_workspace_id, source_tab_id,
         attribution, linked_observation_id, occurred_at, received_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     eventBySource: db.prepare("SELECT * FROM connector_events WHERE instance_id = ? AND run_id = ? AND source_event_id = ?"),
     observationById: db.prepare(
@@ -194,6 +202,11 @@ function createConnectorStore({ db, appRunId }) {
       ORDER BY id ASC LIMIT ?
     `),
     pending: db.prepare("SELECT * FROM connector_events WHERE notification_status = 'pending' ORDER BY id ASC LIMIT ?"),
+    pendingPage: db.prepare(`
+      SELECT * FROM connector_events
+      WHERE notification_status = 'pending' AND id > ?
+      ORDER BY id ASC LIMIT ?
+    `),
     markPresented: db.prepare("UPDATE connector_events SET notification_status = 'presented' WHERE id = ? AND notification_status = 'pending'"),
   };
 
@@ -213,7 +226,8 @@ function createConnectorStore({ db, appRunId }) {
     return q.addEvent.run(
       appRunId, event.instanceId, event.runId ?? null, event.agentId ?? null, event.kind,
       event.state ?? null, event.rawState ?? null, event.sequence ?? null, event.sourceEventId ?? null,
-      event.priority ?? null, event.historical ? 1 : 0, event.reconciled ? 1 : 0, event.gapped ? 1 : 0,
+      event.priority ?? null, event.originalPriority ?? event.priority ?? null,
+      event.historical ? 1 : 0, event.reconciled ? 1 : 0, event.gapped ? 1 : 0,
       event.notificationStatus ?? "none", event.linkedEventId ?? null,
       event.observationId ?? null, event.subscriptionId ?? null,
       event.subscriptionUuid ?? null, event.localIndex ?? null,
@@ -229,6 +243,7 @@ function createConnectorStore({ db, appRunId }) {
       id: row.id, appRunId: row.app_run_id, instanceId: row.instance_id, runId: row.run_id,
       agentId: row.agent_id, kind: row.kind, state: row.state, rawState: row.raw_state,
       sequence: row.sequence, eventId: row.source_event_id, priority: row.priority,
+      originalPriority: row.original_priority,
       historical: row.historical === 1, reconciled: row.reconciled === 1,
       gapped: row.gapped === 1, notificationStatus: row.notification_status,
       linkedEventId: row.linked_event_id, observationId: row.observation_id,

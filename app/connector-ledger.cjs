@@ -673,13 +673,82 @@ function createConnectorLedger({ db, now = () => Date.now(), appRunId } = {}) {
     return q.pending.all(cleanLimit(limit)).map(rowToEvent);
   }
 
-  function markPresented(eventIds) {
+  function listPendingPage({ after = 0, limit } = {}) {
+    if (!Number.isInteger(after) || after < 0) throw invalid("after 必须是非负整数游标。");
+    const size = cleanLimit(limit);
+    const rows = q.pendingPage.all(after, size + 1);
+    const page = rows.slice(0, size);
+    return {
+      items: page.map(rowToEvent),
+      nextCursor: rows.length > size ? page[page.length - 1].id : null,
+    };
+  }
+
+  /* 按通知有效优先级和可见 deadline 做有界选择；目标时长由调用方传入，
+     不把通知策略复制进账本。历史事件用 original_priority 保留在线原始 P0。
+     active 关联由 notification 存储维护，SQL NOT EXISTS 排除活跃项，
+     避免把上千个 active ID 作为参数或把全 pending 读入内存。 */
+  function listPendingScheduled({
+    limit, urgent = false, targets,
+  } = {}) {
+    const size = cleanLimit(limit);
+    if (!targets || [0, 1, 2].some(
+      (key) => !Number.isInteger(targets[key]) || targets[key] < 1,
+    )) throw invalid("targets 必须包含正整数 P0/P1/P2 目标时长。");
+    const priority = `(CASE WHEN historical = 1
+      THEN COALESCE(original_priority, priority, 2)
+      ELSE COALESCE(priority, original_priority, 2) END)`;
+    const due = `received_at + CASE ${priority}
+      WHEN 0 THEN ? WHEN 1 THEN ? ELSE ? END`;
+    const channel = urgent ? "pending.effective_priority = 0"
+      : "pending.effective_priority > 0";
+    const rows = db.prepare(`
+      SELECT * FROM (
+        SELECT *, ${priority} AS effective_priority, ${due} AS due_at
+        FROM connector_events WHERE notification_status = 'pending'
+      ) AS pending
+      WHERE ${channel}
+        AND NOT EXISTS (
+          SELECT 1 FROM notification_active_events active
+          WHERE active.event_id = pending.id
+        )
+      ORDER BY due_at ASC, received_at ASC, id ASC
+      LIMIT ?
+    `).all(targets[0], targets[1], targets[2], size);
+    return rows.map(rowToEvent);
+  }
+
+  function listEventsByIds(eventIds) {
+    if (!Array.isArray(eventIds)) throw invalid("eventIds 必须是数组。");
+    const ids = [...new Set(eventIds)];
+    for (const id of ids) {
+      if (!Number.isInteger(id) || id < 1) throw invalid("eventIds 只能包含正整数。");
+    }
+    if (ids.length === 0) return [];
+    const found = new Map();
+    for (let offset = 0; offset < ids.length; offset += 200) {
+      const chunk = ids.slice(offset, offset + 200);
+      const placeholders = chunk.map(() => "?").join(", ");
+      const rows = db.prepare(
+        `SELECT * FROM connector_events WHERE id IN (${placeholders}) ORDER BY id ASC`,
+      ).all(...chunk);
+      for (const row of rows) found.set(row.id, rowToEvent(row));
+    }
+    return ids.map((id) => found.get(id)).filter(Boolean);
+  }
+
+  function presentedIds(eventIds) {
     if (!Array.isArray(eventIds)) throw invalid("eventIds 必须是数组。");
     const ids = new Set();
     for (const id of eventIds) {
       if (!Number.isInteger(id) || id < 1) throw invalid("eventIds 只能包含正整数。");
       ids.add(id);
     }
+    return ids;
+  }
+
+  function markPresented(eventIds) {
+    const ids = presentedIds(eventIds);
     return tx(() => {
       let updated = 0;
       for (const id of ids) updated += Number(q.markPresented.run(id).changes);
@@ -687,10 +756,24 @@ function createConnectorLedger({ db, now = () => Date.now(), appRunId } = {}) {
     });
   }
 
+  /* 账本 presented 与同一 SQLite 上的呈现状态必须在同一事务提交。
+     回调在账本事务内执行，不得再开第二个事务；任何写入失败一起回滚。 */
+  function markPresentedWith(eventIds, onPresented) {
+    if (typeof onPresented !== "function") throw invalid("onPresented 必须是函数。");
+    const ids = presentedIds(eventIds);
+    return tx(() => {
+      let updated = 0;
+      for (const id of ids) updated += Number(q.markPresented.run(id).changes);
+      const extra = onPresented({ eventIds: [...ids], updated });
+      return { updated, extra };
+    });
+  }
+
   return {
     appRunId: runScope, registerInstance, markDisconnected, tick, confirmStopped,
     disableInstance, enableInstance, recordAgentChange, recordObservation, applySnapshot,
-    getInstance, listAgents, listEvents, listPending, markPresented,
+    getInstance, listAgents, listEvents, listPending, listPendingPage,
+    listEventsByIds, listPendingScheduled, markPresented, markPresentedWith,
   };
 }
 
