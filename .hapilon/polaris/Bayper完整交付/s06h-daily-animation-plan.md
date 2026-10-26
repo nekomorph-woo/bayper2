@@ -31,3 +31,5 @@ Codex独立检查实际diff、运行结果、真实尺寸画面和接缝后决�
 2026-10-27 Codex核对现行manifest：idle-pixel-v2/wave-pixel-v1为256×384、output_foot_anchor(128,376)；stretch-pixel-v2及listen-pixel-v3为320×384、(160,376)，neutral-height均298。desktop-assets.buildDisplayPlan要求脚锚完全一致且使用idle的frameSize，不能只在getAnimations里增加stretch就认为可用。实现前统一公共画布/地面坐标：优先使用已有sprite-pipeline从保存的源图导出兼容尺寸的非破坏版本，或在已有播放器中采用简单明确的画布偏移；选择需保留一致线性比例和同一地面锚，禁止逐动作fit、静默拉伸、忽略footStable检查。派发前后对照旧待机实际身高，原已接受源图和导出保留，不让工具重新绘制像素。
 
 sit-pixel-v2采用explicit-region-anchor、spec.output_ground_anchor(160,370)，不是output_foot_anchor字段；它不属于本轮伸展范围，不能顺手纳入既有站姿加载器，也不能把缺失字段当0。后续休息动作切片须另核对接地以下的裙尾空间。本轮仅解决当前站立日常动作的坐标兼容，不扩成通用资源引擎。
+
+已完成最小兼容预处理：既有工具导出stretch-pixel-v2-canvas256（及后续互动用listen-pixel-v3-canvas256），8帧均与旧导出去除两侧各32列全透明空白后的RGBA逐字节一致，scale/时长/源SHA不变，脚锚128/376。本切片优先直接加载stretch兼容候选，不必扩宽idle/wave或为尺寸差异增加播放器抽象。该检查只解决坐标兼容，实际动作质量和正式集成仍按上述Case验收。

@@ -17,3 +17,7 @@ Repair this exact eight-frame Rin attentive-listening sheet. Preserve the same c
 ## v3完整提示词
 
 Re-layout these exact 8 same-character pixel animation frames into a properly spaced transparent sprite sheet. Keep their pixel drawings, identity, outfit and listening pose order. Canvas1536x1024, 4 columns2rows, each cell384x512. CRITICAL: each complete character including tail and ears must be ONLY 200px WIDE maximum and300px HIGH maximum, about HALF the cell, centered horizontally at localx192 with shoes baseline localy430. Large EMPTY transparent margins100px left/right,100px top. Uniform shrink of all8 together, never independently fit. All eight small sprites MUST be isolated with wide gutters, especially each tail. Actual alpha-zero TRANSPARENT background, no backdrop or shadows. Pixel art remains crisp, no blur. No text/grid/labels. Same 8 poses, front3quarter view, frame1 neutral,2 hands approach waist,3 hands together slighttilt,4/5 listeninghold,6 straightening,7 armslower,8neutral. Layout correction is mandatory: visibly SMALL characters within LARGE empty cells, not filling cells.
+
+## 256宽兼容导出
+
+2026-10-27 使用既有sprite-pipeline从同一v3源导出animations/listen-pixel-v3-canvas256，256×384、neutral-height298及原时序不变。Codex逐帧比较8帧RGBA：与旧320宽导出去除左右各32列全透明空白完全一致，源SHA、scale0.90303、时长不变；新脚锚128/376与现行idle/wave一致。保留旧导出追溯，后续集成优先用此候选；还未正式播放/衔接验收。日志完整交付evidence/rin-listen-pixel-v3-canvas256-export.log。

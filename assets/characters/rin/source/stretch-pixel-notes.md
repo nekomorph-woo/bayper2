@@ -11,3 +11,7 @@ Create an 8-frame NONLOOPING gentle stretch animation spritesheet for exact Rin 
 ## v2完整提示词
 
 Repair this exact 8-frame Rin stretch sprite sheet ONLY for layout and safe margins. Preserve same character design/outfit and eight gesture progression/order. 4 columns2rows, canvas1536x1024, equal384x512cells. Each complete figure INCLUDING tail and raised hands occupies at most75%cell width and75%cell height. All figures same scale, matching foot baseline at local y470, generous transparent gutters, entire tail fully INSIDE each cell with at least35 pixels margin on either side. Do not let tail cross cell border. Keep face/body/maid dress identity and coarse pixel clusters. Frame1 neutral,2 hands chest,3 beside ears,4 open stretch,5 overhead stretch,6 lower beside ears,7 waist,8 same neutral. Actual transparent background, no glow/floor/grid/text, clean hard alpha. Do not add poses or crop limbs. Reduce all figures uniformly together rather than independently resize each frame.
+
+## 256宽兼容导出
+
+2026-10-27 使用既有sprite-pipeline从同一v2源导出animations/stretch-pixel-v2-canvas256，frame-size256×384，neutral-height298及原时序不变。Codex逐帧比较：新8帧与原320宽导出去除左右各32个全透明列后的RGBA逐字节一致，原两侧alpha确为空；源SHA、scale0.707838、时长一致，脚锚统一128/376，与现行idle/wave一致。实际浅棋盘复查完整，未改变角色像素、缩放或动作。后续S06h优先使用本兼容候选；仍待正式桌面连续播放及衔接验收，不因尺寸兼容就发布。日志完整交付evidence/rin-stretch-pixel-v2-canvas256-export.log。
