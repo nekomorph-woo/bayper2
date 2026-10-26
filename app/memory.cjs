@@ -690,7 +690,10 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
         contextVersions,
       };
     };
-    return store.transaction(applyKeepExclusive);
+    // 聊天保留独属要与回复、请求完成共用同一事务；调用方负责提交/回滚。
+    return input.inTransaction === true
+      ? applyKeepExclusive()
+      : store.transaction(applyKeepExclusive);
   }
 
   /* 指定分享只复制明确列出的条目，保留原讲述者与派生链；

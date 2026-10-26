@@ -6,7 +6,13 @@ const { segmentQueryTokens } = require("./memory-retrieval.cjs");
 
 const MAX_OPERATION_TEXT = 2000;
 const MAX_FACT_KEY = 200; // 与 memory.cjs 的 factKey 上限一致
-const ACTIONS = Object.freeze(["correct", "forget", "restrictSharing", "relay"]);
+const ACTIONS = Object.freeze([
+  "correct",
+  "forget",
+  "restrictSharing",
+  "keepExclusive",
+  "relay",
+]);
 const RELAY_FAILURE_CODES = new Set(["SHARE_BLOCKED", "SHARE_CONFLICT", "SHARE_NOT_ALLOWED"]);
 const GENERIC_TOKENS = new Set([
   "喜欢", "讨厌", "想要", "记得", "忘记", "事情", "东西",
@@ -47,7 +53,7 @@ const REPLIES = Object.freeze({
   notProcessed: "我这次没有改动任何记忆。",
   ambiguous: "我还不确定你指的是哪一件事，能具体说是哪条记忆吗？",
   multipleActions:
-    "这句话里包含不止一个操作，我这次先不改动记忆；你想先纠正、忘记，还是禁止分享哪一件事？",
+    "这句话里包含不止一个操作，我这次先不改动记忆；你想先纠正、忘记、禁止分享，还是只留给当前角色记得哪一件事？",
   temporalClarification:
     "你说的这个时间范围我还不确定，先不改动长期记忆；能说清楚是今天，还是到什么时候吗？",
   uncertaintyClarification:
@@ -75,6 +81,21 @@ const RESTRICT_PATTERNS = Object.freeze([
   { pattern: /(?:不要|别|不用)(?:再)?(?:告诉(?!我)|跟(?!我|我们).{0,8}说)/gu, negation: "command" },
   { pattern: /(?:保密|不外传|不要说出去|别说出去)/gu, negation: "command" },
 ]);
+/* “只让你记得”是保留独属，不是忘记或禁分享。只认带“让/允许”谓词的
+   明确保留说法；“只有你记得”“就你记得”这类陈述不构成授权。 */
+const EXCLUSIVE_PATTERNS = Object.freeze([
+  {
+    pattern: /(?:只|仅|就)(?:让|允许)你(?:一个人|独自|单独)?(?:记得|记住)/gu,
+    negation: "before",
+  },
+]);
+const EXCLUSIVE_QUESTION =
+  /(?:能不能|能否|可不可以|会不会|是否|行不行|好不好|可以吗|行吗|好吗)/u;
+const EXCLUSIVE_NEGATION =
+  /(?:不要|不用|不必|无需|不需要|不希望|不想|没让你|不是让你|不是要|并非要|(?:请|千万)?别)/u;
+/* 陈述主语与话题所有格的区别：“我的/你的饮品偏好”是话题；
+   “他认为/我发现”是叙述。话题标记“这件事”只在未被叙述主语包裹时生效。 */
+const STATEMENT_SUBJECT = /^(?:我|你|他|她|它|我们|你们|他们|她们)(?!们?的)/u;
 /* 转告句只认本轮的明确命令。“告诉/转告”后紧跟“我”、或主语式陈述
    （“我想跟…”）不构成让当前角色转告的授权。 */
 const RELAY_DIRECT = /(?:转告|转达|告诉|讲给|说给)/gu;
@@ -94,6 +115,7 @@ const RULES = Object.freeze({
   forget: FORGET_PATTERNS,
   correct: CORRECT_PATTERNS,
   restrictSharing: RESTRICT_PATTERNS,
+  keepExclusive: EXCLUSIVE_PATTERNS,
 });
 
 function normalizeGrounding(value) {
@@ -121,6 +143,11 @@ function stripQuoted(text) {
 
 function isBareCommand(action, clause, match) {
   const trimmed = clause.trim();
+  if (action === "keepExclusive") {
+    // 请求框架已在 findCommand 中先行接受；其余只允许话题短语作前缀。
+    // “我的饮品偏好”是所有格话题；“他认为这件事”是叙述，不授权删除其他持有者。
+    return !STATEMENT_SUBJECT.test(trimmed.slice(0, match.index));
+  }
   if (action === "forget" && (SELF_PREFIX.test(trimmed) || /^把/u.test(trimmed))) {
     return true;
   }
@@ -194,6 +221,18 @@ function relayAuthorized(clause, hypotheticalSentences) {
   return Boolean(findRelayCommand(clause));
 }
 
+/* 独立功能询问或带疑问语气的句子不构成“只让你记得”的授权；
+   真实意图不明确时只澄清，不凭候选数量猜测。 */
+function exclusiveAuthorized(clause, questionSentences) {
+  if (EXCLUSIVE_NEGATION.test(clause) || EXCLUSIVE_QUESTION.test(clause)) {
+    return false;
+  }
+  if (questionSentences.some((sentence) => sentence.includes(clause))) {
+    return false;
+  }
+  return Boolean(findCommand("keepExclusive", clause));
+}
+
 /* 显式纠正允许“不是A，是B”这种跨逗号的声明式说法；问句和假设不算。 */
 function explicitCorrectionOf(text) {
   for (const sentence of text.match(/[^。！？!?；;\n]+[。！？!?；;]?/gu) ?? []) {
@@ -228,11 +267,17 @@ function detectOperationIntent(userText) {
   const hypotheticalSentences = safeText
     .split(SENTENCE_SPLIT)
     .filter((sentence) => HYPOTHETICAL.test(sentence));
+  const questionSentences = (safeText.match(/[^。！？!?；;\n]+[。！？!?；;]?/gu) ?? []).filter(
+    (sentence) =>
+      /[？?]\s*$/u.test(sentence) || /(?:吗|呢)[。！!]?\s*$/u.test(sentence),
+  );
   for (const clause of clauses) {
     const actions = ACTIONS.filter((action) =>
       action === "relay"
         ? relayAuthorized(clause, hypotheticalSentences)
-        : findCommand(action, clause),
+        : action === "keepExclusive"
+          ? exclusiveAuthorized(clause, questionSentences)
+          : findCommand(action, clause),
     );
     if (actions.length > 0) {
       authorized.push({ clause, actions });
@@ -870,6 +915,9 @@ function applyChatOperation({ memory, characterId, operation, nowMs, userSourceI
       mode: "replace",
     };
   }
+  if (operation.action === "keepExclusive") {
+    return memory.keepExclusive(selection);
+  }
   if (operation.action === "forget") {
     return memory.forget({
       ...selection,
@@ -900,6 +948,11 @@ function operationReply(operation, result) {
     return operation.trust === "inferred"
       ? `好，我按你不确定的说法把这条记为“${operation.body}”；原来源不会自动恢复。`
       : `好，这条记忆已按你给的原话更新为“${operation.body}”；原来源不会自动恢复。`;
+  }
+  if (operation.action === "keepExclusive") {
+    return result?.alreadyExclusive
+      ? "好，这件事已经只留在我这里记得，我没有再改动其他内容。"
+      : "好，这件事只留在我这里记得；其他角色已有的这条内容已清除，之后我也不会再分享或转告。";
   }
   if (operation.action === "forget") {
     return operation.scope === "self"
