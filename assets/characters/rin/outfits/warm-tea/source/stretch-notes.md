@@ -15,3 +15,9 @@ Create an 8-frame full-body PIXEL ART sprite sheet of Rin gently stretching, wea
 ## v2完整修订提示词
 
 Edit this exact 4x2 eight-frame sprite sheet to fix costume continuity ONLY. In frame4 (top row rightmost) and frame5 (bottom row leftmost), the raised arms incorrectly show bare skin between upper arm and wrist. Cover BOTH arms in both frames with the SAME smoky-lilac LONG SLEEVES from reference2. Each sleeve is continuous opaque smoky-lilac fabric from shoulder all the way to a cream cuff at the WRIST, just below hand. No exposed forearms, elbows or upper arms. Only the hands and tiny wrist edge may be skin. Even when raised straight overhead the long sleeves fully cover arms, bending/stretching fabric naturally. Match remaining frames' long sleeves. Preserve exact eight poses, all faces, body/head scale, placement, ears/tail, pocket, shoes, background alpha and grid. Do not alter other costume components. Keep all figures wholly in original equal cells, clear transparent separation. Crisp square pixel clusters, flat colors, no smooth illustration. True transparent background, alpha zero outside sprites, no halo, no backdrop, no floor shadow or text.
+
+## 128pt独立播放器复验
+
+2026-10-27 Codex独占GUI运行既有verify-player：`--display-scale 0.42953020134228187`（128/298），证据`tools/sprite-pipeline/evidence/codex-warm-tea-stretch-v2-small.*`，stdout另存，不覆盖工具自己的日志。退出0，8帧非循环到末帧停止、重播、暂停、逐帧、0.25倍速、深浅背景、导航拦截与清理均通过，无covered=false。画布实际137.4375×164.9375 CSS点，与320×384源画布及缩放相符；此画布含透明留白，不是角色本体大小。
+
+Codex查看实际小尺寸第5帧深浅截图与完整8帧棋盘：长袖、围裙方口袋、耳尾与鞋未缺失，举臂可辨且边缘完整。该证据是自动播放检查加关键帧视觉审查，不冒称人工连续观看；跨温茶idle/wave衔接、换装正式运行与其余动作仍需后续验收，候选状态保持。播放器已退出且专用目录删除。
