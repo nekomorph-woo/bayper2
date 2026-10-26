@@ -1522,6 +1522,33 @@ function registerIpcHandlers() {
     }
   });
 
+  /* 面板“只让所选角色记得”：保留选中角色，清除其他持有者并禁止再次分享。
+     保留者与所有被清除角色都要失效旧上下文；factKeyHash 不越过 IPC。 */
+  ipcMain.handle("bayper:memory:keep-exclusive", (event, payload) => {
+    try {
+      assertTrustedSender(event);
+      const result = store.memory.keepExclusive({
+        characterId: payload?.characterId,
+        entryId: payload?.entryId,
+        expectedVersion: payload?.expectedVersion,
+      });
+      notifyMemoryChanged([
+        ...new Set([result.retainedCharacterId, ...result.clearedCharacters]),
+      ]);
+      return {
+        ok: true,
+        retainedCharacterId: result.retainedCharacterId,
+        version: result.version,
+        cleared: result.cleared,
+        clearedCharacters: result.clearedCharacters,
+        alreadyExclusive: result.alreadyExclusive,
+        blockedSharing: result.blockedSharing,
+      };
+    } catch (error) {
+      return memoryFailureResult(error);
+    }
+  });
+
   /* 用户明确转告只接收一条、一个已结识接收者；条目归属与版本由记忆服务核对。
      投递成功后接收者上下文失效，沿既有记忆变更事件刷新当前可控旧回复。 */
   ipcMain.handle("bayper:memory:relay", (event, payload) => {

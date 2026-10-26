@@ -54,6 +54,12 @@
                 只阻止以后分享，不会撤回已有记忆。
               </span>
             </div>
+            <div class="memory-limit-row">
+              <button id="memory-exclusive" class="btn btn-ghost btn-small" type="button">
+                只让这位角色记得
+              </button>
+              <span id="memory-exclusive-note" class="memory-scope-note"></span>
+            </div>
             <p class="memory-scope-note">
               保存会更新所有知道它的角色；删除默认移除这些角色及派生记录。
             </p>
@@ -163,6 +169,14 @@
         : "只阻止以后分享，不会撤回已有记忆。";
     }
 
+    /* 独属保留只作用于下拉框所选角色，不能拿桌面当前角色代替。 */
+    function renderExclusiveState() {
+      const name = characterName(state.characterId);
+      byId("memory-exclusive").textContent = `只让${name}记得`;
+      byId("memory-exclusive-note").textContent =
+        `会清除其他已知角色对这件事的记忆，并禁止再次分享；只保留${name}的这条内容。`;
+    }
+
     function setNotice(text, stateName = "") {
       const notice = byId("memory-notice");
       notice.textContent = text;
@@ -189,6 +203,7 @@
       byId("memory-relay-target").disabled = blocked || !hasSelection || !hasTargets;
       byId("memory-relay").disabled = blocked || !hasSelection || !hasTargets || dirty;
       byId("memory-sharing-toggle").disabled = blocked || !hasSelection;
+      byId("memory-exclusive").disabled = blocked || !hasSelection || dirty;
       byId("memory-dirty-note").hidden = !hasSelection || !dirty;
     }
 
@@ -250,6 +265,7 @@
       byId("memory-editor").hidden = !visible;
       if (!visible) {
         renderSharingState();
+        renderExclusiveState();
         updateControls();
         return;
       }
@@ -261,6 +277,7 @@
         byId("memory-editor-meta").textContent = entryMeta(state.selected);
       }
       renderSharingState();
+      renderExclusiveState();
       updateControls();
     }
 
@@ -378,6 +395,7 @@
         return;
       }
       setNotice(successText);
+      return result;
     }
 
     async function submitCorrect() {
@@ -546,6 +564,42 @@
       );
     }
 
+    /* 独属保留只使用已保存正文与当前版本；范围提示就是一次确认，成功后再刷新列表与版本。 */
+    async function submitKeepExclusive() {
+      if (!state.selected || state.busy || state.stale) {
+        return;
+      }
+      if (isDirty()) {
+        showAlert(byId("memory-error"), {
+          code: "UNSAVED_EDIT",
+          message: "请先保存或取消正文修改，再设置独属记忆。",
+        });
+        setNotice("有未保存修改，尚未设置独属记忆。", "error");
+        byId("memory-body").focus();
+        return;
+      }
+      const entry = state.selected;
+      const name = characterName(state.characterId);
+      const result = await applyChange(
+        "设置独属记忆",
+        () =>
+          callApi("keepExclusive", {
+            characterId: state.characterId,
+            entryId: entry.id,
+            expectedVersion: entry.version,
+          }),
+        "",
+      );
+      if (!result?.ok) {
+        return;
+      }
+      setNotice(
+        result.alreadyExclusive
+          ? `这件事已经只保留给${name}。`
+          : `已只保留给${name}；其他角色的对应内容已清除，之后不再分享。`,
+      );
+    }
+
     function revertEdit() {
       if (!state.selected) {
         return;
@@ -658,6 +712,7 @@
       byId("memory-revert").addEventListener("click", revertEdit);
       byId("memory-relay").addEventListener("click", submitRelay);
       byId("memory-sharing-toggle").addEventListener("click", submitSharingToggle);
+      byId("memory-exclusive").addEventListener("click", submitKeepExclusive);
       byId("memory-body").addEventListener("input", updateControls);
       byId("memory-overlay").addEventListener("click", (event) => {
         if (event.target === byId("memory-overlay")) {

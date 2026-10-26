@@ -35,3 +35,17 @@ Codex独立84811执行固定四Runner，45/45、0跳过、exit0；evidence/s03h-
 | POL-EXCLUSIVECHAT-005 | PASS（服务） | 独属保留、自忘、禁后续分享三个范围保持；派生A仍保留来源，不冒亲历 |
 
 受托接受聊天服务子片，模型为构造HTTP，实际GUI和真实DeepSeek仍未验；不以45条绿灯宣称自然语言普遍可靠。面板由33826另行实施，须冻结后独立GUI再接受。
+
+## 独属记忆面板独立接受
+
+2026-10-27，Codex受托审查。33826完成main/preload/memory-panel共83行接线及803行固定GUI流程；55728仅补旧memory-ui接口精确白名单中的keepExclusive，未删业务断言。首次相邻回归因遗漏新增接口而FAIL，原始s03h-panel-neighbor-ui.log保留；该失败不是产品独属行为失败，也不抹去。
+
+Codex独立13067真实Electron GUI通过，证据evidence/s03h-memory-exclusive-ui/codex-20261027-r1/run.json与8张截图。九份源SHA与验收后文件逐项一致。查看琥珀选中、凛仍同屏的实际截图，按钮与范围说明明确指向琥珀，转述来源保留，面板完整显示。相邻回归7653执行memory-ui与chat-memory-operations-ui，全部通过；18单元通过，diff --check通过。详s03h-panel-neighbor-ui-r2.log、s03h-panel-unit.log。
+
+| Case | 状态 | 实际观察 |
+|---|---|---|
+| POL-EXCLUSIVEUI-001 | PASS | 本地HTTP停服时点击保留凛饮品记忆，琥珀对应内容清除、澄未知；无聊天调用，版本/防回流控制更新；重复点击幂等 |
+| POL-EXCLUSIVEUI-002 | PASS | 未保存编辑不能提交，外部版本更新拒绝旧项；选琥珀时只留琥珀饮食内容，保留“听凛说过”，不误以桌面凛为操作对象；无关事实保留 |
+| POL-EXCLUSIVEUI-003 | PASS | 重启后正文、归属与禁分享保持；真实聊天入口一HTTP完成音乐独属命令，旧持有者清除，本地确认如实；关系/名单/数值保持 |
+
+三个父进程正常exit0，各桌面子进程无残留，HTTP已关闭、临时目录已删除，fixtureErrors为空。此批为构造数据与本地HTTP，非真实DeepSeek、非用户人工体验；真实模型独属指令、异factKey语义归并等仍待独立闭环。

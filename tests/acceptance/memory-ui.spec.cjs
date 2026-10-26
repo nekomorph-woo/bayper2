@@ -469,6 +469,7 @@ test("POL-MEMUI-001 GUI 角色归属、200+分页与两尺寸操作", { timeout:
       "allowMemorySharing",
       "correctMemory",
       "forgetMemory",
+      "keepExclusive",
       "listMemories",
       "onMemoryChanged",
       "relayMemory",
