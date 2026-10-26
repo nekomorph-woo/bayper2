@@ -1,0 +1,10 @@
+{
+  "columns": 4,
+  "rows": 1,
+  "regions": [
+    {"x": 0, "y": 0, "width": 543, "height": 724, "anchor": {"x": 271, "y": 691}},
+    {"x": 543, "y": 0, "width": 543, "height": 724, "anchor": {"x": 271, "y": 691}},
+    {"x": 1086, "y": 0, "width": 543, "height": 724, "anchor": {"x": 271, "y": 691}},
+    {"x": 1629, "y": 0, "width": 543, "height": 724, "anchor": {"x": 271, "y": 691}}
+  ]
+}
