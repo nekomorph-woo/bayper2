@@ -10,7 +10,7 @@
       "traits": ["回答问题前会先停一下", "茶要放到温热才喝", "织东西时会留一盏灯"],
       "matchKeywords": ["安静", "倾听", "听我", "温和", "不急", "茶", "织", "陪着"],
       "matchReason": "她话不多，习惯先听你说完，再慢慢回应。",
-      "image": "../../prototypes/desktop/assets/img/rin.png",
+      "image": "../../assets/characters/rin/source/master-pixel-v2.png",
       "imageState": "development-candidate",
       "recipeRef": "reference.maid10",
       "recipeNote": "引用造型画风参考配方，不是正式角色制作配方。"
