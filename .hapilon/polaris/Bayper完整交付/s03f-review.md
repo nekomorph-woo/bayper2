@@ -63,3 +63,15 @@
 源差异检查通过。只提交本服务代码/测试、审查与必要失败/最终证据；不夹带S07c worktree或其它tools证据。正式GUI、自然语言转告、自动定向共享、不同factKey语义纠正/删除仍为Goal余项。
 
 提交检查补记：两份原始失败日志共六行包含测试框架输出的空白尾空格，保留原始输出不重写；源码、测试、文档与元数据的diff --check另行通过。最终五个源SHA全部一致，无.env或依赖目录混入暂存。
+
+## 正式聊天窗口独立验收（2026-10-27）
+
+Codex执行 `S03F_CHATMEM_UI_BATCH=codex-20261027-r1 node --test tests/acceptance/chat-memory-operations-ui.spec.cjs`，退出0，1/1通过。Claude只实现Runner并做语法检查；本次使用真实Electron窗口、SQLite及本地构造HTTP，不读取.env、不作为真实模型语义复验。
+
+| Case | 结果 | 实际观察与边界 |
+|---|---|---|
+| POL-CHATMEM-UI-001 | PASS | 真实输入/发送完成纠正、禁分享、删除；同对话后续messages不含旧住址与删除命令；记忆页和重启均保留完整纠正文、禁分享标签及无关事实，旧住址消失；服务relay返回SHARE_BLOCKED；关系/名单/亲密度/心情不变，精力无额外消耗 |
+
+证据：`evidence/s03f-chat-memory-ui/codex-20261027-r1/`及`s03f-codex-gui-r1.log`。九项源码摘要重新核对全部一致。Codex查看聊天确认、记忆页及重启截图，中文内容完整、未溢出；截图只含自建应用和构造数据。三次Electron退出、HTTP关闭、临时目录删除均成功。机器run.json保留当时PENDING_CODEX标签，本节为独立审查结论，不改写原始证据。
+
+此处接受正式窗口三动作闭环，不代表自然语言转告、自动共享、不同factKey语义归并等剩余需求已经完成；不冒称人工体验。
