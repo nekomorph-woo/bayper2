@@ -22,6 +22,32 @@ function nodeMatchesPresentation(displayKey, presentation) {
   return Boolean(displayKey) && displayKey === presentationAssetKey(presentation);
 }
 
+function notificationPresentation(view, presentationId) {
+  return view?.presentations.find((item) => item.presentationId === presentationId) ?? null;
+}
+
+/* 旧子进程、旧视图 token 或不属于该呈现的事件都不能触发 presented。 */
+function validateNotificationAck(view, message) {
+  if (!view || message?.token !== view.token || message?.generation !== view.generation) {
+    return false;
+  }
+  const presentation = notificationPresentation(view, message.presentationId);
+  const ids = message.eventIds;
+  if (!presentation || !Array.isArray(ids) || ids.length === 0) return false;
+  if (new Set(ids).size !== ids.length) return false;
+  const allowed = new Set(presentation.items.map((item) => item.eventId));
+  return ids.every((id) => Number.isInteger(id) && allowed.has(id));
+}
+
+function validateNotificationClose(view, message) {
+  return Boolean(
+    view
+    && message?.token === view.token
+    && message?.generation === view.generation
+    && notificationPresentation(view, message.presentationId),
+  );
+}
+
 function createDesktopHost({
   dataDir,
   electronPath = process.execPath,
@@ -29,6 +55,9 @@ function createDesktopHost({
   onAssetError = () => {},
   onPositionChange = () => {},
   onStatusChange = () => {},
+  onNotificationAck = () => {},
+  onNotificationClose = () => {},
+  onNotificationVisibilityChange = () => {},
 }) {
   const profileDir = path.join(dataDir, "desktop-profile");
   fs.mkdirSync(profileDir, { recursive: true });
@@ -47,6 +76,28 @@ function createDesktopHost({
   let assetErrorMessage = null;
   let lastAssetKey = "";
   const boundaryWaiters = new Set();
+
+  /* 通知只走同一条子进程通道。父进程保存最近一次视图与 token；
+     renderer 的回执必须同时匹配 token、generation 和当前呈现内容。 */
+  let channelReady = false;
+  let notificationView = null;
+  let notificationToken = 0;
+  let notificationSignature = "";
+  let notificationPanels = new Map();
+  let notificationWindowFact = {};
+  const notificationAckStats = { accepted: 0, rejected: 0 };
+
+  function setNotificationWindowFact(next) {
+    const wasVisible = notificationWindowFact.visible === true;
+    notificationWindowFact = next;
+    if (next.visible !== wasVisible) {
+      try {
+        onNotificationVisibilityChange(next.visible === true);
+      } catch {
+        // 可见性回调不参与通知事实，不影响子进程通道。
+      }
+    }
+  }
 
   let status = {
     state: "stopped",
@@ -85,6 +136,97 @@ function createDesktopHost({
     notify();
   }
 
+  function hasVisibleNotifications() {
+    return Boolean(
+      notificationView
+      && notificationView.visible
+      && notificationView.presentations.length > 0,
+    );
+  }
+
+  function wanted() {
+    return desired || hasVisibleNotifications();
+  }
+
+  function sendNotifications() {
+    if (!notificationView || !channelReady) return;
+    send({
+      type: "notifications",
+      token: notificationView.token,
+      generation: notificationView.generation,
+      visible: notificationView.visible,
+      presentations: notificationView.presentations,
+    });
+  }
+
+  function panelFact(presentationId) {
+    if (!notificationPanels.has(presentationId)) {
+      notificationPanels.set(presentationId, {});
+    }
+    return notificationPanels.get(presentationId);
+  }
+
+  /* tick 只在视图内容或可见性变化时下发；相同视图不重复覆盖子进程 DOM。 */
+  function updateNotifications(view, visible = true) {
+    if (!view || !Array.isArray(view.presentations)) return;
+    const signature = JSON.stringify({
+      generation: view.generation,
+      visible,
+      presentations: view.presentations,
+    });
+    if (signature === notificationSignature) return;
+    notificationSignature = signature;
+    notificationToken += 1;
+    notificationView = {
+      token: notificationToken,
+      generation: view.generation,
+      visible,
+      presentations: view.presentations,
+    };
+    const active = new Set(view.presentations.map((item) => item.presentationId));
+    for (const presentationId of [...notificationPanels.keys()]) {
+      if (!active.has(presentationId)) notificationPanels.delete(presentationId);
+    }
+    if (!child) {
+      spawnChild();
+      return;
+    }
+    sendNotifications();
+  }
+
+  function setNotificationsVisible(visible) {
+    if (!notificationView) return;
+    const signature = JSON.stringify({
+      generation: notificationView.generation,
+      visible,
+      presentations: notificationView.presentations,
+    });
+    if (signature === notificationSignature) return;
+    notificationSignature = signature;
+    notificationToken += 1;
+    notificationView = { ...notificationView, token: notificationToken, visible };
+    sendNotifications();
+  }
+
+  function notificationStatus() {
+    return {
+      generation: notificationView?.generation ?? null,
+      visible: Boolean(notificationView?.visible && hasVisibleNotifications()),
+      token: notificationView?.token ?? null,
+      ackStats: { ...notificationAckStats },
+      window: notificationWindowFact,
+      panels: notificationView
+        ? notificationView.presentations.map((presentation) => ({
+          presentationId: presentation.presentationId,
+          channel: presentation.channel,
+          slot: presentation.slot,
+          itemCount: presentation.items.length,
+          eventIds: presentation.items.map((item) => item.eventId),
+          ...panelFact(presentation.presentationId),
+        }))
+        : [],
+    };
+  }
 
   function rememberPresentation(presentation) {
     const key = presentationAssetKey(presentation);
@@ -107,12 +249,13 @@ function createDesktopHost({
 
   function spawnChild() {
     // 恢复等待由 handleExit 的单个 timer 负责；心跳/重复 start 不得抢跑。
-    if (child || !desired || restartTimer || status.state === "failed") {
+    if (child || !wanted() || restartTimer || status.state === "failed") {
       return;
     }
     clearReadyTimer();
     setStatus({ state: "starting", pid: null, ready: false, error: null });
     ready = false;
+    channelReady = false;
 
     const env = {
       PATH: process.env.PATH || "/usr/bin:/bin:/usr/sbin:/sbin",
@@ -121,6 +264,19 @@ function createDesktopHost({
       LANG: process.env.LANG || "zh_CN.UTF-8",
       BAYPER_DESKTOP_PROFILE: profileDir,
       BAYPER_DESKTOP_CHILD: "1",
+      // 仅在验收进程显式开启时暴露调试端口；不影响正式启动。
+      ...(process.env.BAYPER_DESKTOP_DEBUG_PORT
+        ? { BAYPER_DESKTOP_DEBUG_PORT: process.env.BAYPER_DESKTOP_DEBUG_PORT }
+        : {}),
+      ...(process.env.BAYPER_NOTIFICATION_ACK_DELAY_MS
+        ? { BAYPER_NOTIFICATION_ACK_DELAY_MS: process.env.BAYPER_NOTIFICATION_ACK_DELAY_MS }
+        : {}),
+      ...(process.env.BAYPER_NOTIFICATION_SHOWN_DELAY_MS
+        ? { BAYPER_NOTIFICATION_SHOWN_DELAY_MS: process.env.BAYPER_NOTIFICATION_SHOWN_DELAY_MS }
+        : {}),
+      ...(process.env.BAYPER_NOTIFICATION_MAX_HEIGHT
+        ? { BAYPER_NOTIFICATION_MAX_HEIGHT: process.env.BAYPER_NOTIFICATION_MAX_HEIGHT }
+        : {}),
     };
 
     const spawned = spawn(electronPath, [DESKTOP_DIR], {
@@ -169,6 +325,14 @@ function createDesktopHost({
       return;
     }
     if (!message || typeof message.type !== "string") {
+      return;
+    }
+
+    if (message.type === "channel-ready") {
+      // 无角色时通知仍需可用；通道就绪不等于角色画布 ready。
+      channelReady = true;
+      if (lastPresentation) sendState();
+      sendNotifications();
       return;
     }
 
@@ -243,6 +407,73 @@ function createDesktopHost({
       if (Number.isFinite(message.x) && Number.isFinite(message.y)) {
         onPositionChange(Math.round(message.x), Math.round(message.y));
       }
+      return;
+    }
+
+    if (message.type === "notification-shown") {
+      // 已要求隐藏时，迟到的 shown(true) 不能把隐藏意图或实际状态改回可见。
+      const intendedVisible = notificationView?.visible !== false;
+      setNotificationWindowFact({
+        visible: message.visible === true && intendedVisible,
+        shownAt: Number.isFinite(message.shownAt) ? message.shownAt : null,
+        bounds: message.bounds ?? null,
+        windowId: Number.isInteger(message.windowId) ? message.windowId : null,
+        focusable: message.focusable === true,
+        captureId: typeof message.captureId === "string" ? message.captureId : null,
+      });
+      return;
+    }
+
+    if (message.type === "notification-visible") {
+      const fact = panelFact(message.presentationId);
+      fact.renderedEventIds = Array.isArray(message.eventIds) ? message.eventIds : [];
+      fact.renderedAt = Date.now();
+      fact.renderedComplete = message.complete === true;
+      return;
+    }
+
+    if (message.type === "notification-ack") {
+      /* 明确回执结果：旧 token 或暂时写入失败由 renderer 有界重试，
+         不放宽 token 校验，也不假定发送一次即成功。 */
+      let accepted = false;
+      if (validateNotificationAck(notificationView, message)) {
+        accepted = onNotificationAck({
+          presentationId: message.presentationId,
+          eventIds: message.eventIds,
+          generation: message.generation,
+          token: message.token,
+        }) === true;
+      }
+      notificationAckStats[accepted ? "accepted" : "rejected"] += 1;
+      if (accepted) {
+        const fact = panelFact(message.presentationId);
+        fact.ackedEventIds = [...new Set([
+          ...(fact.ackedEventIds ?? []),
+          ...message.eventIds,
+        ])];
+        fact.ackAt = Date.now();
+      }
+      send({
+        type: "notification-ack-result",
+        token: notificationView?.token ?? null,
+        presentationId: message.presentationId,
+        eventIds: message.eventIds,
+        accepted,
+      });
+      return;
+    }
+
+    if (message.type === "notification-close") {
+      if (!validateNotificationClose(notificationView, message)) {
+        return;
+      }
+      const fact = panelFact(message.presentationId);
+      fact.closedAt = Date.now();
+      onNotificationClose({
+        presentationId: message.presentationId,
+        generation: message.generation,
+        token: message.token,
+      });
     }
   }
 
@@ -250,14 +481,17 @@ function createDesktopHost({
     if (child !== processHandle) {
       return;
     }
-    const wasDesired = desired;
+    const wasWanted = wanted();
     child = null;
     ready = false;
+    channelReady = false;
+    notificationPanels.clear();
+    setNotificationWindowFact({});
     clearReadyTimer();
     clearRestartTimer();
     resolveBoundaries({ ok: false, reason: "child-exit" });
 
-    if (!wasDesired) {
+    if (!wasWanted) {
       setStatus({ state: "stopped", ready: false, pid: null });
       return;
     }
@@ -343,6 +577,9 @@ function createDesktopHost({
     if (child) {
       if (ready) {
         sendState();
+      } else if (!readyTimer) {
+        // 通知-only 启动不设角色 ready 超时；角色出现后才开始计时。
+        armReadyTimer(child);
       }
       return;
     }
@@ -411,7 +648,7 @@ function createDesktopHost({
         return;
       }
       readyTimer = null;
-      if (child === spawned && !ready) {
+      if (child === spawned && !ready && desired) {
         setStatus({ state: "failed", error: "角色画布启动超时" });
         spawned.kill("SIGTERM");
       }
@@ -443,8 +680,13 @@ function createDesktopHost({
     clearRestartTimer();
     clearReadyTimer();
     resolveBoundaries({ ok: false, reason: "stopping" });
+    notificationView = null;
+    notificationSignature = "";
+    notificationPanels.clear();
+    setNotificationWindowFact({});
     const running = child;
     if (!running) {
+      channelReady = false;
       setStatus({ state: "stopped", ready: false, pid: null });
       return;
     }
@@ -459,8 +701,21 @@ function createDesktopHost({
       child = null;
     }
     ready = false;
+    channelReady = false;
     clearReadyTimer();
     setStatus({ state: "stopped", ready: false, pid: null });
+  }
+
+  /* 角色消失不等于退出：通知仍可能待呈现，子进程继续承载通知窗口。 */
+  function stopRole() {
+    if (!desired && !lastPresentation) return;
+    desired = false;
+    lastPresentation = null;
+    clearReadyTimer();
+    if (child) send({ type: "role-hidden" });
+    if (!hasVisibleNotifications()) {
+      stop().catch(() => {});
+    }
   }
 
   function waitForExit(processHandle, timeoutMs) {
@@ -494,6 +749,7 @@ function createDesktopHost({
         ? "加载失败"
         : lastPresentation?.assetLabel ?? status.assetLabel,
       characterId: lastPresentation?.character?.id ?? null,
+      notifications: notificationStatus(),
     };
   }
 
@@ -505,8 +761,11 @@ function createDesktopHost({
     start,
     update,
     stop,
+    stopRole,
     restart,
     getStatus,
+    updateNotifications,
+    setNotificationsVisible,
     waitForNodeBoundary,
     hasBoundaryWaiters,
   };
@@ -516,4 +775,6 @@ module.exports = {
   createDesktopHost,
   presentationAssetKey,
   nodeMatchesPresentation,
+  validateNotificationAck,
+  validateNotificationClose,
 };

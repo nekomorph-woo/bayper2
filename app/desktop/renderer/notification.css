@@ -1,0 +1,190 @@
+/* 通知气泡：透明非激活 panel，贴近角色但不遮挡。普通三位与加急位
+   共用窗口但各自独立：加急列表在自身高度内滚动/分页，不把普通卡片挤出。 */
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: #241f1a;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  user-select: none;
+}
+
+#stack {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 6px;
+  overflow: hidden;
+}
+
+.card {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  padding: 8px 11px 9px;
+  border: 1px solid rgba(71, 58, 45, 0.18);
+  border-radius: 12px;
+  background: rgba(251, 248, 240, 0.97);
+  box-shadow: 0 6px 18px rgba(24, 20, 16, 0.18);
+}
+
+.card.urgent {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 1;
+  min-height: 76px;
+  border-color: rgba(186, 82, 42, 0.55);
+  box-shadow: 0 0 0 1px rgba(186, 82, 42, 0.22), 0 8px 20px rgba(92, 42, 20, 0.2);
+}
+
+.card.closing {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.card-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.badge {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #e8e0d2;
+  color: #554a3e;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.card.urgent .badge {
+  background: #b9522a;
+  color: #fff8f1;
+}
+
+.close {
+  flex: none;
+  padding: 2px 7px;
+  border: 1px solid rgba(71, 58, 45, 0.22);
+  border-radius: 7px;
+  background: transparent;
+  color: #6f6559;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.close:hover {
+  background: rgba(71, 58, 45, 0.08);
+}
+
+.items {
+  flex: 0 0 auto;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card.urgent .items {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 150px;
+  /* 自动分页的整页内容必须完整可见；只有手动查看全部时才允许滚动。 */
+  overflow-y: hidden;
+}
+
+.card.urgent[data-expanded="1"] .items {
+  overflow-y: auto;
+}
+
+.card[data-channel="ordinary"] .items {
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+.item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 5px 2px;
+  border-top: 1px solid rgba(71, 58, 45, 0.1);
+}
+
+.item:first-child {
+  border-top: 0;
+}
+
+.item-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.item-source {
+  display: block;
+  font-size: 11px;
+  color: #6f6559;
+  font-variant-numeric: tabular-nums;
+}
+
+.item-meaning {
+  display: block;
+  font-size: 13px;
+}
+
+.item-state {
+  flex: none;
+  padding-top: 1px;
+  font-size: 11px;
+  color: #857a6c;
+}
+
+.more {
+  flex: 0 0 auto;
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  padding: 4px 8px;
+  border: 1px dashed rgba(71, 58, 45, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.35);
+  color: #554a3e;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.more[hidden] {
+  display: none;
+}
+
+.more:hover {
+  background: rgba(71, 58, 45, 0.07);
+}
+
+/* 卡片头内的“查看全部”只占一行，给加急正文留出完整可见高度；
+   极窄时省略号保留可读性，完整说明在 title 中。 */
+.card-head .more {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 0;
+  margin: 0;
+  padding: 2px 7px;
+  border-style: solid;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -168,6 +168,12 @@ function createConnectorStore({ db, appRunId }) {
       WHERE instance_id = ? AND run_id = ? AND agent_id = ? AND kind = 'observation'
       ORDER BY id DESC LIMIT 1
     `),
+    latestStateEvent: db.prepare(`
+      SELECT state, received_at FROM connector_events
+      WHERE instance_id = ? AND run_id = ? AND agent_id = ? AND state IS NOT NULL
+        AND kind IN ('observation', 'agent_change', 'reconciled')
+      ORDER BY id DESC LIMIT 1
+    `),
     unsettledObservations: db.prepare(`
       SELECT * FROM connector_events
       WHERE instance_id = ? AND run_id = ? AND agent_id = ? AND kind = 'observation'

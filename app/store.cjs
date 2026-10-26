@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { createCompanionStore } = require("./companion-store.cjs");
 const { createConnectorLedger } = require("./connector-ledger.cjs");
+const { createNotificationPresentation } = require("./notification-presentation.cjs");
 const { createMemoryService } = require("./memory.cjs");
 const { createChatService } = require("./chat.cjs");
 const { createExternalSources } = require("./external-sources.cjs");
@@ -67,6 +68,12 @@ function createStore(dataDir, options = {}) {
   // S05i 连接账本复用唯一 SQLite 连接；appRunId 只在本次进程内稳定。
   const appRunId = `app-${crypto.randomUUID()}`;
   const connectorLedger = createConnectorLedger({ db, now, appRunId });
+  // S05j 通知服务与账本共用连接；构造时只清理上次未呈现的旧 offer。
+  const notificationPresentation = createNotificationPresentation({
+    db,
+    ledger: connectorLedger,
+    now,
+  });
 
   // S02a 迁移与陪伴方法共用这一条连接，关闭仍由 store 统一负责。
   const companion = createCompanionStore(db);
@@ -227,6 +234,7 @@ function createStore(dataDir, options = {}) {
     dbPath,
     appRunId,
     connectorLedger,
+    notificationPresentation,
     ...companion,
     memory,
     chat,

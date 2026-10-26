@@ -191,7 +191,12 @@ function createConnectorLedger({ db, now = () => Date.now(), appRunId } = {}) {
         && !(last.historical === 1 && currentState && currentState !== nextState),
       );
       const baseline = Boolean(!last && currentState === nextState);
-      const notified = !sameEpisode && !baseline;
+      /* 快照可能先于同状态的观测入账（刷新在途）；最新事实已是该状态时，
+         这条观测只是确认，不追加第二条气泡。 */
+      const latestStateEvent = q.latestStateEvent.get(iid, rid, aid);
+      const confirmed = latestStateEvent?.state === nextState
+        && latestStateEvent.received_at >= (current?.received_at ?? -1);
+      const notified = !sameEpisode && !baseline && !confirmed;
       const settled = notified
         ? settlePassedObservations(iid, rid, aid, nextState)
         : 0;

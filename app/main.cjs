@@ -45,6 +45,7 @@ const TRAY_ICON_FILE = path.join(
   "frame-00.png",
 );
 const HEARTBEAT_MS = Math.max(200, Number(process.env.BAYPER_HEARTBEAT_MS) || 60000);
+const NOTIFICATION_TICK_MS = Math.max(50, Number(process.env.BAYPER_NOTIFICATION_TICK_MS) || 100);
 const FALLBACK_NODE_MS = 2500;
 const CONNECTOR_REGISTRY_DIR_NAME = "herdr-registry";
 
@@ -73,6 +74,7 @@ let activeChat = null;
 let connectorRuntime = null;
 let connectorRegistryDir = null;
 let lastConnectorSignature = null;
+let notificationTimer = null;
 
 function readDataDir(argv) {
   const inline = argv.find((arg) => arg.startsWith("--data-dir="));
@@ -201,6 +203,9 @@ function startApplication() {
     onAssetError: handleCanvasAssetError,
     onPositionChange: persistDesktopPosition,
     onStatusChange: handleDesktopStatusChange,
+    onNotificationAck: handleNotificationAck,
+    onNotificationClose: handleNotificationClose,
+    onNotificationVisibilityChange: handleNotificationWindowVisibility,
   });
 
   systemLifecycle = createSystemLifecycle(powerMonitor, {
@@ -215,6 +220,7 @@ function startApplication() {
   mainWindow = createManagementWindow();
   createTray();
   syncDesktop();
+  startNotificationTicker();
   rotationPending = companionship.getSnapshot().pendingRotation;
   ensurePendingRotationCompletion();
   startHeartbeat();
@@ -361,13 +367,116 @@ function syncDesktop() {
   }
   const presentation = desktopPresentation();
   if (!presentation) {
-    desktopHost.stop().catch((error) => {
-      console.error("角色画布停止失败：", error?.message ?? error);
-    });
+    // 角色消失时通知仍可能需要可见位置；由宿主决定是否保留子进程。
+    desktopHost.stopRole();
     return;
   }
   desktopHost.start(presentation);
 }
+
+/* 气泡只拿短来源标识、Agent 与状态语义；完整实例 ID、账本诊断和
+   连接内容不越过子进程边界。 */
+function shortSourceLabel(item) {
+  const label = item.sourceLabel ?? item.instanceId ?? "";
+  return label.length > 12 ? label.slice(-8) : label;
+}
+
+function notificationPayload(view) {
+  return {
+    generation: view.generation,
+    presentations: view.presentations.map((presentation) => ({
+      presentationId: presentation.presentationId,
+      channel: presentation.channel,
+      slot: presentation.slot,
+      state: presentation.state,
+      createdAt: presentation.createdAt,
+      items: presentation.items.map((item) => ({
+        eventId: item.eventId,
+        source: shortSourceLabel(item),
+        agent: item.agentLabel,
+        phrase: item.phrase,
+        historical: item.historical === true,
+        priority: item.priority,
+        state: item.state,
+        currentState: item.currentState,
+        recovered: item.recovered === true,
+        acknowledgedAt: item.acknowledgedAt,
+        holdUntil: item.holdUntil,
+        receivedAt: item.receivedAt,
+      })),
+    })),
+  };
+}
+
+function tickNotifications() {
+  if (quitting || systemPaused || !store || !desktopHost) {
+    return;
+  }
+  try {
+    const view = store.notificationPresentation.tick();
+    desktopHost.updateNotifications(notificationPayload(view), true);
+  } catch (error) {
+    console.error("通知呈现推进失败：", error?.message ?? error);
+  }
+}
+
+function startNotificationTicker() {
+  if (notificationTimer) {
+    clearInterval(notificationTimer);
+  }
+  notificationTimer = setInterval(tickNotifications, NOTIFICATION_TICK_MS);
+  tickNotifications();
+}
+
+/* 回执已经过子进程身份、presentationId、代次与事件归属校验；
+   这里再交给正式服务校验并原子标记 presented。 */
+function handleNotificationAck({ presentationId, eventIds } = {}) {
+  if (quitting || systemPaused || !store || !presentationId || !Array.isArray(eventIds)) {
+    return false;
+  }
+  try {
+    store.notificationPresentation.acknowledge({ presentationId, eventIds });
+    return true;
+  } catch (error) {
+    console.error("通知回执未被接受：", error?.message ?? error);
+    return false;
+  }
+}
+
+/* 子进程重建/隐藏期间冻结阅读时间；窗口重新可见后顺延剩余 hold 再推进。 */
+function handleNotificationWindowVisibility(visible) {
+  if (quitting || !store) return;
+  const notification = store.notificationPresentation;
+  try {
+    // 暂停期间任何迟到的 shown(true) 都不能解除阅读冻结；由恢复流程统一 resume。
+    if (systemPaused) {
+      notification.pause();
+      return;
+    }
+    if (visible) {
+      notification.resume();
+      tickNotifications();
+      return;
+    }
+    if (notification.getView().presentations.length > 0) notification.pause();
+  } catch (error) {
+    console.error("通知可见性结算失败：", error?.message ?? error);
+  }
+}
+
+function handleNotificationClose({ presentationId } = {}) {
+  if (quitting || !store || !presentationId) {
+    return;
+  }
+  try {
+    store.notificationPresentation.closePresentation({ presentationId, reason: "USER_CLOSED" });
+  } catch (error) {
+    console.error("收起通知失败：", error?.message ?? error);
+    return;
+  }
+  tickNotifications();
+}
+
 
 function pushSnapshot() {
   if (!mainWindow || mainWindow.isDestroyed() || !onboardingService || !companionship) {
@@ -661,6 +770,13 @@ function pauseForSystem() {
     clearTimeout(fallbackNodeTimer);
     fallbackNodeTimer = null;
   }
+  // 通知隐藏/阅读冻结独立于陪伴结算，任何一侧失败都不能让气泡继续可见或回执。
+  try {
+    store?.notificationPresentation.pause();
+  } catch (error) {
+    console.error("暂停通知阅读时间失败：", error?.message ?? error);
+  }
+  desktopHost?.setNotificationsVisible(false);
   try {
     // 系统暂停保留聊天会话与互动，但取消在途请求；暂停期间的 send/retry 另行拒绝。
     cancelActiveChatRequest();
@@ -702,6 +818,12 @@ function resumeFromSystem() {
     }
     syncDesktop();
     ensurePendingRotationCompletion();
+    try {
+      store?.notificationPresentation.resume();
+    } catch (error) {
+      console.error("恢复通知阅读时间失败：", error?.message ?? error);
+    }
+    tickNotifications();
     pushSnapshot();
     tray?.refresh();
   } catch (error) {
@@ -1231,6 +1353,10 @@ async function cleanup() {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
   }
+  if (notificationTimer) {
+    clearInterval(notificationTimer);
+    notificationTimer = null;
+  }
   if (fallbackNodeTimer) {
     clearTimeout(fallbackNodeTimer);
     fallbackNodeTimer = null;
@@ -1294,6 +1420,12 @@ async function cleanup() {
       await store.chat.dispose();
     } catch (error) {
       console.error("退出时结束聊天请求失败：", error?.message ?? error);
+    }
+    try {
+      // 只关闭未呈现的 offer，不把未看到的通知标成 presented。
+      store.notificationPresentation.dispose();
+    } catch (error) {
+      console.error("退出时释放通知呈现失败：", error?.message ?? error);
     }
     store.close();
     store = null;

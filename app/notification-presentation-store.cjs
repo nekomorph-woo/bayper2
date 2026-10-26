@@ -127,6 +127,14 @@ function createNotificationPresentationStore({ db }) {
     auditRows: db.prepare(
       "SELECT * FROM notification_audit WHERE kind = 'overdue' ORDER BY id ASC LIMIT ?",
     ),
+    /* 不可见期间的阅读时间不计入 4/6 秒；恢复时整体顺延有效 hold。 */
+    extendActiveHolds: db.prepare(`
+      UPDATE notification_presentation_items SET hold_until = hold_until + ?
+      WHERE hold_until IS NOT NULL AND presentation_id IN (
+        SELECT presentation_id FROM notification_presentations
+        WHERE generation = ? AND state IN ('offered', 'visible')
+      )
+    `),
   };
 
   function tx(fn) {

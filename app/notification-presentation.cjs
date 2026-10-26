@@ -105,6 +105,7 @@ function createNotificationPresentation({
   let disposed = false;
   let scanCursor = 0;
   let lastScan = null;
+  let pausedAt = null;
 
   function at() {
     const ms = clock();
@@ -139,7 +140,14 @@ function createNotificationPresentation({
       : null;
     const source = sourceLabel(event.instanceId, ctx.sources);
     const agent = current?.label ?? event.agentId ?? null;
-    const currentState = current?.effectiveState ?? null;
+    let currentState = current?.effectiveState ?? null;
+    /* 快照刷新在途时，新的需要确认事实比旧快照更新；先按事件陈述，
+       等快照确认后再转成已恢复。断连 unknown 是更晚的权威事实，不覆盖。 */
+    if (event.state === "needs_attention" && !event.historical
+      && currentState !== "unknown"
+      && event.receivedAt > (current?.receivedAt ?? -1)) {
+      currentState = "needs_attention";
+    }
     const currentUnknown = event.state === "needs_attention"
       && (currentState === null || currentState === "unknown");
     const recovered = event.state === "needs_attention"
@@ -183,6 +191,7 @@ function createNotificationPresentation({
       currentNeedsAttention,
       currentUnknown,
       recovered,
+      phrase,
       text: `${history}${subject}：${phrase}`,
     };
   }
@@ -348,6 +357,8 @@ function createNotificationPresentation({
   function tick() {
     if (disposed) throw new AppError("NOTIFICATION_DISPOSED", "通知呈现服务已释放。");
     const time = at();
+    // 不可见期间不关闭阅读中内容，也不新建 offer；恢复后统一推进。
+    if (pausedAt !== null) return viewFor(time);
     closeExpired(time);
     const { events } = scanPending(time);
     const selected = fillPresentations();
@@ -358,6 +369,25 @@ function createNotificationPresentation({
   function getView() {
     if (disposed) throw new AppError("NOTIFICATION_DISPOSED", "通知呈现服务已释放。");
     return viewFor(at());
+  }
+
+  /* 锁屏/窗口不可见时冻结阅读时间；恢复只顺延已回执项的 hold，不重发已呈现事件。 */
+  function pause() {
+    if (disposed) throw new AppError("NOTIFICATION_DISPOSED", "通知呈现服务已释放。");
+    if (pausedAt === null) pausedAt = at();
+    return { paused: true, since: pausedAt };
+  }
+
+  function resume() {
+    if (disposed) throw new AppError("NOTIFICATION_DISPOSED", "通知呈现服务已释放。");
+    if (pausedAt === null) return { resumed: false, extendedMs: 0, updated: 0 };
+    const time = at();
+    const extendedMs = Math.max(0, time - pausedAt);
+    pausedAt = null;
+    const updated = extendedMs > 0
+      ? store.q.extendActiveHolds.run(extendedMs, generation).changes
+      : 0;
+    return { resumed: true, extendedMs, updated };
   }
 
   function acknowledge({ presentationId, eventIds } = {}) {
@@ -477,6 +507,7 @@ function createNotificationPresentation({
 
   return {
     tick, getView, acknowledge, closePresentation, rebuildWindow, listOverdue, dispose,
+    pause, resume,
     get generation() { return disposed ? null : generation; },
   };
 }

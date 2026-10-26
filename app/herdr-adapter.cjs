@@ -179,13 +179,13 @@ function createHerdrAdapter({
     current.handle.close();
   }
 
-  function scheduleRefresh() {
+  function scheduleRefresh(gapped = true) {
     if (disposed || refreshScheduled) return;
     refreshScheduled = true;
     refreshTimer = startTimer(() => {
       refreshTimer = null;
       refreshScheduled = false;
-      startRefresh(true).catch(() => {});
+      startRefresh(true, gapped).catch(() => {});
     }, TOPOLOGY_REFRESH_DELAY_MS);
   }
 
@@ -220,6 +220,7 @@ function createHerdrAdapter({
     const pane = meta.pane;
     if (data.pane_id !== pane.paneId || !pane.terminalId) {
       observeUnattributed(meta, event, data.pane_id ?? pane.paneId);
+      scheduleRefresh(false);
       return;
     }
     observe({
@@ -229,6 +230,8 @@ function createHerdrAdapter({
       sourceWorkspaceId: pane.workspaceId ?? optionalText(data.workspace_id, "event workspace_id"),
       sourceTabId: pane.tabId,
     });
+    /* 状态事实仍由快照同步当前 Agent；普通状态刷新不是断档，不写 gap。 */
+    scheduleRefresh(false);
   }
 
   function handleTopology(meta, event, record) {
@@ -572,7 +575,7 @@ function createHerdrAdapter({
   }
 
   /* 公共 refresh 与在途刷新合并；拓扑触发的刷新可在完成后追加一次。 */
-  function startRefresh(queueIfBusy) {
+  function startRefresh(queueIfBusy, reconnecting = true) {
     if (disposed) return Promise.resolve({ started: false, reason: "DISPOSED" });
     if (refreshing) {
       if (queueIfBusy) refreshPending = true;
@@ -585,7 +588,7 @@ function createHerdrAdapter({
         do {
           refreshPending = false;
           try {
-            result = await connect(true);
+            result = await connect(reconnecting);
           } catch (error) {
             handleConnectFailure();
             throw error;
