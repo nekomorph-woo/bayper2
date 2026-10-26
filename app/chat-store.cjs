@@ -97,6 +97,9 @@ function createChatStore(db) {
   const statements = {
     isKnownCharacter: db.prepare("SELECT 1 AS found FROM relationships WHERE character_id = ?"),
     getNickname: db.prepare("SELECT nickname FROM relationships WHERE character_id = ?"),
+    listKnownCharacters: db.prepare(
+      "SELECT character_id, nickname FROM relationships ORDER BY character_id",
+    ),
     insertConversation: db.prepare(`
       INSERT INTO chat_conversations (id, character_id, created_at, updated_at)
       VALUES (?, ?, ?, ?)
@@ -190,6 +193,15 @@ function createChatStore(db) {
   function getNickname(characterId) {
     const nickname = statements.getNickname.get(characterId)?.nickname;
     return typeof nickname === "string" && nickname.trim() ? nickname.trim() : null;
+  }
+
+  /* 聊天转告只向模型提供已结识角色的稳定编号映射；昵称来自既有关系表。 */
+  function listKnownCharacters() {
+    return statements.listKnownCharacters.all().map((row) => ({
+      characterId: row.character_id,
+      nickname:
+        typeof row.nickname === "string" && row.nickname.trim() ? row.nickname.trim() : null,
+    }));
   }
 
   function createConversation({ id, characterId, createdAt }) {
@@ -289,6 +301,7 @@ function createChatStore(db) {
   return {
     isKnownCharacter,
     getNickname,
+    listKnownCharacters,
     transaction,
     createConversation,
     getConversation,

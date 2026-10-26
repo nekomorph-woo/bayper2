@@ -740,7 +740,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       throw new MemoryError("INVALID_INPUT", "转告条目不能重复。");
     }
 
-    return store.transaction(() => {
+    const applyRelay = () => {
       const originals = selections.map(({ entryId, expectedVersion }) => {
         const entry = store.getEntryById(entryId);
         if (!entry || entry.characterId !== fromCharacterId) {
@@ -802,7 +802,9 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
 
       const contextVersion = created > 0 ? store.bumpContextVersion(toCharacterId, nowMs) : null;
       return { toCharacterId, shared, contextVersion };
-    });
+    };
+    // 聊天转告与回复、请求完成共用外部事务；调用方负责提交/回滚。
+    return input.inTransaction === true ? applyRelay() : store.transaction(applyRelay);
   }
 
   /* 新增或解除事实禁分享都要求明确选中当前持有条目并核对版本；只有独立调用
