@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "theme": {
+    "id": "maid.quiet-house",
+    "name": "小窝里的慢时光"
+  },
+  "note": "S06g 作者内容目录。全部故事均为版本虚构角色背景，素材尚未验收，assetAvailable 全部为 false；不得据此声明正式发布、动画完成或用户可见故事界面。",
+  "stories": [
+    {
+      "storyId": "maid.meet.rin",
+      "type": "character",
+      "targetId": "rin",
+      "ownerCharacterId": null,
+      "themeId": "maid.quiet-house",
+      "assetAvailable": false,
+      "nodes": [
+        {
+          "nodeId": "window",
+          "factId": "rin.leaves-window-seat",
+          "body": "凛把窗边那张椅子空着。她说，有人想坐就坐，不用专门打招呼。"
+        },
+        {
+          "nodeId": "warm-tea",
+          "factId": "rin.waits-for-warm-tea",
+          "body": "她想带着还没织完的小围巾来坐坐。茶放到温热再喝就好，她不赶时间。"
+        }
+      ]
+    },
+    {
+      "storyId": "maid.meet.hu",
+      "type": "character",
+      "targetId": "hu",
+      "ownerCharacterId": null,
+      "themeId": "maid.quiet-house",
+      "assetAvailable": false,
+      "nodes": [
+        {
+          "nodeId": "pocket",
+          "factId": "hu.keeps-small-finds",
+          "body": "琥珀口袋里装着一颗圆石头。她还记得在哪条路边捡到，讲起来比石头本身有趣。"
+        },
+        {
+          "nodeId": "return",
+          "factId": "hu.announces-before-going",
+          "body": "她说下回可以来小窝讲讲路上的事。至于往哪走，她想等出门再决定。"
+        }
+      ]
+    },
+    {
+      "storyId": "maid.meet.cheng",
+      "type": "character",
+      "targetId": "cheng",
+      "ownerCharacterId": null,
+      "themeId": "maid.quiet-house",
+      "assetAvailable": false,
+      "nodes": [
+        {
+          "nodeId": "cushion",
+          "factId": "cheng.prefers-window-cushion",
+          "body": "澄把毯子叠得整整齐齐，最后还是坐了上去。她觉得这样也很合适。"
+        },
+        {
+          "nodeId": "quiet-visit",
+          "factId": "cheng-warms-up-slowly",
+          "body": "她想先来看看。如果暂时没说话，不是嫌弃谁，只是她认识一个地方需要一点时间。"
+        }
+      ]
+    },
+    {
+      "storyId": "maid.outfit.rin-warm-tea",
+      "type": "outfit",
+      "targetId": "rin.warm-tea",
+      "ownerCharacterId": "rin",
+      "themeId": "maid.quiet-house",
+      "assetAvailable": false,
+      "nodes": [
+        {
+          "nodeId": "pocket-plan",
+          "factId": "rin-apron-needs-pocket",
+          "body": "凛想在围裙前面缝个口袋。她说线团已经比她更熟悉桌子底下了。"
+        },
+        {
+          "nodeId": "pocket-ready",
+          "factId": "rin-warm-apron-finished",
+          "body": "那个口袋缝好了。她把线团放进去试了一下，终于不用弯腰捡了。"
+        }
+      ]
+    }
+  ]
+}
