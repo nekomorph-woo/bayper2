@@ -1,0 +1,101 @@
+{
+  "manifest": "/Volumes/Under_M2/morphiiouo/bayper/assets/characters/rin/animations/walk-right-pixel-v4/manifest.json",
+  "capturedAt": "2026-10-26T19:42:46.934Z",
+  "durationMs": 640,
+  "loop": true,
+  "passed": true,
+  "failures": [],
+  "exitCode": 0,
+  "displayScale": 0.4295302013,
+  "note": "自动检查仅证明播放入口行为，不构成视觉或节奏验收；covered=false 表示未覆盖。",
+  "checks": {
+    "window": {
+      "ok": true,
+      "count": 1,
+      "bounds": {
+        "x": 920,
+        "y": 410,
+        "width": 720,
+        "height": 620
+      },
+      "userData": "/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-sprite-verify-sjmN8a"
+    },
+    "sandbox": {
+      "ok": true,
+      "require": "undefined",
+      "process": "undefined",
+      "ipc": "undefined",
+      "frames": 4
+    },
+    "display-size": {
+      "ok": true,
+      "scale": 0.4295302013,
+      "target": {
+        "width": 109.9597315328,
+        "height": 164.93959729920002
+      },
+      "rendered": {
+        "width": 109.953125,
+        "height": 164.9375,
+        "naturalWidth": 256,
+        "naturalHeight": 384,
+        "imageRendering": "pixelated"
+      },
+      "toleranceCssPx": 0.015625
+    },
+    "normal": {
+      "ok": true,
+      "covered": true,
+      "mode": "loop",
+      "firstLoopMs": 562,
+      "status": "帧 1 / 4　循环 1"
+    },
+    "pause": {
+      "ok": true,
+      "before": "帧 1 / 4　循环 1",
+      "pausedAt": "帧 1 / 4　循环 1",
+      "pausedLater": "帧 1 / 4　循环 1"
+    },
+    "step": {
+      "ok": true,
+      "before": 1,
+      "next": 2,
+      "prev": 1
+    },
+    "slow": {
+      "ok": true,
+      "covered": true,
+      "speed": "0.25",
+      "frame": 1,
+      "frameDurationMs": 160,
+      "expectedMs": 640,
+      "probeMs": 320,
+      "sameAtProbe": true,
+      "advancedMs": 667,
+      "frameAfter": 2
+    },
+    "background": {
+      "ok": true,
+      "dark": "dark",
+      "light": "",
+      "screenshots": [
+        "codex-walk-right-v4-small-dark.png",
+        "codex-walk-right-v4-small-light.png"
+      ]
+    },
+    "navigation-block": {
+      "ok": true,
+      "url": "file:///Volumes/Under_M2/morphiiouo/bayper/tools/sprite-pipeline/player.html",
+      "windows": 1
+    },
+    "cleanup": {
+      "ok": true,
+      "path": "/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-sprite-verify-sjmN8a",
+      "error": null
+    },
+    "exit": {
+      "ok": true,
+      "code": 0
+    }
+  }
+}
