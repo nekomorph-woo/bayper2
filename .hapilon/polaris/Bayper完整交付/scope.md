@@ -76,13 +76,13 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 
 工具组织REQ-41贯穿所有切片：现有SQLite/造型目录工具是已存在能力，新增项目工具仍须自包含审查，不将此横向约束标作一次性完成。
 
-## 当前阶段：S03m 首批与 2a 已测有限能力受托接受，下一批 2b（2026-10-27 r22）
+## 当前阶段：S03m 2b forget 约定已受托确认，待实施（2026-10-27 r24）
 
-master 独立运行 **19 套件 185/185 PASS、0 skipped、exit 0**，before/after SHA 一致，证据 [master-corrected-source-TxA5THg1](evidence/master-corrected-source-TxA5THg1/stdout.log)；受托接受首批来源追溯与协议的**已测有限能力**，不是用户亲自确认。008 聚合仍 **NOT_COVERED（部分已验）**：15 项全绿不等于 008 全部承诺通过。2a 长期 correct 确定性业务流程已由 master 独立 28/28、0 skipped、exit 0 与 GUI14/14 受托接受为**已测有限能力**（不是用户亲自确认、不是真实模型语义/人类体验）；逐文件核对先前 20 套件 212/212 与 GUI14/14 仍适用于未变源码范围。聚合 POL-SEMOP-001～008 仍 NOT_COVERED；下一批 2b 推进 forget/temporary、真实模型与 GUI 全链。本批只做文档与版本，VERSION `0.1.189` 待 master snap。
+master 独立运行 **19 套件 185/185 PASS、0 skipped、exit 0**，before/after SHA 一致，证据 [master-corrected-source-TxA5THg1](evidence/master-corrected-source-TxA5THg1/stdout.log)；受托接受首批来源追溯与协议的**已测有限能力**，不是用户亲自确认。008 聚合仍 **NOT_COVERED（部分已验）**：15 项全绿不等于 008 全部承诺通过。2a 长期 correct 确定性业务流程已由 master 独立 28/28、0 skipped、exit 0 与 GUI14/14 受托接受为**已测有限能力**（不是用户亲自确认、不是真实模型语义/人类体验）；逐文件核对先前 20 套件 212/212 与 GUI14/14 仍适用于未变源码范围。聚合 POL-SEMOP-001～008 仍 NOT_COVERED；master 已受托确认 S03m 计划 §10 的 2b forget Part A/B，本批只做文档与版本，VERSION `0.1.190` 待 master snap；下一次才实施 forget。
 
 - 已验：008a 连续/多分句、C++/C 逐字、重复歧义；008b 真实 relay 传播副本、锚版本/删除/正文/歧义/权限、revision 历史/未来/溢出；segments/digest 篡改、消息变动、旧 direct、跨片段引用；008c 当日到期与伪造跨角色 current；2a 长期 correct 两阶段流程、同角色独立同义候选、真实 association 后来源、取消/重启/系统暂停与最小 GUI。
 - 未覆盖：002 forget、001d temporary、真实模型 L1/L2、跨角色临时传播、完整产品级 GUI 生命周期。
-- 下一批 2b 推进 forget/temporary、真实模型与 GUI 全链；不继续无边界来源探针。本轮仅文档/版本，VERSION `0.1.189` 待 master snap。
+- 下一批实施 2b forget；temporary 与真实模型/GUI 全链随后推进，不继续无边界来源探针。本轮仅文档/版本，VERSION `0.1.190` 待 master snap。
 
 ## 历史阶段：POL-MIG v1 迁移有限能力已受托接受（2026-10-27 r10）
 

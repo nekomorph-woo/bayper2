@@ -200,3 +200,153 @@
 - 候选证据捕获整组成员 entryId/version/sourceId、每成员 source snapshot 与来源控制集合，并记录阶段 1 对每个 holder 的确切旧 source 增量；重核时只容许该增量，其他后续控制变化拒绝。第一关联前重核代表、全部成员、消息/context 与权限；凭据返回后、发送核验前再次复核并剔除失效候选，全部失效则不发 HTTP。网络等待期间任一变化 → 该候选未确认，不应用旧结果。
 - 同角色 identity 的非锚成员来源必须是 `corrected:`、`direct=false`、`via=identity_correction`，sourceAnchor 指向发起条目的 chat-correct 锚；仅选中 held 条目为直接来源。旧版 `chat-correct` 指向其他 id 时按同身份同正文、旧锚存在/stated/user/未过期/实际 source 一致兼容，不再冒充直接告知。
 - 证据复核同时核对原 chat 消息的 conversationId 与 `chat:<id>` 来源归属；候选仍 fresh 时优先用 `isCurrent`，只有阶段 1 造成的必要变化才走窄证据检查。
+
+## 10. 2b forget 切片实现约定（master 受托确认 Part A/B，2026-10-27）
+
+HEAD `88ff9c7`（VERSION `0.1.189`，已由 master snap）。master 已受托审核并确认本节 Part A/B（不是用户亲自确认）；本批只做文档与版本 `0.1.190` 收口，下一次才实施 forget。temporary 随后沿用本计划，不并入本切片，也不减少其范围。本轮未写代码/测试、未运行测试或真实模型，以下为已确认的实现约定，不是验收结果。
+
+### 10.1 范围、触发与阶段 0 捕获
+
+- 只对 `action="forget"` 且 `target.entry` 存在的聊天操作启用两阶段；scope 仍只取用户本轮原话（`intent.scope`），模型返回值不授权。correct/temporary 行为不变。
+- 阶段 1 删除前（阶段 0）在内存捕获：目标旧 fact 的 `memorySourceContext.resolve` 快照、目标 identity 全部成员（entryId/characterId/version/sourceId）、按 scope 允许的候选 identity。self 的候选检索持有者仅当前角色；all 为全部已结识角色。
+- 候选代表必须是可直接核验的用户来源（`snapshot.status==="ok"`、`direct!==false`）；排除与锚同 identity、代表为派生、过期、推断/主题、来源受限、纯派生 identity。纯派生 identity 不因“看起来同义”进入 all。
+- forget 模式下候选整组成员必须捕获并重核 `entryId/characterId/version/sourceId` 与来源控制；成员快照可解析则记录并核验，不要求每个派生成员都有来源快照。2a correct 的“全部成员必须有快照”保持不变，不放宽。
+- 候选仍为每角色最多 3、总 8、按 identity 去重；达到上限只记录 truncated，不宣称知道全部同义。
+
+### 10.2 无正文 operation_proof 具体列
+
+不新建表，继续用 `chat_requests.operation_proof TEXT`。forget 阶段 1 在存在候选、进入 `pending` 时写 JSON：
+
+```json
+{
+  "version": 2,
+  "action": "forget",
+  "scope": "self|all",
+  "anchorEntryId": "...",
+  "anchorIdentityId": "...",
+  "deletedEntryIds": ["..."],
+  "retainedEntries": [{ "entryId": "...", "characterId": "...", "version": 2, "sourceIdHash": "..." }],
+  "deletedCount": 2,
+  "sourceControls": { "a": ["<sourceId sha256>"], "b": ["..."] },
+  "identityControls": { "a": "<identityId>" },
+  "deletedFingerprints": { "a": ["<strictFactFingerprint>"] },
+  "commandSourceHash": "<userSourceId sha256>",
+  "initiatorCharacterId": "a",
+  "initiatorContextVersion": 12
+}
+```
+
+- 只存 id、版本、哈希、计数；不存正文、excerpt、原始 sourceId。删除指纹沿用 `strictFactFingerprint` 的既有哈希，不新增正文副本。
+- `sourceControls` 是本次操作覆盖的来源控制键集合，可能包含阶段 1 之前已存在的控制；按集合语义取并集，不把“已被覆盖”误写成“必然新插入”。`commandSourceHash` 同时包含在 `sourceControls[a]`，单独列只为便于核对。
+- self 的 `retainedEntries` 记录目标 identity 中未删除的其他持有者成员；all 为空。用于证明“应保留的未被误删”，也用于识别后续新写入。
+- **proof 仅在存在候选、`verification_status` 进入 `pending` 时持久化**；没有阶段 2 工作时不写持久 proof，保持最小。`memory.forget` 仍返回内存中的 `controlProof`，调用方按需使用，不落库。
+- `initiatorContextVersion` 是阶段 1 事务结束时发起角色 A 的 `memory.getContextVersion(A)`；阶段 2 在发送核验前、凭据返回后、事务首删前分别与当前值比较，任一不等即 `stale`。这样用户以新来源+明确同意新建**新的 identity** 时也会递增 A 的 contextVersion，旧 forget 不会继续删除候选；只比较发起角色，不把无关角色全部上下文纳入 stale 判断。
+- 阶段 2 完成后在同一 JSON 追加 `verification`、`candidateIdentityIds`、每 identity 的删除计数与 `contextVersions`，仍不写正文。
+- correct 的既有 proof 形状与写入时机不变；2b 不回头改造 2a 已验收路径。
+
+### 10.3 最小接口
+
+- `memory.forget(...)` 返回值新增 `controlProof`（上述无正文结构，按实际删除条目计算），既有字段与行为不变。进入 pending 时，阶段 1 直接持久化实际返回值，不用预测值；无候选时不落库。
+- 新增只读 `memory.verifyOperationProof({ action:"forget", identityId, controlProof, initiatorCharacterId, expectedContextVersion, nowMs })`：
+  - `deletedEntryIds` 均不存在；
+  - `listEntriesByIdentity(identityId)` 与 `retainedEntries` 的 id 集合完全一致，且每个保留成员的 version/sourceIdHash 未变；
+  - 每个 `identityControls`、`sourceControls`、`deletedFingerprints` 仍存在；
+  - `memory.getContextVersion(initiatorCharacterId) === expectedContextVersion`；不为“旧 identity 未新增条目”而已，用户以新 identity 重学造成的 contextVersion 变化同样使 proof 失效。
+  - 任一不满足即 `false`；发现目标 identity 多出新条目或发起角色有新记忆变动也返回 `false`，阶段 2 不继续清理候选。
+- correct 的 proof 核对继续使用 `chat.cjs` 现有 `proofMatches`，不 retrofit 到新接口。
+- `chat-memory-verification.cjs` 增加 forget 模式捕获：目标快照/成员证据与候选捕获；`verify()` 的关系请求与 pair 映射不变。不新增导出给工具层使用。
+- `chat.cjs` 增加 forget 分支、proof 写入、阶段 2 分支与 action-aware 文案；cancel/close/dispose/recover 从 `operation_proof.action` 还原动作，重启后仍能输出删除文案。旧数据 proof 缺 `action` 时按 correct 兼容，保持 2a 与旧库行为。
+- `chat-store.cjs`、`main.cjs`、`preload.cjs`、`renderer/chat-panel.js` 预期零改动：字段与 `bayper:memory-changed`/`chat-updated` 事件沿用 2a。
+
+### 10.4 阶段 1 来源控制增量
+
+设发起角色 A、目标 identity T、scope s、命令来源 `userSourceId=<当前 user message.sourceId>`；`D_s` 为阶段 1 实际删除条目（all=T 全部成员；self=T 中 `characterId===A` 的成员）。
+
+- 对每个持有者 h：`sourceControls[h]` 是本次操作覆盖的 `sha256(entry.sourceId)` 集合（entry∈D_s、entry.characterId===h）；仅 A 额外覆盖 `sha256(userSourceId)`。这些键可能阶段 1 前已存在，记录的是本次覆盖集合而不是“新插入差量”；与阶段 0 捕获集比较时取并集。
+- `identityControls[h] = T.identityId`；`deletedFingerprints[h] = { strictFactFingerprint(entry) | entry∈D_s, entry.characterId===h }`；重复键按集合去重。
+- `retainedEntries` 为 T 中未删除成员；self 才可能非空。
+- 候选证据的允许增量直接取阶段 1 实际 `controlProof.sourceControls[h]`（覆盖集合，可能含预存键），与阶段 0 捕获集合取并集后精确比较；不自行推测。
+- 阶段 2 的 forget 调用仅在调用角色为 A 时传 `sourceIdsToExclude:[userSourceId]`；B 自己持有的候选不把 A 的聊天来源写进 B 的来源控制。重复调用由 `INSERT OR IGNORE` 保持集合并集语义。
+
+### 10.5 阶段 2 步骤、self/all 与原子性
+
+1. 仅当 proof 存在且 `verification_status==="pending"` 才进入阶段 2。凭据读取前先读 proof，`verifyOperationProof`（含发起角色 contextVersion）通过；目标旧快照走 `isEvidenceCurrent`，只允许 10.4 的覆盖集合并集。
+2. 候选全部在第一笔删除前复核：identity 成员 id 集合/version/sourceId 完全一致；可解析的成员快照仍核验，派生成员无快照不单独拒绝；成员来源控制精确等于阶段 0 捕获集合与阶段 1 覆盖集合的并集。任一变化该候选未确认；全部失效则不删候选。
+3. 凭据返回后、发送核验前再次核对 proof/contextVersion/目标证据与候选；任一失效则剔除或停止，不把旧结果用于删除。
+4. 删除代表选择：候选 identity 中优先取 A 持有的成员，否则取阶段 0 的代表；用该成员的 `entryId+expectedVersion` 调 `memory.forget({ inTransaction:true })`。
+5. self：只处理 A 持有的候选 identity，`scope:"self"`，只删 A 条目；identity 中的 B 成员必须保留。all：每个候选 identity 只处理一次，`scope:"all"`，清除全部已有持有者。
+6. 同一第二事务首删前再次核对 proof/contextVersion、目标证据与全部候选；通过后按稳定顺序逐个删除。所有候选复核在首删之前完成，事务同步执行，后删不会因本阶段自增的来源控制误拒前面的候选。任一执行失败整笔回滚阶段 2，不保留任何候选删除；阶段 1 不回滚。
+7. 成功或失败只原位更新同一 assistant 消息并写 proof/状态；不追加第二条。关系核验仍最多 1 次、15s、无重试、不占自动活动预算。
+8. 用户以新来源+明确同意新建新的 identity 时，A 的 contextVersion 递增；即使旧 identity 没有新增条目，旧核验也在下一次检查时 `stale`，不删除候选。其他无关角色的上下文变化不纳入该判断。
+
+### 10.6 删除锚后旧消息证据
+
+- 阶段 1 删除锚条目后，不再用 `getHeldEntry`/`isCurrent` 要求锚存在；使用阶段 0 捕获的 `snapshot` 调 `isEvidenceCurrent(snapshot, { holderCharacterId, expectedExcludedHashes, allowedSourceHashes })`。
+- 该检查核对原 user 消息正文/时间/seq/conversation/`chat:<id>` 来源归属、有限前文、corrected_v2 segments、digest，以及来源控制精确集合；不查询已删条目，因此适用于 forget。
+- 若目标快照是跨角色传播的 `corrected_v2` 且原消息不属于 A，`isEvidenceCurrent` 不通过；降级为本地已完成，不启动阶段 2。这是如实边界，不声称覆盖所有跨角色 `corrected_v2` 或所有传播来源；无法证明时只保留本地删除。
+- 原消息被改/删/搬会话、来源控制出现阶段 1 覆盖集合之外的变化、目标 identity 多出新条目，或发起角色 contextVersion 变化（含新来源+明确同意新建新 identity）→ stale，候选一条不删。
+
+### 10.7 取消、重启与文案
+
+- 阶段 1 前取消：零写，不生成 assistant 消息。
+- 阶段 1 后 cancel/close/dispose/系统暂停/重启：只停阶段 2，本地删除与 proof 保留，无重试；同一 assistant 原位更新。
+- pending 提示沿用：`其他相近内容我正在核对，完成后会在同一条消息里更新。`
+- forget 本地收口：`其他相近内容未继续核对，本地这次删除已完成。`
+- forget 成功有删除：`另外把 N 条确认属于同一件事的内容一并删除了。`
+- forget 成功无删除：`其他相近内容没有确认到可以一起删除的部分，我没有改动。`
+- 有未确认或截断时追加：`如果也要一起处理，请直接说出那条内容。`
+- correct 既有“一并更正了/本地这次更正已完成”等文案逐字保留；不得让 forget 复述“更正”。不出现“全部”、retrieved/truncated 或技术计数。
+
+### 10.8 生产改动文件与规模信号
+
+| 文件 | 职责 | 预计净增 |
+|---|---|---|
+| `app/chat-memory-verification.cjs` | forget 模式目标/候选捕获，成员证据放宽仅限 forget | +60～90 |
+| `app/chat.cjs` | 阶段 1 proof、阶段 2 删除、action-aware 文案与生命周期 | +70～110 |
+| `app/memory.cjs` | `forget` 返回无正文 `controlProof`；`verifyOperationProof` forget 分支 | +30～50 |
+| `app/memory-store.cjs` | 预计零改动；若补只读存在性 helper 不超过 +10 | 0～10 |
+| `app/chat-store.cjs` / `main.cjs` / `preload.cjs` / `renderer/chat-panel.js` | 复用既有字段/事件 | 0 |
+
+合计约 160～250 行，落在 150～300 信号内。测试只扩展 `tests/acceptance/memory-semantic-operations.spec.cjs`，复用 `setupContext`、`memorySnapshot`、`waitFor`、`verificationRequests` 等既有设施，新增约 400～650 行、12 项；不新建重复 Runner，不复制 2a 的 27 例生命周期。GUI 本批不实施：复用既有事件即可，后续另加 forget 真实 GUI 文案验证，不能把 correct GUI 结果算作 forget 通过。若实现明显超出，先向 master 说明拆分，不以压缩语句或删断言降数。临时纠正不计入本切片。
+
+### 10.9 业务 Case 映射（12 项，复用 POL-SEMOP 既有父 Case）
+
+| 编号 | 父 Case | Given → When / Expected |
+|---|---|---|
+| F01 | 002a | A 删除锚，B 独立持有同义候选 → all 阶段 2 删 B；C 不变；单条 assistant；一次核验 |
+| F02 | 002a | 候选 identity 同时有 A/B 成员（如 A 原始、B 派生）→ all 一次删除全部持有者，不重复处理 |
+| F03 | 002b | 同一多持有者候选 + B 独有候选 → self 只删 A 成员；B 成员/B 独有候选正文、版本、来源、context 不变 |
+| F04 | 002c | 关系 different/uncertain、候选截断 → 不删候选；文案说具体未确认，不称“全部”，本地删除保留 |
+| F05 | 003a | 有候选时 sendMessage 阶段 1 后返回；阶段 2 完成后同一 assistant id 原位更新，不新增第二条 |
+| F06 | 003b | 阶段 1 前取消零写；阶段 1 后取消只停阶段 2，本地删除/proof 保留，文案为“本地这次删除已完成” |
+| F07 | 003c | dispose/closeConversation/重启的 pending forget → 不删候选、不重试、同一消息删除收口；重开控制仍有效 |
+| F08 | 004b | 阶段 1 自增来源控制不误拒候选；等待期间 B 新增来源限制/成员版本或来源变化 → 该候选未确认，A 成员也不因 self 被误删 |
+| F09 | 004c | 第二个候选删除故障 → 阶段 2 逐表全回滚（候选 1 正文/FTS/控制/版本恢复），阶段 1 删除与 proof 保留，消息失败收口 |
+| F10 | 004a/007c | 锚已删后改原 user 消息/搬会话/新增外部控制 → stale，候选不删；用户以新来源+明确同意新建**新 identity** 使 A contextVersion 变化 → 旧核验同样 stale，新条目保留、候选不删；proof 仍无正文，重启可核验 |
+| F11 | 006a/b | 有 forget 候选恰好 1 次核验、无重试、15s；无候选/普通聊天 0 次；automatic_budget 不变；超时/网络失败不删候选 |
+| F12 | 007a/b/c | 正例：新来源+明确同意可新建新 identity，且旧 forget 核验失败、不删候选；反例：复用旧来源即使明确同意仍阻断。阶段 2 删除后 FTS/别名/relay/share 旧来源不回流；控制表无正文；重启仍阻断 |
+
+### 10.10 测试先失败基线与断言重点
+
+- 先扩展同一 Runner 并运行，保留实现前失败 attempt：2a 既有 28 项应仍 PASS；新增 forget 项因“未触发阶段 2/未写 pending proof/文案仍为更正”等业务断言失败，不得是缺表或 fixture ERROR。
+- F01/F02/F03/F12 逐行比较 `memory_entries`、FTS、source/identity/deleted 控制、derivations、aliases、contextVersions；self 额外断言 B 成员版本与正文不变。
+- F05/F06/F07 断言 assistant 数量、同一消息 id/内容、request 状态、无 pending、无第二次 HTTP；F09 用 trigger 注入第二候选删除失败，逐表快照只允许 request 状态与同一 assistant 文案变化。
+- F10/F12 断言新来源+明确同意后 A contextVersion 变化、旧核验为 stale、候选未删、新 identity 条目存在；旧来源复用仍阻断。无候选 forget 断言 `operation_proof` 为空且 0 次核验。
+- F10/F12 断言 proof 序列化文本不含被删正文/原始 sourceId；控制表扫描无正文；`rebuildSearchIndex`、重开、旧 source 重导入、relay/share 均不能恢复。
+- 所有 Expected 仍以 [cases.md](cases.md) 的 POL-SEMOP 父 Case 为准；本轮不预填 PASS，未运行不写结果。
+
+### 10.11 master 受托决定（2026-10-27）
+
+以下为 master 审核 §10 后的受托决定，不是用户亲自确认：
+
+1. **proof 最小持久化**：只有候选存在、`verification_status` 进入 `pending` 时才持久化 proof；不为无阶段 2 工作写持久 proof。`memory.forget` 仍返回内存 `controlProof` 供阶段 1 计算与测试使用。
+2. **候选成员证据**：允许 forget 派生成员没有来源快照，但每个成员的 version/sourceId 与来源控制都必须捕获并重核；可解析的成员快照仍要核验。correct 不放宽。
+3. **代表与命令来源**：阶段 2 优先取 A 持有的成员作代表；`sourceIdsToExclude:[userSourceId]` 仅对 A 传递，B 独有候选不写 A 的聊天来源。
+4. **测试范围**：12 项业务映射进入既有 `memory-semantic-operations.spec.cjs`；GUI 本批不实施，后续另加 forget 真实 GUI 文案验证；correct GUI 结果不得算作 forget 通过。
+5. **temporary 顺序**：temporary 仍紧随 forget、沿用本计划；其 proof 按当前事实条目/版本/`expiresAt` 设计，不直接套用删除 proof。
+6. **版本与基线**：`evaluation.md` 当前基线更新为 `88ff9c7` / VERSION `0.1.189`，历史行不改；本批文档/版本从 `0.1.189` 升至 `0.1.190` 待 master snap。
+7. **新身份失效（新增关键约束）**：proof 记录阶段 1 结束时发起角色 A 的 contextVersion；阶段 2 在发送核验前、凭据返回后、事务首删前分别核对一致。用户以新来源+明确同意新建**新 identity** 会递增 A 的 contextVersion，旧 forget 必须 stale，不能继续删除候选；不是只检查旧 identity 是否新增条目。可保守地把 A 的其他新记忆变动判为 stale，但不扩大到无关角色的全部上下文。
+8. **来源控制集合语义**：阶段 1 的实际 sources 是本次操作覆盖的控制键集合（可能预存），按并集语义记录与比较，不表述为必然新插入。
+9. **跨角色边界**：§10.6 的 `corrected_v2` 跨角色降级是如实边界，不声称覆盖全部传播来源。
+
+本批只改文档与版本，不写代码/测试、不 Git/API/GUI/子代理；下一次才实施 forget 切片。
