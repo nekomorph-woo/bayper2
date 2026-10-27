@@ -213,7 +213,7 @@ POL-REMEMBER-001～005 v1由master受托确认，见[s03r-explicit-remember-plan
 
 ## S03s 真实模型明确记忆
 
-POL-REMEMBER-LIVE-001～005 v1受托批准，实际模型/SQLite/chat边界与预期见[s03s-live-remember-plan.md](s03s-live-remember-plan.md)；工具拟为tools/memory-tuning/remember-probe.cjs，尚未执行。
+POL-REMEMBER-LIVE-001～005 v1受托批准，实际模型/SQLite/chat边界与预期见[s03s-live-remember-plan.md](s03s-live-remember-plan.md)；工具为tools/memory-tuning/remember-probe.cjs，已执行批次与逐项语义结论见s03s-master-review.md。
 
 ### S03s Part C 场景补充
 
@@ -223,3 +223,8 @@ POL-REMEMBER-LIVE-001～005 v1受托批准，实际模型/SQLite/chat边界与�
 |---|---|---|
 |POL-REMEMBER-006|已有同角色同键用户事实，再明确记住；正文有/无中文句号|只提升重要性且版本恰好+1，保留身份/正文/来源/时间；重复幂等；不同数字/否定/主体/内部标点不得误合，普通提炼语义不放宽。观察SQLite与正式回复。|
 |POL-REMEMBER-007|用户指定授权/拒绝段，模型返回窄/宽/独立事实及错误数值|授权仅指定完整事实，宽混合不入库，拒绝事实的窄/宽提炼不绕过；独立真实事实普通保存，错误数字/标点无来源则不保存；外部引用命令与引用中命令区分。观察chat最终SQLite/importance与回复。|
+
+
+### POL-REMEMBER-008：明确记住的异键唯一定位
+
+父级S03/REQ-09；master受托批准的契约见s03s-live-remember-plan.md Part D。Given同角色直接用户来源的唯一第一人称detail/preference/identity事实；When通过正式chat再次明确记住、模型换key；Expected保留原条目/身份/来源/时间，仅实际提升importance和版本，不产生重复，不额外调用模型；多条或metadata/来源冲突澄清且不回退新建，删除不可回流、角色隔离不变。Oracle为SQLite前后快照、版本与最终回复；Runner tests/acceptance/memory-explicit-remember.spec.cjs，正式chat/SQLite真实，模型使用本地HTTP构造。受托验收与真实模型边界见s03s-master-review.md Part D。

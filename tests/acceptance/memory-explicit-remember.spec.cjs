@@ -1440,7 +1440,9 @@ test("POL-REMEMBER-007 明确记住完整授权段与宽候选", async (t) => {
       {
         text: "请记住，我家的门牌是307，另外她家的门牌是308。",
         candidates: [
-          ["auth.subject.mine", "我家的门牌是307", IMPORTANT],
+          // Part D 起，同一上下文里再次明确记住同一第一人称事实会复用
+          // 前文的 auth.exact.307；这里保留 importance 与不重复的双重断言。
+          ["auth.subject.mine", "我家的门牌是307", IMPORTANT, "auth.exact.307"],
           ["auth.subject.other", "她家的门牌是308", DEFAULT_DETAIL],
         ],
       },
@@ -1456,14 +1458,21 @@ test("POL-REMEMBER-007 明确记住完整授权段与宽候选", async (t) => {
         }),
       });
       assert.equal(result.status, "completed");
-      for (const [factKey, , importance] of turn.candidates) {
-        const row = rowByFact(ctx, "a", factKey);
+      for (const [factKey, , importance, heldKey] of turn.candidates) {
+        const row = rowByFact(ctx, "a", heldKey ?? factKey);
         if (importance === null) {
           assert.equal(row, null, `${factKey} 不得落库`);
           continue;
         }
         assert.ok(row, `${factKey} 应经业务入口落库`);
         assert.equal(row.importance, importance, `${factKey} importance`);
+        if (heldKey) {
+          assert.equal(
+            rowByFact(ctx, "a", factKey),
+            null,
+            `${factKey} 应复用既有条目，不得新增重复`,
+          );
+        }
       }
     }
   });
@@ -1504,5 +1513,424 @@ test("POL-REMEMBER-007 明确记住完整授权段与宽候选", async (t) => {
     assert.equal(rowByFact(ctx, "a", "neg.mixed.narrow"), null, "否定窄+额外候选不得落库");
     assert.equal(rowByFact(ctx, "a", "neg.coffee").importance, DEFAULT_DETAIL);
     assert.match(result.reply, /没有保存/u);
+  });
+});
+
+async function naturalFact(ctx, {
+  text, factKey, body, kind = "detail", characterId = "a", requestId,
+}) {
+  const { result } = await sendChat(ctx, {
+    characterId,
+    text,
+    requestId,
+    envelope: modelReply({
+      reply: "记下了。",
+      candidates: [candidate({ factKey, body, kind })],
+    }),
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.memoryApplied, 1, `${factKey} 自然提炼应新建一条`);
+  return result;
+}
+
+async function explicitRemember(ctx, {
+  text, factKey, body, kind = "detail", characterId = "a", requestId,
+}) {
+  const { result } = await sendChat(ctx, {
+    characterId,
+    text,
+    requestId,
+    envelope: modelReply({
+      reply: "嗯，我记住了。",
+      candidates: [candidate({ factKey, body, kind })],
+    }),
+  });
+  assert.equal(result.status, "completed");
+  return result;
+}
+
+test("POL-REMEMBER-008 明确记住的异键唯一定位", async (t) => {
+  await t.test("不同 key 命中同角色同来源事实，原地提升且重复幂等", async (t2) => {
+    const ctx = await setupContext(t2);
+    await naturalFact(ctx, {
+      text: "我家的门牌是307。",
+      factKey: "user_home_door_number",
+      body: "我家的门牌是307。",
+      requestId: "s03s-008-natural",
+    });
+    const before = rowByFact(ctx, "a", "user_home_door_number");
+    const contextBefore = contextVersionOf(ctx);
+    const requestsBefore = ctx.server.requests.length;
+    ctx.advance(HOUR);
+
+    const result = await explicitRemember(ctx, {
+      text: "请记住，我家的门牌是307。",
+      factKey: "home_door_number",
+      body: "我家的门牌是307。",
+      requestId: "s03s-008-remember",
+    });
+    assert.equal(ctx.server.requests.length, requestsBefore + 1, "异键定位不得额外调用模型");
+    assert.equal(result.memoryApplied, 0, "异键定位应是提升而不是新建");
+    assert.doesNotMatch(result.reply, /没有保存成长期记忆/u);
+    assert.equal(rowsFor(ctx, "a").length, 1, "不得因换 key 新增重复条目");
+    assert.equal(rowByFact(ctx, "a", "home_door_number"), null, "模型新 key 不落库");
+    const after = rowByFact(ctx, "a", "user_home_door_number");
+    for (const field of [
+      "id", "fact_key", "fact_identity_id", "body", "kind",
+      "source_id", "source_version", "created_at", "updated_at",
+    ]) {
+      assert.equal(after[field], before[field], `${field} 应保持原条目`);
+    }
+    assert.equal(after.importance, IMPORTANT);
+    assert.equal(after.version, before.version + 1);
+    assert.equal(contextVersionOf(ctx), contextBefore + 1);
+
+    ctx.advance(HOUR);
+    const repeat = await explicitRemember(ctx, {
+      text: "请记住，我家的门牌是307",
+      factKey: "home_door_number_third",
+      body: "我家的门牌是307",
+      requestId: "s03s-008-repeat",
+    });
+    assert.equal(repeat.memoryApplied, 0);
+    assert.equal(rowsFor(ctx, "a").length, 1);
+    assert.equal(rowByFact(ctx, "a", "home_door_number_third"), null);
+    assert.equal(rowByFact(ctx, "a", "user_home_door_number").version, after.version);
+    assert.equal(rowByFact(ctx, "a", "user_home_door_number").importance, IMPORTANT);
+    assert.equal(contextVersionOf(ctx), contextBefore + 1, "重复提升不得再次递增上下文");
+  });
+
+  await t.test("detail/preference/identity 的直接第一人称单人事实均可定位", async (t2) => {
+    const ctx = await setupContext(t2);
+    const cases = [
+      {
+        kind: "detail",
+        naturalKey: "detail.door",
+        newKey: "detail.door.renamed",
+        text: "我家的门牌是307。",
+        importance: IMPORTANT,
+        versionDelta: 1,
+      },
+      {
+        kind: "preference",
+        naturalKey: "preference.coffee",
+        newKey: "preference.coffee.renamed",
+        text: "我喜欢无糖咖啡。",
+        importance: IMPORTANT,
+        versionDelta: 1,
+      },
+      {
+        kind: "identity",
+        naturalKey: "identity.birthday",
+        newKey: "identity.birthday.renamed",
+        text: "我的生日是十月一日。",
+        importance: 90,
+        versionDelta: 0,
+      },
+    ];
+    for (const item of cases) {
+      await naturalFact(ctx, {
+        text: item.text,
+        factKey: item.naturalKey,
+        body: item.text,
+        kind: item.kind,
+        requestId: `s03s-008-${item.kind}-natural`,
+      });
+      const before = rowByFact(ctx, "a", item.naturalKey);
+      const contextBefore = contextVersionOf(ctx);
+      ctx.advance(HOUR);
+      const result = await explicitRemember(ctx, {
+        text: `请记住，${item.text}`,
+        factKey: item.newKey,
+        body: item.text,
+        kind: item.kind,
+        requestId: `s03s-008-${item.kind}-remember`,
+      });
+      assert.equal(result.memoryApplied, 0, `${item.kind} 不得新建重复`);
+      assert.equal(rowByFact(ctx, "a", item.newKey), null);
+      const after = rowByFact(ctx, "a", item.naturalKey);
+      assert.equal(after.id, before.id, item.kind);
+      assert.equal(after.fact_identity_id, before.fact_identity_id, item.kind);
+      assert.equal(after.source_id, before.source_id, item.kind);
+      assert.equal(after.importance, item.importance, item.kind);
+      assert.equal(after.version, before.version + item.versionDelta, item.kind);
+      assert.equal(
+        contextVersionOf(ctx),
+        contextBefore + item.versionDelta,
+        `${item.kind} 只随实际提升递增`,
+      );
+    }
+  });
+
+  await t.test("同正文多条相关条目零写入并澄清", async (t2) => {
+    const ctx = await setupContext(t2);
+    await naturalFact(ctx, {
+      text: "我家的门牌是307。",
+      factKey: "detail.door.one",
+      body: "我家的门牌是307。",
+      requestId: "s03s-008-multiple-one",
+    });
+    await naturalFact(ctx, {
+      text: "我家的门牌是307。",
+      factKey: "detail.door.two",
+      body: "我家的门牌是307。",
+      requestId: "s03s-008-multiple-two",
+    });
+    const beforeRows = rowsFor(ctx, "a");
+    const contextBefore = contextVersionOf(ctx);
+    ctx.advance(HOUR);
+    const result = await explicitRemember(ctx, {
+      text: "请记住，我家的门牌是307。",
+      factKey: "detail.door.three",
+      body: "我家的门牌是307。",
+      requestId: "s03s-008-multiple-remember",
+    });
+    assert.equal(result.memoryApplied, 0);
+    assert.match(result.reply, /不能确定/u);
+    assert.equal(rowsFor(ctx, "a").length, 2);
+    assert.deepEqual(rowsFor(ctx, "a"), beforeRows, "多条既有条目不得被挑选提升");
+    assert.equal(rowByFact(ctx, "a", "detail.door.three"), null);
+    assert.equal(contextVersionOf(ctx), contextBefore);
+  });
+
+  await t.test("同正文 metadata 冲突零写入并澄清", async (t2) => {
+    const ctx = await setupContext(t2);
+    await naturalFact(ctx, {
+      text: "我家的门牌是307。",
+      factKey: "detail.door",
+      body: "我家的门牌是307。",
+      requestId: "s03s-008-metadata-natural",
+    });
+    const before = rowByFact(ctx, "a", "detail.door");
+    const contextBefore = contextVersionOf(ctx);
+    ctx.advance(HOUR);
+    const result = await explicitRemember(ctx, {
+      text: "请记住，我家的门牌是307。",
+      factKey: "preference.door",
+      body: "我家的门牌是307。",
+      kind: "preference",
+      requestId: "s03s-008-metadata-remember",
+    });
+    assert.equal(result.memoryApplied, 0);
+    assert.match(result.reply, /不能确定/u);
+    assert.equal(rowsFor(ctx, "a").length, 1);
+    assert.equal(rowByFact(ctx, "a", "preference.door"), null);
+    const after = rowByFact(ctx, "a", "detail.door");
+    assert.equal(after.id, before.id);
+    assert.equal(after.kind, "detail");
+    assert.equal(after.importance, DEFAULT_DETAIL);
+    assert.equal(after.version, 1);
+    assert.equal(contextVersionOf(ctx), contextBefore);
+  });
+
+  await t.test("不同数值不因同角色同来源跨键合并", async (t2) => {
+    const ctx = await setupContext(t2);
+    await naturalFact(ctx, {
+      text: "我家的门牌是307。",
+      factKey: "detail.door",
+      body: "我家的门牌是307。",
+      requestId: "s03s-008-number-natural",
+    });
+    const before = rowByFact(ctx, "a", "detail.door");
+    ctx.advance(HOUR);
+    const result = await explicitRemember(ctx, {
+      text: "请记住，我家的门牌是3070。",
+      factKey: "detail.door.3070",
+      body: "我家的门牌是3070。",
+      requestId: "s03s-008-number-remember",
+    });
+    assert.equal(result.memoryApplied, 1, "307 与 3070 不得仅同文合并");
+    const after = rowByFact(ctx, "a", "detail.door");
+    assert.equal(after.id, before.id);
+    assert.equal(after.importance, DEFAULT_DETAIL);
+    assert.equal(after.version, before.version);
+    assert.equal(rowByFact(ctx, "a", "detail.door.3070").importance, IMPORTANT);
+  });
+
+  await t.test("异键歧义旁的独立事实仍部分完成", async (t2) => {
+    const ctx = await setupContext(t2);
+    await naturalFact(ctx, {
+      text: "我家的门牌是307。",
+      factKey: "detail.door.one",
+      body: "我家的门牌是307。",
+      requestId: "s03s-008-partial-one",
+    });
+    await naturalFact(ctx, {
+      text: "我家的门牌是307。",
+      factKey: "detail.door.two",
+      body: "我家的门牌是307。",
+      requestId: "s03s-008-partial-two",
+    });
+    const contextBefore = contextVersionOf(ctx);
+    ctx.advance(HOUR);
+    const { result } = await sendChat(ctx, {
+      text: "请记住，我家的门牌是307，另外我喜欢咖啡。",
+      requestId: "s03s-008-partial-remember",
+      envelope: modelReply({
+        reply: "嗯，我记住了。",
+        candidates: [
+          candidate({ factKey: "detail.door.new", body: "我家的门牌是307" }),
+          candidate({ factKey: "detail.coffee", body: "我喜欢咖啡" }),
+        ],
+      }),
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(result.memoryApplied, 1, "只有独立事实应新建");
+    assert.match(result.reply, /能确认的那部分/u);
+    assert.equal(rowsFor(ctx, "a").length, 3);
+    assert.equal(rowByFact(ctx, "a", "detail.coffee").importance, DEFAULT_DETAIL);
+    assert.equal(rowByFact(ctx, "a", "detail.door.new"), null);
+    assert.equal(contextVersionOf(ctx), contextBefore + 1);
+  });
+
+  await t.test("其他角色的同正文条目不参与定位", async (t2) => {
+    const ctx = await setupContext(t2);
+    await naturalFact(ctx, {
+      text: "我家的门牌是307。",
+      factKey: "b.door",
+      body: "我家的门牌是307。",
+      characterId: "b",
+      requestId: "s03s-008-other-natural",
+    });
+    const otherBefore = rowByFact(ctx, "b", "b.door");
+    ctx.advance(HOUR);
+    await explicitRemember(ctx, {
+      text: "请记住，我家的门牌是307。",
+      factKey: "a.door",
+      body: "我家的门牌是307。",
+      requestId: "s03s-008-other-remember",
+    });
+    const own = rowByFact(ctx, "a", "a.door");
+    assert.ok(own, "当前角色仍应保存自己的事实");
+    assert.equal(own.importance, IMPORTANT);
+    assert.notEqual(own.fact_identity_id, otherBefore.fact_identity_id);
+    const otherAfter = rowByFact(ctx, "b", "b.door");
+    assert.equal(otherAfter.id, otherBefore.id);
+    assert.equal(otherAfter.importance, DEFAULT_DETAIL);
+    assert.equal(otherAfter.version, otherBefore.version);
+    assert.equal(otherAfter.source_id, otherBefore.source_id);
+    assert.equal(rowsFor(ctx, "b").length, 1);
+  });
+
+  await t.test("删除后换 key 或末尾句号都不能回流", async (t2) => {
+    const cases = [
+      { deletedBody: "我家的门牌是307。", candidateBody: "我家的门牌是307" },
+      { deletedBody: "我家的门牌是307", candidateBody: "我家的门牌是307。" },
+      { deletedBody: "我家的门牌是307。", candidateBody: "我家的门牌是307。" },
+    ];
+    for (const { deletedBody, candidateBody } of cases) {
+      const ctx = await setupContext(t2);
+      await naturalFact(ctx, {
+        text: deletedBody,
+        factKey: "user_home_door_number",
+        body: deletedBody,
+        requestId: "s03s-008-delete-natural",
+      });
+      ctx.store.memory.forget({
+        characterId: "a",
+        factKey: "user_home_door_number",
+        nowMs: ctx.nowMs(),
+      });
+      assert.equal(rowsFor(ctx, "a").length, 0);
+      const contextAfterForget = contextVersionOf(ctx);
+      ctx.advance(HOUR);
+      const result = await explicitRemember(ctx, {
+        text: `请记住，${candidateBody}`,
+        factKey: "home_door_number",
+        body: candidateBody,
+        requestId: "s03s-008-delete-remember",
+      });
+      assert.equal(result.memoryApplied, 0);
+      assert.match(result.reply, /没有保存成长期记忆/u);
+      assert.equal(rowsFor(ctx, "a").length, 0, "删除后不得以新 key 回流");
+      assert.equal(rowByFact(ctx, "a", "home_door_number"), null);
+      assert.equal(contextVersionOf(ctx), contextAfterForget);
+    }
+  });
+
+  await t.test("原来源被排除时零写入且不退回新建", async (t2) => {
+    const ctx = await setupContext(t2);
+    await naturalFact(ctx, {
+      text: "我家的门牌是307。",
+      factKey: "detail.door",
+      body: "我家的门牌是307。",
+      requestId: "s03s-008-source-natural",
+    });
+    const before = rowByFact(ctx, "a", "detail.door");
+    const contextBefore = contextVersionOf(ctx);
+    ctx.advance(HOUR);
+    const { result } = await sendChat(ctx, {
+      text: "请记住，我家的门牌是307。",
+      requestId: "s03s-008-source-remember",
+      responder: ({ res }) => {
+        withDatabase(ctx.store.dbPath, (db) => {
+          db.prepare(`
+            INSERT OR IGNORE INTO memory_source_controls
+              (character_id, source_id_hash, created_at) VALUES (?, ?, ?)
+          `).run("a", hashText(before.source_id), ctx.nowMs());
+        });
+        sendEnvelope(res, modelReply({
+          reply: "嗯，我记住了。",
+          candidates: [candidate({ factKey: "home_door_number", body: "我家的门牌是307。" })],
+        }));
+      },
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(result.memoryApplied, 0);
+    assert.match(result.reply, /不能确定/u);
+    assert.equal(rowsFor(ctx, "a").length, 1);
+    assert.equal(rowByFact(ctx, "a", "home_door_number"), null);
+    assert.equal(rowByFact(ctx, "a", "detail.door").importance, before.importance);
+    assert.equal(rowByFact(ctx, "a", "detail.door").version, before.version);
+    assert.equal(contextVersionOf(ctx), contextBefore);
+  });
+
+  await t.test("非第一人称与 experience 不因同文合并", async (t2) => {
+    const ctx = await setupContext(t2);
+    const cases = [
+      {
+        kind: "detail",
+        naturalKey: "detail.other.door",
+        newKey: "detail.other.door.new",
+        text: "她家的门牌是307。",
+      },
+      {
+        kind: "detail",
+        naturalKey: "detail.our.door",
+        newKey: "detail.our.door.new",
+        text: "我们家的门牌是307。",
+      },
+      {
+        kind: "experience",
+        naturalKey: "experience.sea",
+        newKey: "experience.sea.new",
+        text: "我们上次去海边。",
+      },
+    ];
+    for (const item of cases) {
+      await naturalFact(ctx, {
+        text: item.text,
+        factKey: item.naturalKey,
+        body: item.text,
+        kind: item.kind,
+        requestId: `s03s-008-subject-${item.naturalKey}-natural`,
+      });
+      const before = rowByFact(ctx, "a", item.naturalKey);
+      ctx.advance(HOUR);
+      const result = await explicitRemember(ctx, {
+        text: `请记住，${item.text}`,
+        factKey: item.newKey,
+        body: item.text,
+        kind: item.kind,
+        requestId: `s03s-008-subject-${item.naturalKey}-remember`,
+      });
+      assert.equal(result.memoryApplied, 1, `${item.text} 不得仅同文复用`);
+      assert.ok(rowByFact(ctx, "a", item.newKey), `${item.text} 应保留为新条目`);
+      const after = rowByFact(ctx, "a", item.naturalKey);
+      assert.equal(after.id, before.id);
+      assert.equal(after.importance, before.importance);
+      assert.equal(after.version, before.version);
+      assert.equal(after.source_id, before.source_id);
+    }
   });
 });

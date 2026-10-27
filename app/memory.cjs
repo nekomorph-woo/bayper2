@@ -443,6 +443,20 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     return normalize(left) === normalize(right);
   }
 
+  /* 明确记住的正文只容忍末尾中文句号，删除指纹也必须覆盖带/不带句号的
+     两种写法，否则换 key 再补句号就能绕过删除控制。只用于显式记住的新建
+     分支，普通提炼与严格指纹不变。 */
+  function explicitRememberDeletedVariantBlocked(fact) {
+    const normalized = normalizeFactBody(fact.body).replace(/。+$/u, "");
+    for (const body of new Set([normalized, `${normalized}。`])) {
+      const fingerprint = strictFactFingerprint({ ...fact, body });
+      if (fingerprint && store.hasDeletedFactFingerprint(fact.characterId, fingerprint)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /* 同一来源可以产生多个 factKey。单条 remember 以 (角色, factKey) 幂等；
      对同一来源重扫请使用 applyExtractionBatch，以 (角色, 来源哈希, 来源版本)
      的批次标记保证整次提炼只应用一次。新来源版本视为新提炼，已有 factKey
@@ -566,6 +580,10 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       deletedFingerprint,
       fact.factKey,
     )) {
+      return { created: false, promoted: false, fulfilled: false, blocked: "forget", entry: null };
+    }
+    if (!fact.explicitConsent && fact.explicitRemember === true &&
+      explicitRememberDeletedVariantBlocked(fact)) {
       return { created: false, promoted: false, fulfilled: false, blocked: "forget", entry: null };
     }
     const identityId = createIdentity(fact, fingerprint);
@@ -1663,6 +1681,13 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     return store.listEntriesByIdentity(identityId);
   }
 
+  /* 明确记住的异键定位只读入口：返回当前角色全部条目（含过期/派生存），
+     由聊天层按同角色、metadata 与来源有效性筛选；不设条数上限。 */
+  function listEntriesForExplicitRemember(characterIdInput) {
+    const characterId = characterIdOf(characterIdInput);
+    return store.listEntriesForCharacter(characterId);
+  }
+
   /* 2c-2b 阶段 0 窄接口：临时 current 的 own L 有效长期锚；无锚 relay 返回 null。 */
   function getTemporaryTarget({ characterId: rawCharacterId, entryId: rawEntryId, nowMs } = {}) {
     const characterId = characterIdOf(rawCharacterId);
@@ -2124,6 +2149,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     getHeldEntry,
     isKnownCharacter,
     listIdentityEntries,
+    listEntriesForExplicitRemember,
     getTemporaryTarget,
     applyConfirmedTemporaryCorrectionToHolders,
     verifyOperationProof,

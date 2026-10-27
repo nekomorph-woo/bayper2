@@ -414,9 +414,9 @@ master独立最新4文件158/158（新Runner29项）、exit0/0skip/SHA一致，�
 本表限定计划的直接事实与同键同正文，不能推断真实模型、跨键语义、一般指代、自动整理或GUI通过。其他来源失效/并发组合沿父级既有Case继续验证，不把分支数量当完整产品接受。审查记录[s03r-master-review.md](s03r-master-review.md)。
 
 
-## S03s 真实模型明确记忆：NOT_COVERED
+## S03s 真实模型明确记忆：执行记录入口
 
-POL-REMEMBER-LIVE-001～005尚未执行；S03r构造模型结果不得填入此表。见[s03s-live-remember-plan.md](s03s-live-remember-plan.md)。
+POL-REMEMBER-LIVE-001～005已执行；各批结果见下文与s03s-master-review.md，S03r构造模型结果不得替代真实模型结果。见[s03s-live-remember-plan.md](s03s-live-remember-plan.md)。
 
 ## S03s真实明确记忆基线（2026-10-28）
 
@@ -425,3 +425,8 @@ POL-REMEMBER-LIVE-001～005尚未执行；S03r构造模型结果不得填入此�
 ### S03s Part C 修复复验
 
 master178/178、SHA一致、dry五Case全部通过；POL-REMEMBER-006/007构造HTTP业务场景受托接受。live-r2的001/003/005及004分离候选样本通过，002异factKey重复FAIL，完整S03未接受。详s03s-master-review.md及原始results/remember-master-live-20261028-r2.json；所有本轮临时数据库已清理。
+
+
+### S03s Part D（2026-10-28）
+
+POL-REMEMBER-008在master独立五文件205/205中通过；异键同文唯一复用有限接受。live-r3的001/002/004分离路径/005单样本PASS，003语义FAIL：当前无记录却推测过去未交流，原始确定性检查未识别该表达。S03s及父级S03仍未接受。证据、限制与后续修复见s03s-master-review.md Part D；原失败不覆盖、不重试挑绿。

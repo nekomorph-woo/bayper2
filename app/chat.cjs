@@ -31,6 +31,7 @@ const {
   summarizeExplicitRememberResult,
 } = require("./memory-explicit-remember.cjs");
 const { locateCorrectionSegments } = require("./memory-correction-evidence.cjs");
+const { normalizeFactBody } = require("./memory-fact-identity.cjs");
 const {
   createChatMemoryVerification,
   provenDerivedMembers,
@@ -46,6 +47,11 @@ const MAX_OPERATION_CANDIDATE_CHARS = 600;
 const MEMORY_FACT_KEY_CHARS = 200;
 const MEMORY_BODY_CHARS = 2000;
 const MEMORY_KINDS = new Set(["identity", "preference", "experience", "detail"]);
+/* S03s Part D：明确记住的异键定位只接受直接第一人称单人的当前用户事实；
+   experience、复数或第三人称主体不参与，避免仅凭同文合并不同经历/主体。 */
+const EXPLICIT_REMEMBER_REUSABLE_KINDS = new Set(["identity", "preference", "detail"]);
+const SUBJECT_SEGMENTER = new Intl.Segmenter("zh-CN", { granularity: "word" });
+const AMBIGUOUS_SUBJECT_TOKEN = /^(?:我们|我們|咱们|咱們|大家|他|她|它)/u;
 /* 紧贴记忆数据给出检索边界：当前为空或只有部分记录，都不能推出用户从未交流。 */
 const MEMORY_BOUNDARY_NOTE = [
   "以上是本轮可用的记忆事实，不是全部人生记录。",
@@ -124,6 +130,27 @@ function messageTextOf(value) {
 
 function sourceHash(sourceId) {
   return crypto.createHash("sha256").update(sourceId, "utf8").digest("hex");
+}
+
+/* 异键定位的正文等价与明确记住一致：只容忍已有末尾中文句号。 */
+function sameRememberBody(left, right) {
+  const normalize = (value) => normalizeFactBody(value).replace(/。+$/u, "");
+  return normalize(left) === normalize(right);
+}
+
+/* 保守的本地主体边界：正文以“我”开头，分词后不含我们/大家/他她它。
+   这不理解姓名或第三人称关系，只用于拒绝把主体不明的同文事实自动复用。 */
+function directFirstPersonBody(value) {
+  const text = normalizeFactBody(value);
+  if (!text.startsWith("我")) {
+    return false;
+  }
+  for (const part of SUBJECT_SEGMENTER.segment(text)) {
+    if (part.isWordLike && AMBIGUOUS_SUBJECT_TOKEN.test(part.segment)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function createChatService({
@@ -1178,6 +1205,86 @@ function createChatService({
     }
   }
 
+  function explicitRememberSourceCurrent(entry, characterId, at) {
+    if (!memorySourceContext || typeof memorySourceContext.resolve !== "function") {
+      return false;
+    }
+    try {
+      const resolved = memorySourceContext.resolve({
+        characterId,
+        entryId: entry.id,
+        expectedVersion: entry.version,
+        nowMs: at,
+      });
+      return resolved?.status === "ok";
+    } catch {
+      return false;
+    }
+  }
+
+  /* 只在明确授权的候选上做异键定位：同角色、同类直接用户 chat 来源、
+     metadata 一致且正文仅末尾句号等价。多条或任何相关但不合格条目都
+     视为冲突，本轮不写并澄清，绝不退回新建绕过控制。 */
+  function resolveExplicitRememberTargets({ characterId, candidates, boosted, nowMs }) {
+    if (boosted.size === 0) {
+      return { candidates, changed: false, clarify: false };
+    }
+    const entries = memory.listEntriesForExplicitRemember(characterId);
+    const candidateKeys = new Set(candidates.map((item) => item.factKey));
+    const targetKeys = new Set();
+    let changed = false;
+    let clarify = false;
+    const kept = [];
+    for (const candidate of candidates) {
+      if (!boosted.has(candidate.factKey)) {
+        kept.push(candidate);
+        continue;
+      }
+      if (entries.some((entry) => entry.factKey === candidate.factKey)) {
+        kept.push(candidate);
+        continue;
+      }
+      if (!EXPLICIT_REMEMBER_REUSABLE_KINDS.has(candidate.kind) ||
+        !directFirstPersonBody(candidate.body)) {
+        kept.push(candidate);
+        continue;
+      }
+      const related = entries.filter((entry) => sameRememberBody(entry.body, candidate.body));
+      if (related.length === 0) {
+        kept.push(candidate);
+        continue;
+      }
+      changed = true;
+      if (related.length > 1) {
+        clarify = true;
+        continue;
+      }
+      const entry = related[0];
+      const metadataMatches =
+        entry.characterId === characterId &&
+        entry.originCharacterId === characterId &&
+        entry.derived !== true &&
+        entry.derivedFromEntryId === null &&
+        entry.kind === candidate.kind &&
+        entry.trust === "stated" &&
+        (entry.sourceKind ?? "user") === "user" &&
+        entry.expiresAt === null &&
+        entry.sourceId.startsWith("chat:");
+      if (!metadataMatches ||
+        !explicitRememberSourceCurrent(entry, characterId, nowMs)) {
+        clarify = true;
+        continue;
+      }
+      if (candidateKeys.has(entry.factKey) || targetKeys.has(entry.factKey)) {
+        clarify = true;
+        continue;
+      }
+      targetKeys.add(entry.factKey);
+      kept.push({ ...candidate, factKey: entry.factKey });
+    }
+    return { candidates: kept, changed, clarify };
+  }
+
   function applyMemoryCandidates({ characterId, sourceId, candidates, nowMs, inTransaction }) {
     if (candidates.length === 0) {
       return { applied: false, count: 0, promoted: 0, facts: [], reason: null };
@@ -1974,9 +2081,26 @@ function createChatService({
          操作回合不把候选再学一遍。 */
       const explicitRememberPlan =
         operationContext.explicitRemember ?? { kind: "none", commands: [] };
-      const explicitRememberResolution = operationPlan.kind === "none"
+      let explicitRememberResolution = operationPlan.kind === "none"
         ? resolveExplicitRemember(explicitRememberPlan, parsed.memoryCandidates)
         : { status: "none", matches: [] };
+      let crossKeyClarify = false;
+      if (operationPlan.kind === "none" && explicitRememberResolution.boosted.size > 0) {
+        const adjusted = resolveExplicitRememberTargets({
+          characterId: request.characterId,
+          candidates: parsed.memoryCandidates,
+          boosted: explicitRememberResolution.boosted,
+          nowMs: currentMs(),
+        });
+        if (adjusted.changed) {
+          parsed = { ...parsed, memoryCandidates: adjusted.candidates };
+          explicitRememberResolution = resolveExplicitRemember(
+            explicitRememberPlan,
+            parsed.memoryCandidates,
+          );
+          crossKeyClarify = adjusted.clarify;
+        }
+      }
 
       const operation = operationPlan.kind === "execute" ? operationPlan.operation : null;
       const twoPhaseCorrect =
@@ -2097,7 +2221,7 @@ function createChatService({
             inTransaction: true,
           });
           memoryApplied = memoryResult.count;
-          if (explicitRememberResolution.clarify) {
+          if (explicitRememberResolution.clarify || crossKeyClarify) {
             // 独立候选可能已保存/提升；按真实结果反馈，不谎称整轮零变更。
             reply = memoryApplied + memoryResult.promoted > 0
               ? EXPLICIT_REMEMBER_REPLIES.ambiguousPartial

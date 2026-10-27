@@ -33,3 +33,19 @@ master live-r2实际deepseek-flash，1models+9chat/0relation，总10、五临时
 受托接受本批已测句号兼容、宽候选/拒绝保存和原文数字保护修复；不接受POL-REMEMBER-LIVE-002、一般异键语义、自动整理或S03整体。新增POL-REMEMBER-006/007映射Part C，仅作为此修复范围的构造HTTP场景。下一步针对真实异键重复确定接口与不变量，复用既有身份/语义研究，不因同正文就跨角色/不同经历误合。
 
 当前未覆盖边界：来源片段精确匹配可能拒绝大小写/全半角/内部空白改写；CJK数字及全部标识符语义未保证。实际落库使用用户evidence原文，不把模型改写当事实。没有GUI或人类长期体验通过声明。
+
+## Part D 独立复验与 live-r3 语义审查（2026-10-28）
+
+master核对开发CLI43335终态后的实际diff、来源/身份/删除门禁与测试；独立五文件205/205、0 skipped、exit0，证据evidence/s03s-master-crosskey-ZOG5s2J5/。before/after SHA相同，并与提交前当前源码逐项核对一致。POL-REMEMBER-008覆盖异键唯一复用、幂等、三个类别、多条/metadata冲突、部分完成、角色隔离、删除及来源失效；一般同义/经历归并仍未覆盖。007原来同一上下文再次创建相同事实，定位器改为旧auth.exact.307并追加新键不存在断言；importance和主体隔离断言保留，属于定位更新而非降低Expected。局部实现规模增加来自完整来源门禁与冲突处理，未增加依赖、模型调用或泛用框架。
+
+真实批次tools/memory-tuning/results/remember-master-live-20261028-r3.json使用实际deepseek-flash：1 models＋9 chat、0关系调用，五个临时库均关闭删除。57项确定性检查通过不等于语义通过，原始结果保留REVIEW，由master单独判定如下：
+
+| Case | 本次语义判定 | 观察 |
+|---|---|---|
+|POL-REMEMBER-LIVE-001|PASS（单样本）|新对话没有旧聊天历史，正式记忆上下文含307，回复307；detail80、来源用户。|
+|POL-REMEMBER-LIVE-002|PASS（单样本）|模型从home.door_number换到home_door_number；仅原条目20→80、version1→2，旧id/identity/key/body/source/时间全部保持，无新条目。|
+|POL-REMEMBER-LIVE-003|FAIL|未保存事实且新对话无泄漏；但回复“我们之前好像没有聊过备用钥匙放哪儿的事”，违背不得由当前缺失推断历史未交流的约束。“好像”不构成豁免，确定性检查未识别此表达。|
+|POL-REMEMBER-LIVE-004|PASS（分离候选样本）|门牌detail80、盆栽detail20；未输出宽候选，宽候选以构造测试为证。|
+|POL-REMEMBER-LIVE-005|PASS（单样本）|Rin存储80，Hu上下文无此记忆并回复不知道，未虚构知道用户门牌；角色场景口吻不作真实用户事实保存。|
+
+受托接受Part D异键同文提升修复；S03s整体仍未通过，003新失败必须继续修复，不能重试挑绿或把工具退出0当验收完成。S03父级还欠一般语义、自动整理、GUI及整体集成；完整Goal不变。本轮使用Polaris的独立语义审查发现实际缺陷，现行skill已明确该要求，无需为执行失败机械改skill。

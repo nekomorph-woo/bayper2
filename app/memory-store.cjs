@@ -364,6 +364,14 @@ function createMemoryStore(db) {
       WHERE e.fact_key = ?
       ORDER BY e.character_id ASC, e.created_at ASC, e.id ASC
     `),
+    /* 明确记住的异键定位需要看到该角色全部条目（含过期/派生存），由
+       业务层按正文与来源筛选；这里不设 LIMIT，避免截断后误报唯一。 */
+    listEntriesForCharacter: db.prepare(`
+      SELECT e.*, ${DERIVED_FIELDS}
+      FROM memory_entries e
+      WHERE e.character_id = ?
+      ORDER BY e.created_at ASC, e.id ASC
+    `),
     listEntriesByIdentity: db.prepare(`
       SELECT e.*, ${DERIVED_FIELDS}
       FROM memory_entries e
@@ -699,6 +707,10 @@ function createMemoryStore(db) {
 
   function listEntriesByFact(factKey) {
     return statements.listEntriesByFact.all(factKey).map(mapEntry);
+  }
+
+  function listEntriesForCharacter(characterId) {
+    return statements.listEntriesForCharacter.all(characterId).map(mapEntry);
   }
 
   function listEntriesByIdentity(identityId) {
@@ -1044,6 +1056,7 @@ function createMemoryStore(db) {
     getEntryById,
     getEntryByFact,
     listEntriesByFact,
+    listEntriesForCharacter,
     listEntriesByIdentity,
     getEntryByCharacterIdentity,
     setEntryIdentity,
