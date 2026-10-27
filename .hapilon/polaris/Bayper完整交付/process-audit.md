@@ -20,6 +20,13 @@
 - 下一顺序：1）先统一 Case/计划入口并修正设计冲突；2）再处理验收矩阵、证据保留、父级闭环与未编号约束；3）最终由 master 验收流程补齐并决定恢复。
 - 本轮不关闭任何未完成 GAP；三册保留为审计发现，后续纠正以本索引为准。
 
+## r7 证据覆盖返修（2026-10-27）
+
+- master 退回来源身份批次验收：同一批次用最终重跑覆盖 `after.log`，首次中间 FAIL 不再是不可变原件；35/35 仅为开发结果，不能据此接受。
+- 已从精确会话 `e977a9dc-5e99-4eb7-8260-8821c3a6573d` 的原始 tool_result 恢复节选（命令含 `tail -60`，完整日志未找回），证据见 [evidence/source-identity-evidence-repair/](evidence/source-identity-evidence-repair/summary.md)。
+- 已完整归档修订前 skill 11 文件并核对 SHA；`references/execution.md` 补每次执行 attempt/唯一目录/防覆盖/`latest` 仅索引。记录见 [../北极星迭代/attempt-evidence.md](../北极星迭代/attempt-evidence.md) 与 manifest。
+- 本批未改产品/测试；VERSION 同步 0.1.183，Git 提交仍由 master 执行。来源身份 v2 与父级待 master 独立验收；`SOURCE-ID-003` 夹具与 `memory-store` 旧注释列为下一轮窄修正。
+
 ## 分册索引（历史审计发现，master 已审查）
 
 - [process-audit-chain.md](process-audit-chain.md)：S01～S08 父级阶段、业务模型、Case、计划、证据、体验/受托接受矩阵。

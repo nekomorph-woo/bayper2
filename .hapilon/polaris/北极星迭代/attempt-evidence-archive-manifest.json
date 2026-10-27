@@ -1,0 +1,17 @@
+{
+  "archive": ".agents/skills/polaris/archived/20261027-131931-attempt-evidence",
+  "files": {
+    "SKILL.md": "1212cdeb78f10a260b386ef2a69c2ba2746c4fd73236694395818523e27af665",
+    "references/acceptance-plan.md": "210cf2672ab68c1ebe415397712b2c3bd5b346f3b156788b4a6f54b404d91800",
+    "references/business-design.md": "1ead4df62f7c04a488acdfdb7abfe80fd0d7c8416f7d0e0f39b639d9a9d08711",
+    "references/cases.md": "ee2784b288b16737e6bda1df3e0cd1bdaaeef7b104476576b48a49a9a38d9313",
+    "references/execution.md": "d8aa7c28daaaa8dacc6227ffa25fbfa0a1c2c8eb87ba10dc1257df0f38b300f2",
+    "references/experience.md": "42fd25b8e6e957796b7ae203d641a2febecd9395c82951acd1583e9e30c9cdc1",
+    "references/modes.md": "810ae900a879a5cffc506a6187cbd763c076f80342a7d993d3a84ef2e33a3d72",
+    "references/prd.md": "9c6a21317bbbd2737f20467b2fc00b79e5e5679ce23c3506e2358ec5f072dbd7",
+    "references/scenario_acceptance_spec.md": "672104b304a98cdc9c94a09179cfdaa0db07b4624c221b44e63a4094f19c9f4a",
+    "references/slices.md": "0bccbc78e4a8c116bf6aa80c58e97d8bbaa044b26ff4534b0b4cd36d733e3e49",
+    "references/work-records.md": "8e6254ce579b09470197625552c2555e5e83dddb2fd1676d0c5d208bc01e2013"
+  },
+  "verified": true
+}
