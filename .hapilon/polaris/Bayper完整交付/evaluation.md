@@ -5,8 +5,8 @@
 本文件是当前唯一逐 Case 结果入口。各 review 保留原始判断、失败过程和长证据说明，本文只登记可定位的结果，不复制全文。状态仅用 execution.md 的五种：PASS、FAIL、ERROR、INCONCLUSIVE、NOT_COVERED；不使用 PARTIAL，也不把多个 Case 压成平均分或“最差状态”。
 
 - 分组：仅当版本、状态、证据和执行边界相同时，一个精确 ID 范围可共用一行；任一 Case 或必需子项有差异即拆行。`001～003` 只表示这些 ID 满足本行，不覆盖范围外或未执行项。
-- 版本：历史行以对应 review/evidence 的验收基线与源摘要定位，未记录 commit 的不补猜。已提交基线为 `a880937`；本批拟提交 VERSION `0.1.181`，尚未产生新提交，不写假 hash。工作区另有 5 个未提交 memory 源码/测试文件，SHA 见 [process-freeze.json](evidence/process-freeze.json)。
-- master 已独立核对冻结 5 SHA、部分原始日志、Expected 与 r2 差异；GAP-05/07/08/12 接受整改记录（不等于产品验收），GAP-03/13 以本轮细修后待最终复验，GAP-14 仍下批，产品保持冻结。
+- 版本：历史行以对应 review/evidence 的验收基线与源摘要定位，未记录 commit 的不补猜。已提交快照为 `fdf7144`（当时 VERSION `0.1.181`，领先 origin/main 133，未推送）；本批拟 snap VERSION `0.1.182`，未产生新 hash。工作区另有 5 个未提交 memory 源码/测试文件，SHA 见 [process-freeze.json](evidence/process-freeze.json)。
+- master 已受托验收 7 个最终 Contract v1/Part A-B，GAP-14 流程补齐通过；GAP-01～14 流程处置完成（GAP-06 仅流程记录、产品修复未完成；GAP-08 原证据未找回限制保留）。本批 snap 前暂不改产品，提交后接回 S03；产品未交付。
 - 历史 PASS 只证明该验收基线，不证明当前未提交工作区。受 memory/chat 身份链改动影响的组在“当前适用”列标“待回归”；没有重跑就不写当前 PASS。反之，当前工作区未验收也不能推断所有历史产品从未通过。
 - Runner 退出码、编译成功、开发报告全绿或 review 中的切片受托接受，均不自动升级为父级或整 Case 通过。体验记录已标明实际操作者、方法与局限；Codex 受托体验不是人类亲自体验，已有授权不要求真人重新批准。
 
@@ -23,7 +23,7 @@
 | POL-ONBOARD-006（v1） | PASS | 同上真实服务单批 | `tests/acceptance/live-onboarding.spec.cjs`；`npm run test:live` | [s01-codex-live.log](evidence/s01-codex-live.log) 1/1 | 仅 DeepSeek 官方固定短请求；其他服务/模型未验 |
 | POL-COMPANION-001～006（v1） | PASS | 2026-10-25 s02-review r3；当前未重跑 | `companionship.spec.cjs`、`companionship-ui.spec.cjs`；见 [acceptance-plan.md](acceptance-plan.md) | [s02-codex-r3-acceptance.log](evidence/s02-codex-r3-acceptance.log) 服务18/18＋GUI9/9 | 可控时钟；未做长期真实运行/进程崩溃注入 |
 | POL-DESKTOP-001（v1） | PASS | 2026-10-26 s02b-review；当前未重跑 | `tests/acceptance/desktop.spec.cjs`；`node --test` | [s02b-codex-r2-gui.log](evidence/s02b-codex-r2-gui.log) 16/16 | 不证明 OS 屏幕合成与真实焦点 |
-| POL-DESKTOP-002（v1） | PASS | 本批无 `desktop.spec` Runner；后续 S07c 原生输入切片覆盖点击/穿透/焦点 | `tests/acceptance/s07c-transparent-input.spec.cjs`（GUI 串行模板） | [s07c-codex-r1-native.log](evidence/s07c-codex-r1-native.log) tests 1/pass 1，单测试覆盖 HIT-001/002/003；桌面 11/11 见 [s07c-codex-r1-desktop.log](evidence/s07c-codex-r1-desktop.log) | scaleFactor=1；Retina、物理多屏未验；计划入口下轮统一 |
+| POL-DESKTOP-002（v1） | PASS | S02b 批无 `desktop.spec` Runner；S07c 以 1 test 覆盖 HIT-001/002/003 的真实点击/穿透/焦点 | `tests/acceptance/s07c-transparent-input.spec.cjs`（GUI 串行模板） | [s07c-codex-r1-native.log](evidence/s07c-codex-r1-native.log) tests 1/pass 1，单测试覆盖 HIT-001/002/003；桌面 11/11 见 [s07c-codex-r1-desktop.log](evidence/s07c-codex-r1-desktop.log) | scaleFactor=1；Retina、物理多屏未验；计划入口已统一 |
 | POL-DESKTOP-003（v1） | NOT_COVERED | 无自动化 Runner；须真实 Spaces/全屏切换与可见证据 | 无 | 无 | 真实 Spaces/全屏；后续 HIT 通过不能代替此项 |
 | POL-DESKTOP-004（关闭/重开/重复启动/崩溃退出） | PASS | 2026-10-26 s02b-review 与 2026-10-27 s08a-review；当前未重跑 | `desktop.spec.cjs` 001/004 相关测试 | [s02b-codex-r2-gui.log](evidence/s02b-codex-r2-gui.log)、[s08a-codex-repair.log](evidence/s08a-codex-repair.log) | 托盘原生点击未单列覆盖；崩溃注入不等于用户真实退出 |
 | POL-DESKTOP-004（原生托盘逐项点击） | NOT_COVERED | 测试内注明“托盘点击由 Codex 后验”，未找到独立原生点击结果 | 无（`desktop.spec.cjs` 只验证 `activate` 重显） | 同左 | 须真实托盘菜单点击与逐项行为 |
@@ -129,6 +129,22 @@
 | POL-HIT-001～003（v1） | PASS | 2026-10-27 s07c 主目录整合；当前未重跑 | `s07c-transparent-input.spec.cjs`、桌面回归、unit | [s07c-codex-r1-native.log](evidence/s07c-codex-r1-native.log) tests 1/pass 1，单测试覆盖 HIT-001/002/003；桌面 11/11 见 [s07c-codex-r1-desktop.log](evidence/s07c-codex-r1-desktop.log) | scaleFactor=1；Retina/Spaces/全屏未验 |
 | POL-NATIVE-001～003（v1） | PASS | 2026-10-27 s08a 收束与凛母版同步；聊天/记忆部分当前待回归 | `native-shell.spec.cjs`、`desktop.spec.cjs` | [s08a-codex-repair.log](evidence/s08a-codex-repair.log) 14/14、[rin-portrait-native-codex.log](evidence/rin-portrait-native-codex.log) 1/1 | 仅已实现三页/两尺寸；全部设置、真实服务、最终原生体验未完成 |
 
+### S08 最终验收入口（GAP-14，流程补齐已受托验收，未执行；跨链 S02/S03/S04/S05/S06/S07）
+
+本组 Contract 见 [final-acceptance-contract.md](final-acceptance-contract.md)；S08 是既有最终验收入口，不新增 S09 父级。master 已受托验收 7 个 v1 Contract 与 Part A/B；Contract 执行结果均未产生，全部记 NOT_COVERED。历史证据仅作边界引用，不升级为这些 Contract 的 PASS。本批 snap 后接回 S03 来源身份工作。
+
+| Case（版本） | 结果 | 验收基线 / 当前适用 | Runner 入口 / 命令（模板见上） | 原始证据 | 未覆盖边界 |
+| --- | --- | --- | --- | --- | --- |
+| POL-FINAL-CATALOG-001（v1） | NOT_COVERED | 只登记；历史工具自检仅引用 | `tools/appearance-catalog/build.py` | README 历史构建记录；本轮未执行 | 独立副本重建/数据一致性、配方追溯与发布边界未验 |
+| POL-FINAL-ANIM-001（v1） | NOT_COVERED | 只登记；ASSET-002 INCONCLUSIVE、ASSET3-001 子项 NOT_COVERED、RESTUI/HIT 为部分 PASS | 待实施 | 历史 ASSET/ASSET3/RESTUI/HIT 日志仅边界 | 24＋12 逐角色/服装覆盖、过渡中断、探索离桌与正式素材未验 |
+| POL-FINAL-STORY-001（v1） | NOT_COVERED | 只登记；STORY/DISCOVERY/STORYRUN/STORYUI 为切片证据 | 待实施 | 历史 story 系列日志仅边界；正式 `assetAvailable=false` | 正式发布→邀请→ACK、服装 72h 告知/穿用与重启幂等未验 |
+| POL-FINAL-NATIVE-001（v1） | NOT_COVERED | 只登记；NATIVE-001～003 仅三页/两尺寸 | 待实施 | 历史 s08a 日志仅边界 | 全页面/全设置、原生目录授权、模型修复与最终单屏未验 |
+| POL-FINAL-DESKTOP-001（v1） | NOT_COVERED | 只登记；002 有 S07c 真实点击，003/006 真实系统事件与 004 托盘点击缺证 | 待实施 | s07c 1 test/3 Case；desktop powerMonitor 子断言 | Spaces/全屏、真实锁屏/睡眠、Retina、托盘逐项未验 |
+| POL-FINAL-E2E-001（v1） | NOT_COVERED | 只登记；内层 Case 原样引用，无单条最终链 | 待实施 | 历史 CHAT-008/HERDR-LIVE 等仅边界 | 真实模型＋隔离 Herdr、突发/重连、断模型、撤权在途与跨重启未合并验收 |
+| POL-FINAL-DELIVERY-001（v1） | NOT_COVERED | 只登记；交付文档/snap/清理由 master 主持 | 待实施 | 无最终交付证据 | 启动/配置/数据说明、全需求映射、环境清理与工具抽查未验 |
+
+下一最小切片（只记录、不实施）：来源身份 v2 的 6 处旧同文 fixture 适配及独立回归；随后立即处理存量错误身份组迁移，并接回 S03 语义纠正/删除/共享闭环。
+
 ## 当前失败、未验证与待回归（不得写成通过）
 
 - **来源身份 v2（当前未提交工作区）**：开发报告四套件 35 项为 29 PASS/6 FAIL，master 未独立验收。POL-FACTID-002 v1 的“严格同文可复用身份”PASS 已失效；6 个 FAIL 分别位于 FACTID-004 禁分享/独属、FACTID-005 迁移/回滚、FACTID-006 跨键同文、ASSOC-002 精确正文复用（见 [claude-s03l-source-identity.json](evidence/claude-s03l-source-identity.json)）。已持久旧身份组未拆解，存量误合组未迁移；修复/补验在流程补齐后另派。
@@ -136,7 +152,7 @@
 - **正式内容**：`app/content/maid-stories.json` 四个故事 `maid.meet.rin`、`maid.meet.hu`、`maid.meet.cheng`、`maid.outfit.rin-warm-tea` 的 `assetAvailable` 均为 `false`；CONTENT 领域 PASS 不等于正式发布、可见故事或动画完成。
 - **素材候选**：ASSET-002 仍 INCONCLUSIVE；ASSET3-001 透明命中 NOT_COVERED；Hu/Cheng 仍为候选；36 动作、正式服装、过渡与中断、其他角色日常未完成。
 - **原生边界**：DESKTOP-003（Spaces/全屏）与 DESKTOP-006 真实锁屏/休眠 NOT_COVERED；托盘原生点击 NOT_COVERED；HIT 仅 scaleFactor=1。测试截图、受控 powerMonitor 事件不能冒充物理操作或 Retina 硬件证据。
-- **当前工作区回归**：5 个未提交文件为 `app/memory.cjs`、`app/memory-store.cjs`、`app/memory-fact-identity.cjs`、`tests/acceptance/memory-fact-identity.spec.cjs`、`tests/acceptance/memory-source-identity.spec.cjs`。凡执行 memory/chat/source/story-sharing 身份链的历史组均未在当前工作区重跑，保持历史 PASS 但标“待回归”；旧 commit 的测试结果不证明新工作区通过。
+- **当前工作区回归**：5 个未提交产品文件为 `app/memory.cjs`、`app/memory-store.cjs`、`app/memory-fact-identity.cjs`、`tests/acceptance/memory-fact-identity.spec.cjs`、`tests/acceptance/memory-source-identity.spec.cjs`（另有本轮流程文档改动，不属产品）。凡执行 memory/chat/source/story-sharing 身份链的历史组均未在当前工作区重跑，保持历史 PASS 但标“待回归”；旧 commit 的测试结果不证明新工作区通过。
 
 ---
 

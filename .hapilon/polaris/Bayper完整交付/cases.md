@@ -1,6 +1,6 @@
 # 正式 Acceptance Cases
 
-正式入口，2026-10-27 流程补建。已有完整 Expected 以本文件内条目为准；外部完整 Contract 只登记引用，不复制第二份 Expected。Case 版本与确认依据逐组注明，未独立执行的不得写 PASS。本文件不记录会过期的测试通过数或批次状态；结果统一见 [evaluation.md](evaluation.md)（本轮待补齐）及对应 review。
+正式入口，2026-10-27 流程补建。已有完整 Expected 以本文件内条目为准；外部完整 Contract 只登记引用，不复制第二份 Expected。Case 版本与确认依据逐组注明，未独立执行的不得写 PASS。本文件不记录会过期的测试通过数或批次状态；结果统一见 [evaluation.md](evaluation.md) 及对应 review。
 
 适用元数据：POL-ONBOARD-001～006 为 v1，Codex 依据完整交付授权受托确认，2026-10-25，依据 [s01-design.md](s01-design.md)；该组全部 P0/必需。其余内联分节标题已注明各自 v1 与 Codex 受托确认；以下是 Expected，不是执行结果；确认日期只采用源文档明确写出的日期，不补猜。
 
@@ -15,7 +15,7 @@
 | POL-ONBOARD-005 | 配置与隔离边界 | 首次窗口 → 提交远端HTTP、含凭据URL、非法模型输入；页面尝试外部导航 | 拒绝不安全配置，无Key外发/日志泄漏；无任意IPC/文件访问/新外部页面 | 独立请求收集+IPC表面/安全配置审查；真实应用和服务，不用安全配置函数单测代替 |
 | POL-ONBOARD-006 | 真实服务核实 | 获授权服务配置 → 实际窗口验证一次，接纳并重启 | 真实服务有效应答，Key安全保存且重启可读取；不输出凭据或私人内容 | 真实兼容服务无Mock，脱敏记录和Codex受托体验；配置尚需确定，此项不允许Mock结果覆盖 |
 
-Runner 映射见 [acceptance-plan.md](acceptance-plan.md)；实际结果见 evaluation.md（待补齐）与相应 review，本文件不预填 PASS/FAIL。
+Runner 映射见 [acceptance-plan.md](acceptance-plan.md)；实际结果见 evaluation.md 与相应 review，本文件不预填 PASS/FAIL。
 
 ## S02a 陪伴安排与数值（v1，Codex受托确认）
 
@@ -91,7 +91,7 @@ POL-COMPANION-004/006同时验证事务失败不留下精力已改但结算时�
 
 ## 外部 Contract 登记（唯一入口引用）
 
-以下条目只登记指向，不复制 plan 中的完整 Expected。ID 集合按实际 Contract 展开；范围有例外时已单列。Runner 映射见 [acceptance-plan.md](acceptance-plan.md)，执行结果见 evaluation.md（待补齐）或对应 review。
+以下条目只登记指向，不复制 plan 中的完整 Expected。ID 集合按实际 Contract 展开；范围有例外时已单列。Runner 映射见 [acceptance-plan.md](acceptance-plan.md)，执行结果见 evaluation.md 或对应 review。
 
 | 父级/业务能力 | 正式 ID（版本/例外） | 唯一 Contract | 需求来源 | 验收边界 | 确认依据 |
 |---|---|---|---|---|---|
@@ -131,8 +131,11 @@ POL-COMPANION-004/006同时验证事务失败不留下精力已改但结算时�
 | S06 故事/发现/内容 | POL-STORY-001～005；POL-DISCOVERY-001～006；POL-CONTENT-001～003；POL-STORYRUN-001～005、POL-STORYRUN-004B、POL-STORYRUN-UI-001；POL-STORYUI-001～005（v1） | [s06e-story-progress-plan.md](s06e-story-progress-plan.md)（STORY-001～004）；[s06e-review.md](s06e-review.md)（STORY-005）；[s06f-discovery-outcomes-plan.md](s06f-discovery-outcomes-plan.md)（DISCOVERY-001～005）；[s06f-review.md](s06f-review.md)（DISCOVERY-006）；[s06g-authored-content-plan.md](s06g-authored-content-plan.md)；[s06i-story-runtime-plan.md](s06i-story-runtime-plan.md)（STORYRUN-001～005）；[s06i-review.md](s06i-review.md)（STORYRUN-004B、STORYRUN-UI-001）；[s06j-story-window-plan.md](s06j-story-window-plan.md) | REQ-46/52/54/59 | 真实活动/story/SQLite/GUI | Codex 受托 v1（plans/review） |
 | S07 角色素材与输入 | POL-ASSET-001～002；POL-ASSET3-001～005；POL-RESTUI-001～003；POL-HIT-001～003（v1） | [asset-pilot.md](asset-pilot.md)；[s07b-three-character-runtime-plan.md](s07b-three-character-runtime-plan.md)；[s07-rest-runtime-plan.md](s07-rest-runtime-plan.md)；[s07c-transparent-input-plan.md](s07c-transparent-input-plan.md) | REQ-03/39/45/49/58 | 真实播放器/Electron/原生输入 | Codex 受托 v1（plans/review） |
 | S08 原生窗口 | POL-NATIVE-001～003（v1） | [s08a-native-shell-plan.md](s08a-native-shell-plan.md) | PRD 原生单屏/设置 | 真实 Electron/两尺寸 | Codex 受托 v1 2026-10-26 |
+| S08 最终验收入口（GAP-14；跨链 S02/S03/S04/S05/S06/S07） | POL-FINAL-CATALOG-001、POL-FINAL-ANIM-001、POL-FINAL-STORY-001、POL-FINAL-NATIVE-001、POL-FINAL-DESKTOP-001、POL-FINAL-E2E-001、POL-FINAL-DELIVERY-001（v1） | [final-acceptance-contract.md](final-acceptance-contract.md) | REQ-40/41、03/39/49/58、45/46/52/54/59、原生单屏、13/21/35、01/44/56、06/09/18/28/51/60/61、Goal 终止 | 最终全链；未执行 | master 已受托验收 v1/Part A-B；GAP-14 流程补齐通过；产品实现未执行 |
 
-登记口径（2026-10-27 r2，r3 更正）：只有能在所引 Contract 中逐项定位定义的 ID 才计 Contract 索引覆盖；文件存在与定义覆盖分开记录，逐组结果见 [coverage-recheck.txt](evidence/process-registry-20261027-r2/coverage-recheck.txt) 与 [r3 核对](evidence/process-registry-20261027-r3/analysis-id-mapping.txt)。以下为仅有编号小节定义、无完整字面 ID 的项，留 master 复核：POL-NOTIFY-007～009、POL-NOTIFY-UI-002～011、POL-CONNECTOR-UI-002～006、POL-HERDR-RUNTIME-006～007 与 009～011、POL-SOURCE-012、POL-DISCOVERY-006、POL-THEME-SHARE-004B～004E 与 006、POL-SOURCE-AUTO-002b/004a2/004b～004e。其余登记 ID 在所引 plan/review 有完整字面定义（POL-FACTID-002 v2 与 POL-ANALYSIS-007/009/010 例外，均见缺口）；不据范围写法或手工清单宣称“全量已证明”。
+S08 是最终验收入口，不新增 S09 父级；7 个 `POL-FINAL` ID 是既有范围的最终门，不是新产品概念。本批 snap 前暂不改产品，提交后接回 S03；Contract 结果仍未执行。
+
+登记口径（2026-10-27 r2，r3 更正）：只有能在所引 Contract 中逐项定位定义的 ID 才计 Contract 索引覆盖；文件存在与定义覆盖分开记录，逐组结果见 [coverage-recheck.txt](evidence/process-registry-20261027-r2/coverage-recheck.txt) 与 [r3 核对](evidence/process-registry-20261027-r3/analysis-id-mapping.txt)。以下为仅有编号小节定义、无完整字面 ID 的项（r2 旧表述）：POL-NOTIFY-007～009、POL-NOTIFY-UI-002～011、POL-CONNECTOR-UI-002～006、POL-HERDR-RUNTIME-006～007 与 009～011、POL-SOURCE-012、POL-DISCOVERY-006、POL-THEME-SHARE-004B～004E 与 006、POL-SOURCE-AUTO-002b/004a2/004b～004e。**当前注记：master 已接受按既有小节规范映射，不因缺完整字面 ID 判缺 Contract，本轮不重新全量审核。** 其余登记 ID 在所引 plan/review 有完整字面定义（POL-FACTID-002 v2 与 POL-ANALYSIS-007/009/010 例外，均见缺口）；不据范围写法或手工清单宣称“全量已证明”。
 
 ## 内部证据与子样本
 
@@ -148,4 +151,4 @@ POL-COMPANION-004/006同时验证事务失败不留下精力已改但结算时�
 - POL-FACTID-002：v1 的“严格同文可复用身份”机制 PASS 已失效；v2 计划已由 Codex 于 2026-10-27 受托确认并作为当前设计依据，未独立验收的是实现，不是计划待确认。不得把 POL-FACTID-001～006 全写成 v1 或据旧 PASS 代表当前。
 - POL-SOURCE-ID-001～004：计划已由 Codex 于 2026-10-27 受托确认；实现尚未独立验收。该 plan 可按 master 批准作为后续流程文档提交依据，产品源码与测试仍不提交，不得据其宣称已交付。
 - POL-ANALYSIS-007/009/010：master 已核实原规则到 ID 的映射（007 预算收尾失败与补核；009 在途改写不发布与映射发布回滚；010 8 区段/4MiB 验证上限），现正式登记；不伪称历史编号确认时间，不新增或削弱 Expected。此前 r2 的“查无定义”判断据此更正。
-- 尚无完整业务 Contract 的范围：REQ-40 造型维度/310 目录（仅工具）、36 动作/正式服装的逐项语义（animation-plan 为规划）、S08 全部设置页/Spaces/fullscreen/Retina、真实模型+隔离 Herdr 端到端、最终交付文档与 snap 清理。上述列为缺口，不从实现反推 Expected。
+- GAP-14 最终范围已登记为 POL-FINAL-001 系列（7 组，见 [final-acceptance-contract.md](final-acceptance-contract.md)），归 S08 最终验收入口；master 已受托验收 v1/Part A-B，流程补齐通过。造型资料、正式动画覆盖、故事/服装、全页面单屏、原生证据门、真实模型＋隔离 Herdr、交付纪律均未执行，evaluation 记 NOT_COVERED；动画采用 24＋12 语义覆盖，不要求 36 张或 36 fps；本轮不新增其他业务概念或 Case。snap 后接回 S03。

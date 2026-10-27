@@ -34,8 +34,8 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 | 父级路径 | REQ / Case 入口 | 历史已验范围（仅切片） | 未闭路径 / 下一阶段 |
 | --- | --- | --- | --- |
 | S01 首次相遇 | REQ-05/21/45/55；[cases.md](cases.md) ONBOARD-001～006 | 6 项当前切片 PASS 并受托接受；首次配置/愿望/接纳/重启/真实服务核实 | S01 切片接受有效；这些 REQ 在桌面、聊天、Herdr、最终体验中的剩余义务由相应父级承担，不要求重做 S01 |
-| S02 桌面陪伴 | REQ-01/03/44/47/48/50/56/57；COMPANION、DESKTOP、RELATION | 安排/轮换/数值、关系事件、Rin 画布与生命周期基础已接受 | DESKTOP-002 原生点击已有 S07c HIT 证据但计划入口未统一；003 Spaces/全屏、006 真实锁屏、004 托盘点击未闭；正式活动接线在 S06 |
-| S03 有记忆的对话 | REQ-09/18/49/51/60/61；MEMORY/CHAT/MEMUI/SHARING/SHAREUI/CHATMEM/CHATRELAY/EXCLUSIVE/AUTOSHARE/THEME/SHARESETTING/SEM/FACTID/ASSOC/SOURCE-* | 基础记忆、聊天、条目管理、转告、独属、自动共享开关、主题定向共享、正式 GUI 与部分真实模型构造链已按切片接受 | 当前冻结：来源身份 v2 未独立验收，FACTID-002 v1 失效，6 个旧机制 FAIL/存量误合组未迁移；SEM 5 FAIL、holdout 2 FAIL、source-live 2 FAIL；异 factKey 语义闭环、正式主题自动分享 GUI 未闭 |
+| S02 桌面陪伴 | REQ-01/03/44/47/48/50/56/57；COMPANION、DESKTOP、RELATION | 安排/轮换/数值、关系事件、Rin 画布与生命周期基础已接受 | DESKTOP-002 已由 S07c 1 test/3 Case 覆盖真实点击；003 Spaces/全屏、006 真实锁屏、004 托盘点击未闭；正式活动接线在 S06 |
+| S03 有记忆的对话 | REQ-09/18/49/51/60/61；MEMORY/CHAT/MEMUI/SHARING/SHAREUI/CHATMEM/CHATRELAY/EXCLUSIVE/AUTOSHARE/THEME/SHARESETTING/SEM/FACTID/ASSOC/SOURCE-* | 基础记忆、聊天、条目管理、转告、独属、自动共享开关、主题定向共享、正式 GUI 与部分真实模型构造链已按切片接受 | 暂不改产品（待 snap）：来源身份 v2 未独立验收，FACTID-002 v1 失效，6 个旧机制 FAIL/存量误合组未迁移；SEM 5 FAIL、holdout 2 FAIL、source-live 2 FAIL；异 factKey 语义闭环、正式主题自动分享 GUI 未闭 |
 | S04 外部来源 | REQ-13；SOURCE/ANALYSIS/SOURCE-UI/SOURCE-AUTO | 权限/读取/分析、设置、正式心跳自动分析已接受 | 真实来源语义质量、跨文件同义防回流、原生目录 dialog 人工体验未验证；上游记忆改动待回归 |
 | S05 工作陪伴 | REQ-06/21/28/35/58；CONNECTOR/TRANSPORT/HERDR-LIVE/HERDR-ID/REGISTER/ADAPTER/RUNTIME/NOTIFY/UI | 账本/传输、真实隔离 Herdr、登记、适配、运行、停止证据、通知队列与正式气泡/连接设置已按切片接受 | 最终真实模型＋隔离 Herdr 端到端、插件安装入口与跨重启恢复仍需整体复验；不得读取用户真实工作会话 |
 | S06 低频故事 | REQ-46/48/52/53/54/59；BUDGET/OPPORTUNITY/ACTIVITY/STORY/DISCOVERY/CONTENT/STORYRUN/STORYUI | 预算/机会、活动生命周期、探索、故事/发现/作者目录领域、main 消费与故事窗口已接受相应边界 | 正式四故事 assetAvailable=false；自动邀请、正式活动→相遇、服装 72h 解锁/穿用、发布后 GUI 全链未闭 |
@@ -76,13 +76,15 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 
 工具组织REQ-41贯穿所有切片：现有SQLite/造型目录工具是已存在能力，新增项目工具仍须自包含审查，不将此横向约束标作一次性完成。
 
-## 当前阶段：流程补建验收（2026-10-27）
+## 当前阶段：流程补齐已受托验收（2026-10-27）
 
-产品 S03 冻结，产品开发未恢复。master 已审查审计三册、AGENTS 与现行 skill diff，接受问题清单作为补齐依据，不接受任何产品完成结论。
+GAP-01～14 流程处置均已完成（GAP-06 仅流程记录、产品修复未完成；GAP-08 原证据未找回限制保留）。本批 snap 前暂不改产品，提交后接回原父级 S03 来源身份工作；产品未交付。
 
-- 当前只做流程补齐：Case/计划入口与设计冲突已由 master 接受；r4 已补统一验收矩阵、父级追溯表与证据保留盘点。master 已独立核对冻结 5 SHA、部分原日志、Expected 与 r2 差异；GAP-05/07/08/12 接受整改记录（不等于产品验收），GAP-03/13 本轮细修后待最终复验，GAP-14 仍下批；产品保持冻结。已提交基线 a880937（当时 0.1.180），本批拟提交 0.1.181，尚未产生新提交 hash。
+- master 已受托验收 7 个最终 Contract v1 与 Part A/B（[final-acceptance-contract.md](final-acceptance-contract.md)），GAP-14 流程补齐通过；Contract 执行结果仍未产生，归 S08 最终验收入口、跨链既有父级。已提交快照 fdf7144（当时 VERSION 0.1.181，领先 origin/main 133，未推送）；本批拟 snap VERSION 0.1.182，未产生新 hash。
 - 完整 Goal 与 S01～S08 全部产品待办保持，不因流程补齐缩小或改写 PRD/Expected；上表切片范围仍是产品依据。
-- S03 当前冻结：来源身份 v2 尚未独立验收，POL-FACTID-002 旧机制 PASS 失效，6 个旧机制 FAIL 与存量误合组未迁移；后续由 master 按顺序处理，不要求先修产品代码/测试才允许流程恢复。
+- S03 暂不改产品（待 snap）：来源身份 v2 尚未独立验收，POL-FACTID-002 旧机制 PASS 失效，6 个旧机制 FAIL 与存量误合组未迁移；snap 后按顺序接回，不要求先修产品代码/测试才允许流程恢复。
 - [s03l-source-identity-plan.md](s03l-source-identity-plan.md) 与 [s03l-identity-plan.md](s03l-identity-plan.md) 的既有修订已获 master 批准，作为当前设计依据随本次流程文档提交；产品源码/测试不提交，实现未独立验收。
+- 下一最小切片（只记录、不实施）：来源身份 v2 的 6 处旧同文 fixture 适配及独立回归；随后立即处理存量错误身份组迁移，并接回 S03 语义纠正/删除/共享闭环。
 - 剩余产品路径不缩小：S03 异 factKey 语义闭环与正式主题自动分享 GUI；S06 自动邀请、正式活动→相遇、服装解锁/穿用；S07 36 动作/服装/过渡中断；S08 其余设置、Spaces/fullscreen/Retina、真实模型+隔离 Herdr 端到端与交付文档。
-- skill 修订记录见 [../北极星迭代/parent-slice-continuity.md](../北极星迭代/parent-slice-continuity.md)；S-01/S-02 暂在项目统一入口落实，S-03 不新增规则。
+- 本轮补记待办、不实现：POL-MEMORY-001 的“服装切换后记忆条目归属”联动（现有 PASS 仅证明衣装不改变身份/名单/当前位，未直接断言记忆归属）；POL-MEMORY-006 的“普通细节降权/整理”（现有用例只验到期与门禁）。
+- skill 修订记录见 [../北极星迭代/parent-slice-continuity.md](../北极星迭代/parent-slice-continuity.md)；真实归档 3e2a64d 已保存，当前问题是执行记录/派工遵循不足，新版已用于补齐，无理由增加 skill 规则。
