@@ -199,6 +199,18 @@ function relationResult(pair, relation) {
   return { pair: pair.id, relation, left: description, right: { ...description } };
 }
 
+function relationDescription(subject, subjectQuote) {
+  return { subject, subjectQuote, scope: "current", time: null, timeQuote: null };
+}
+
+function bindingResponder(subject, leftQuote, rightQuote) {
+  return relationResponder((pairs) => pairs.map((pair) => ({
+    pair: pair.id, relation: "equivalent",
+    left: relationDescription(subject, leftQuote),
+    right: relationDescription(subject, rightQuote),
+  })));
+}
+
 function relationResponder(resultsOf) {
   return ({ body, res }) => {
     const pairs = pairsOf(body);
@@ -490,6 +502,124 @@ test("POL-SEMOP-001a/b/c 旧事实核验：left 是 A 旧事实，B 旧事实确
   assert.equal(source.direct, false);
   assert.equal(source.via, "identity_correction");
   assert.equal(ctx.store.memorySourceContext.isCurrent(source), true);
+});
+
+test("POL-SUBJ-BIND-004 模型错误 equivalent 不得让 A 的更正跨角色改动 B", async (t) => {
+  const ctx = await setupContext(t);
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  await chatTurn(ctx, aConversation, "用户说她喜欢蓝色。", [
+    { factKey: "bind.a", body: "用户说她喜欢蓝色。", kind: "preference", trust: "stated", evidence: "用户说她喜欢蓝色。" },
+  ]);
+  await chatTurn(ctx, bConversation, "用户喜欢蓝色。", [
+    { factKey: "bind.b", body: "用户喜欢蓝色。", kind: "preference", trust: "stated", evidence: "用户喜欢蓝色。" },
+  ], "b");
+  const bOld = entryOf(ctx.store, "b", "bind.b");
+  const aOld = entryOf(ctx.store, "a", "bind.a");
+  const result = await sendCorrection(ctx, aConversation, "不是蓝色，我更喜欢绿色，请帮我改过来。", {
+    needle: "蓝色", excerpt: "我更喜欢绿色", evidence: "请帮我改过来",
+  }, {
+    verification: relationResponder((pairs) => pairs.map((pair) => ({
+      pair: pair.id, relation: "equivalent",
+      left: { subject: "用户", subjectQuote: "用户", scope: "current", time: null, timeQuote: null },
+      right: { subject: "用户", subjectQuote: "用户", scope: "current", time: null, timeQuote: null },
+    }))),
+  });
+  await waitFor(() => ctx.store.chat.getRequest({
+    characterId: "a", requestId: result.requestId,
+  }).verificationStatus !== "pending");
+  const aNew = entryOf(ctx.store, "a", "bind.a");
+  const bNew = entryOf(ctx.store, "b", "bind.b");
+  const settled = ctx.store.chat.getRequest({ characterId: "a", requestId: result.requestId });
+  assert.equal(verificationRequests(ctx).length, 1);
+  assert.equal(settled.verificationStatus, "completed");
+  assert.match(aNew.body, /绿色/u);
+  assert.ok(aNew.version > aOld.version);
+  assert.equal(bNew?.body, bOld.body);
+  assert.equal(bNew?.version, bOld.version);
+  assert.equal(bNew?.factIdentityId, bOld.factIdentityId);
+  assert.equal(memorySnapshot(ctx.store.dbPath).relations.length, 0);
+  const assistant = ctx.store.chat.getConversation({
+    characterId: "a", conversationId: aConversation.id,
+  }).messages.filter((message) => message.role === "assistant").at(-1);
+  assert.equal(/一并更正|一并删除/u.test(assistant.content), false);
+});
+
+test("POL-SUBJ-BIND-001 同句明确绑定经真实 chat 传播", async (t) => {
+  const ctx = await setupContext(t);
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  await chatTurn(ctx, aConversation, "她是我妹妹小雅，她喜欢蓝色。", [
+    { factKey: "bind.same.a", body: "她是我妹妹小雅，她喜欢蓝色。", kind: "preference", trust: "stated", evidence: "她是我妹妹小雅，她喜欢蓝色。" },
+  ]);
+  await chatTurn(ctx, bConversation, "小雅喜欢蓝色。", [
+    { factKey: "bind.same.b", body: "小雅喜欢蓝色。", kind: "preference", trust: "stated", evidence: "小雅喜欢蓝色。" },
+  ], "b");
+  const result = await sendCorrection(ctx, aConversation, "不是蓝色，小雅更喜欢绿色，请帮我改过来。", {
+    needle: "蓝色", excerpt: "小雅更喜欢绿色", evidence: "请帮我改过来",
+  }, {
+    verification: bindingResponder("小雅", "她是我妹妹小雅", "小雅"),
+  });
+  await waitFor(() => ctx.store.chat.getRequest({
+    characterId: "a", requestId: result.requestId,
+  }).verificationStatus !== "pending");
+  const aAfter = entryOf(ctx.store, "a", "bind.same.a");
+  const bAfter = entryOf(ctx.store, "b", "bind.same.b");
+  assert.match(aAfter.body, /绿色/u);
+  assert.equal(bAfter.body, aAfter.body);
+  assert.equal(bAfter.factIdentityId, aAfter.factIdentityId);
+});
+
+test("POL-SUBJ-BIND-002 保留用户前文明确绑定经真实 chat 传播", async (t) => {
+  const ctx = await setupContext(t);
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  await chatTurn(ctx, bConversation, "她是我妹妹小雅。", [], "b");
+  await chatTurn(ctx, bConversation, "她喜欢蓝色。", [
+    { factKey: "bind.context.b", body: "她喜欢蓝色。", kind: "preference", trust: "stated", evidence: "她喜欢蓝色。" },
+  ], "b");
+  await chatTurn(ctx, aConversation, "小雅喜欢蓝色。", [
+    { factKey: "bind.context.a", body: "小雅喜欢蓝色。", kind: "preference", trust: "stated", evidence: "小雅喜欢蓝色。" },
+  ]);
+  const result = await sendCorrection(ctx, aConversation, "不是蓝色，小雅更喜欢绿色，请帮我改过来。", {
+    needle: "蓝色", excerpt: "小雅更喜欢绿色", evidence: "请帮我改过来",
+  }, {
+    verification: bindingResponder("小雅", "小雅", "她"),
+  });
+  await waitFor(() => ctx.store.chat.getRequest({
+    characterId: "a", requestId: result.requestId,
+  }).verificationStatus !== "pending");
+  const aAfter = entryOf(ctx.store, "a", "bind.context.a");
+  const bAfter = entryOf(ctx.store, "b", "bind.context.b");
+  assert.match(aAfter.body, /绿色/u);
+  assert.equal(bAfter.body, aAfter.body);
+  assert.equal(bAfter.factIdentityId, aAfter.factIdentityId);
+});
+
+test("POL-SUBJ-BIND-003 仅裸姓名前文不构成指代绑定，不传播", async (t) => {
+  const ctx = await setupContext(t);
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  await chatTurn(ctx, bConversation, "我妹妹小雅最近很忙。", [], "b");
+  await chatTurn(ctx, bConversation, "她喜欢蓝色。", [
+    { factKey: "bind.name.b", body: "她喜欢蓝色。", kind: "preference", trust: "stated", evidence: "她喜欢蓝色。" },
+  ], "b");
+  await chatTurn(ctx, aConversation, "小雅喜欢蓝色。", [
+    { factKey: "bind.name.a", body: "小雅喜欢蓝色。", kind: "preference", trust: "stated", evidence: "小雅喜欢蓝色。" },
+  ]);
+  const bOld = entryOf(ctx.store, "b", "bind.name.b");
+  const result = await sendCorrection(ctx, aConversation, "不是蓝色，小雅更喜欢绿色，请帮我改过来。", {
+    needle: "蓝色", excerpt: "小雅更喜欢绿色", evidence: "请帮我改过来",
+  }, {
+    verification: bindingResponder("小雅", "小雅", "她"),
+  });
+  await waitFor(() => ctx.store.chat.getRequest({
+    characterId: "a", requestId: result.requestId,
+  }).verificationStatus !== "pending");
+  const bNew = entryOf(ctx.store, "b", "bind.name.b");
+  assert.equal(bNew?.body, bOld.body);
+  assert.equal(bNew?.version, bOld.version);
+  assert.equal(memorySnapshot(ctx.store.dbPath).relations.length, 0);
 });
 
 test("POL-SEMOP-001a B 已喜欢茶但不是同一旧事实，不因新结果相同而合并", async (t) => {

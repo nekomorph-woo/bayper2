@@ -5,6 +5,11 @@
    本协议也不保存永久否定。 */
 const { AppError } = require("./errors.cjs");
 const { MAX_SEGMENTS, segmentProblem } = require("./memory-correction-evidence.cjs");
+const {
+  hasUnsupportedPlural,
+  pronounPositions,
+  clauseRanges,
+} = require("./memory-relation-binding.cjs");
 
 const POLICY_VERSION = "s03l-grounded-relation-v1";
 const SOURCE_POLICY_VERSION = "s03l-source-grounded-relation-v1";
@@ -462,6 +467,202 @@ function incompleteReasons(side, description, label) {
   return reasons;
 }
 
+/* S03n 主体绑定门：只在模型声称 equivalent 时检查第三人称代词是否有
+   可定位的用户身份证据；证据不足降 uncertain，不做语义证明。 */
+const BINDING_FORBIDDEN = /(?:不是|并非|不算|不叫|如果|假如|要是|倘若|如若|若是|吗|？|\?)/u;
+const BINDING_FACT_FORBIDDEN = /(?:如果|假如|要是|倘若|如若|若是|吗|？|\?)/u;
+const BINDING_CONDITION = /(?:如果|假如|要是|倘若|如若|若是|万一|假设)/u;
+const BINDING_CONJUNCTION = /(?:和|与|及|、|跟)/u;
+const QUOTE_PAIRS = new Map([
+  ["“", "”"], ["\"", "\""], ["「", "」"], ["『", "』"], ["‘", "’"], ["'", "'"],
+]);
+
+function quoteRangesOf(text) {
+  const ranges = [];
+  let open = null;
+  let start = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (open === null && QUOTE_PAIRS.has(char)) {
+      open = char;
+      start = index;
+    } else if (open !== null && char === QUOTE_PAIRS.get(open)) {
+      ranges.push([start, index]);
+      open = null;
+    }
+  }
+  if (open !== null) ranges.push([start, text.length - 1]);
+  return ranges;
+}
+
+function insideQuotes(ranges, start, end) {
+  return ranges.some(([left, right]) => start <= right && end >= left);
+}
+
+/* 直接来源的完整原话可能包含被 excerpt 丢掉的前置条件或引号；不能把
+   删掉“假如/如果”后的片段当成独立事实。 */
+function conditionBefore(text, index) {
+  const prefix = text.slice(0, index);
+  const sentenceAt = Math.max(
+    prefix.lastIndexOf("。"), prefix.lastIndexOf("！"), prefix.lastIndexOf("？"),
+    prefix.lastIndexOf("；"), prefix.lastIndexOf(";"),
+  ) + 1;
+  return BINDING_CONDITION.test(prefix.slice(sentenceAt));
+}
+
+function sourceContextProblem(side) {
+  const source = side.sourceContext;
+  if (!source) return null;
+  const content = source.utterance;
+  const quotes = quoteRangesOf(content);
+  const check = (index, length) => {
+    if (index === -1) return "来源原话未包含片段";
+    if (insideQuotes(quotes, index, index + length - 1)) return "来源原话引号内";
+    if (conditionBefore(content, index)) return "来源原话前置条件";
+    return null;
+  };
+  if (source.format === CORRECTED_FORMAT) {
+    for (const segment of source.segments) {
+      const problem = check(content.indexOf(segment), segment.length);
+      if (problem) return problem;
+    }
+    return null;
+  }
+  let index = content.indexOf(side.text);
+  if (index === -1) return "来源原话未包含正文";
+  while (index !== -1) {
+    const problem = check(index, side.text.length);
+    if (problem) return problem;
+    index = content.indexOf(side.text, index + 1);
+  }
+  return null;
+}
+
+function bindingsOf(text) {
+  const clauses = clauseRanges(text);
+  return clauses.flatMap((clause, index) => {
+    const match = /^(她|他)(是|叫)(.+)$/u.exec(clause.text);
+    return match
+      ? [{
+        clause, clauses, index, pronoun: match[1], copula: match[2],
+        antecedent: match[3].trim(),
+      }]
+      : [];
+  });
+}
+
+function normalizeBinding(value) {
+  return String(value)
+    .normalize("NFKC")
+    .replace(/[\s\p{P}\p{S}]/gu, "")
+    .toLowerCase();
+}
+
+function bindingSubjectMatches(subject, copula, antecedent) {
+  const subjectText = normalizeBinding(subject);
+  const antecedentText = normalizeBinding(antecedent);
+  if (subjectText.length < 2 || !antecedentText ||
+    /[她他]/u.test(subjectText) || /[她他]/u.test(antecedent) ||
+    BINDING_CONJUNCTION.test(antecedent)) {
+    return false;
+  }
+  return copula === "叫"
+    ? antecedentText === subjectText
+    : antecedentText === subjectText || antecedentText.endsWith(subjectText);
+}
+
+function bindingFactProblem(fact, pronoun, quotes) {
+  if (!fact) return "绑定与事实不相邻";
+  if (!fact.text.startsWith(pronoun)) return "事实句不以同一代词开头";
+  const positions = pronounPositions(fact.text);
+  if (positions.length !== 1 || positions[0].pronoun !== pronoun) {
+    return "事实句代词不唯一";
+  }
+  if (insideQuotes(quotes, fact.start, fact.end)) return "引号内事实";
+  if (BINDING_FACT_FORBIDDEN.test(fact.text + fact.trailing)) return "事实句为疑问/假设";
+  return null;
+}
+
+function bindingCoreProblem(binding, subject) {
+  if (BINDING_FORBIDDEN.test(binding.clause.text + binding.clause.trailing)) {
+    return "否定/假设/疑问";
+  }
+  if (!bindingSubjectMatches(subject, binding.copula, binding.antecedent)) {
+    return "主体指称不一致";
+  }
+  return null;
+}
+
+function bindingProblem(side, description) {
+  const text = side.text;
+  if (hasUnsupportedPlural(text)) return "复数第三人称未支持";
+  if (pronounPositions(text).length === 0) return null;
+  const { subject, subjectQuote } = description;
+  if (typeof subject !== "string" || !subject.trim() ||
+    typeof subjectQuote !== "string" || !subjectQuote.trim()) {
+    return "缺少主体或引用";
+  }
+  const sourceProblem = sourceContextProblem(side);
+  if (sourceProblem) return sourceProblem;
+  const textBindings = bindingsOf(text).map((binding) => ({ ...binding, source: "text" }));
+  const context = side.sourceContext?.context ?? [];
+  const contextBindings = context.flatMap((message) =>
+    bindingsOf(message.content).map((binding) => ({ ...binding, source: "context", message })));
+  const bindings = [...textBindings, ...contextBindings];
+  if (bindings.length === 0) return "未找到明确身份绑定";
+  if (bindings.length > 1) return "存在多个竞争绑定";
+  const binding = bindings[0];
+  if (binding.source === "text" && side.sourceContext?.format === CORRECTED_FORMAT &&
+    !side.sourceContext.segments.some((segment) => segment.includes(binding.clause.text))) {
+    return "绑定跨 segment";
+  }
+  const quotes = quoteRangesOf(text);
+  if (binding.source === "text") {
+    const fact = binding.clauses[binding.index + 1];
+    if (binding.clauses.slice(0, binding.index)
+      .some((clause) => BINDING_CONDITION.test(clause.text + clause.trailing))) {
+      return "前置条件句";
+    }
+    const problem = bindingFactProblem(fact, binding.pronoun, quotes) ??
+      (insideQuotes(quotes, binding.clause.start, binding.clause.end) ? "引号内绑定" : null) ??
+      bindingCoreProblem(binding, subject);
+    if (problem) return problem;
+    const competing = binding.clauses.some((clause) =>
+      clause !== binding.clause && clause !== fact &&
+      pronounPositions(clause.text).length > 0);
+    if (competing) return "其他分句含代词";
+    if (!text.includes(subjectQuote) ||
+      !normalizeBinding(subjectQuote).includes(normalizeBinding(binding.clause.text))) {
+      return "引用未覆盖绑定句";
+    }
+    return null;
+  }
+  const last = context[context.length - 1];
+  if (!last || binding.message !== last) return "绑定不在最近保留前文";
+  if (pronounPositions(binding.message.content).length !== 1) return "前文含其他代词";
+  if (binding.clauses.slice(0, binding.index)
+    .some((clause) => BINDING_CONDITION.test(clause.text + clause.trailing))) {
+    return "前文条件句";
+  }
+  const factClauses = clauseRanges(text).filter((clause) =>
+    pronounPositions(clause.text).length > 0);
+  if (factClauses.length !== 1) return "事实句代词不唯一";
+  const problem = bindingFactProblem(factClauses[0], binding.pronoun, quotes) ??
+    (insideQuotes(quoteRangesOf(binding.message.content), binding.clause.start, binding.clause.end)
+      ? "引号内绑定" : null) ??
+    bindingCoreProblem(binding, subject);
+  if (problem) return problem;
+  if (!text.includes(subjectQuote) || !subjectQuote.includes(binding.pronoun)) {
+    return "引用未指向当前事实代词";
+  }
+  return null;
+}
+
+function bindingReasons(side, description) {
+  const problem = bindingProblem(side, description);
+  return problem ? [`第三人称绑定证据不足：${problem}`] : [];
+}
+
 /* 只在模型声称 equivalent 时收集本地反证；证据不足一律降为 uncertain。 */
 function equivalentReasons(pair, left, right) {
   const reasons = [];
@@ -484,6 +685,8 @@ function equivalentReasons(pair, left, right) {
   if (leftWorld !== rightWorld) reasons.push(`来源世界不同（${leftWorld} / ${rightWorld}）`);
   reasons.push(...incompleteReasons(pair.left, left, "左侧"));
   reasons.push(...incompleteReasons(pair.right, right, "右侧"));
+  reasons.push(...bindingReasons(pair.left, left));
+  reasons.push(...bindingReasons(pair.right, right));
   return reasons;
 }
 

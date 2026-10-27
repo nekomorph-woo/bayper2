@@ -46,6 +46,314 @@ function single(pairs, relation, left, right) {
   return parseRelationResponse(modelResponse([result(pairs[0].id, relation, left, right)]), pairs);
 }
 
+function directSource(text, { contextIncomplete = false, messages = [], content = text } = {}) {
+  return {
+    status: "ok",
+    speaker: "user",
+    holder: "user",
+    characterId: "user",
+    holderCharacterId: "user",
+    excerpt: text,
+    utterance: content,
+    sourceMessage: { id: "m2", conversationId: "c1", seq: 2, createdAt: 1, content },
+    messages: messages.map((contentItem, index) => ({
+      id: `m${index}`, conversationId: "c1", seq: index + 1, createdAt: index, content: contentItem,
+    })),
+    contextIncomplete,
+  };
+}
+
+function correctedSource(text, segments, content = text) {
+  return {
+    status: "ok",
+    format: "corrected_v2",
+    speaker: "user",
+    holder: "user",
+    holderCharacterId: "user",
+    excerpt: text,
+    contextIncomplete: false,
+    sourceMessage: { id: "m2", conversationId: "c1", seq: 2, createdAt: 1, content },
+    messages: [],
+    sourceCharacterId: "user",
+    sourceAnchorEntryId: "e1",
+    sourceAnchorVersion: 1,
+    sourceAnchorIdentityId: "i1",
+    direct: true,
+    via: "corrected_chat",
+    segments: segments.map((segment) => ({ messageId: "m2", ...segment })),
+  };
+}
+
+test("POL-SUBJ-BIND 本地绑定门：明确绑定通过，无绑定/竞争保持 uncertain", () => {
+  const cases = [
+    {
+      name: "same-text-binding",
+      leftText: "她是我妹妹小雅，她喜欢蓝色。",
+      rightText: "小雅喜欢蓝色。",
+      left: description({ subject: "小雅", subjectQuote: "她是我妹妹小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "retained-context-binding",
+      leftText: "她喜欢蓝色。",
+      leftSource: directSource("她喜欢蓝色。", { messages: ["她是我妹妹小雅。"] }),
+      rightText: "小雅喜欢蓝色。",
+      left: description({ subject: "小雅", subjectQuote: "她" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "same-text-binding-with-incomplete-context",
+      leftText: "她是我妹妹小雅，她喜欢蓝色。",
+      leftSource: directSource("她是我妹妹小雅，她喜欢蓝色。", { contextIncomplete: true }),
+      rightText: "小雅喜欢蓝色。",
+      left: description({ subject: "小雅", subjectQuote: "她是我妹妹小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "bare-name-context",
+      leftText: "她喜欢蓝色。",
+      leftSource: directSource("她喜欢蓝色。", { messages: ["我妹妹小雅最近很忙。"] }),
+      rightText: "小雅喜欢蓝色。",
+      left: description({ subject: "小雅", subjectQuote: "她" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+      expected: "uncertain",
+    },
+    {
+      name: "outer-speaker",
+      leftText: "用户说她喜欢蓝色。",
+      rightText: "用户喜欢蓝色。",
+      left: description(),
+      right: description(),
+      expected: "uncertain",
+    },
+    {
+      name: "standalone-pronoun",
+      leftText: "她喜欢蓝色。",
+      rightText: "用户喜欢蓝色。",
+      left: description({ subject: "小雅", subjectQuote: "她" }),
+      right: description(),
+      expected: "uncertain",
+    },
+    {
+      name: "subject-prefix-only",
+      leftText: "她是我妹妹小雅同事，她喜欢蓝色。",
+      rightText: "小雅喜欢蓝色。",
+      left: description({ subject: "小雅", subjectQuote: "她是我妹妹小雅同事" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+      expected: "uncertain",
+    },
+    {
+      name: "negated-binding",
+      leftText: "她不是我妹妹小雅，她喜欢蓝色。",
+      rightText: "小雅喜欢蓝色。",
+      left: description({ subject: "小雅", subjectQuote: "她不是我妹妹小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+      expected: "uncertain",
+    },
+    {
+      name: "hypothetical-binding",
+      leftText: "如果她是我妹妹小雅，她喜欢蓝色。",
+      rightText: "小雅喜欢蓝色。",
+      left: description({ subject: "小雅", subjectQuote: "她是我妹妹小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+      expected: "uncertain",
+    },
+    {
+      name: "question-fact",
+      leftText: "她是我妹妹小雅，她喜欢蓝色吗？",
+      rightText: "小雅喜欢蓝色。",
+      left: description({ subject: "小雅", subjectQuote: "她是我妹妹小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+      expected: "uncertain",
+    },
+    {
+      name: "competing-bindings",
+      leftText: "她是我妹妹小雅，他是我弟弟小明，她喜欢蓝色。",
+      rightText: "小雅喜欢蓝色。",
+      left: description({ subject: "小雅", subjectQuote: "她是我妹妹小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+      expected: "uncertain",
+    },
+    {
+      name: "quoted-pronoun",
+      leftText: "她是我妹妹小雅，她说：“她喜欢蓝色。”",
+      rightText: "小雅喜欢蓝色。",
+      left: description({ subject: "小雅", subjectQuote: "她是我妹妹小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+      expected: "uncertain",
+    },
+    {
+      name: "unrelated-other-word",
+      leftText: "我喜欢其他甜食",
+      rightText: "我爱别的甜食",
+      left: description({ subject: "用户", subjectQuote: "我" }),
+      right: description({ subject: "用户", subjectQuote: "我" }),
+    },
+    {
+      name: "unrelated-guitar-word",
+      leftText: "我喜欢弹吉他",
+      rightText: "我爱弹吉他",
+      left: description({ subject: "用户", subjectQuote: "我" }),
+      right: description({ subject: "用户", subjectQuote: "我" }),
+    },
+  ];
+  for (const [index, item] of cases.entries()) {
+    const parsedPair = pair(`b${index}`, item.leftText, item.rightText);
+    if (item.leftSource) parsedPair.left.sourceContext = item.leftSource;
+    const parsed = single([parsedPair], "equivalent", item.left, item.right);
+    assert.equal(parsed.results[0].effectiveRelation,
+      item.expected ?? "equivalent", item.name);
+  }
+  const blueRed = pair("blue-red", "我喜欢蓝色", "我喜欢红色");
+  const different = single([blueRed], "different",
+    description({ subject: "用户", subjectQuote: "我" }),
+    description({ subject: "用户", subjectQuote: "我" }));
+  assert.equal(different.results[0].effectiveRelation, "different");
+});
+
+test("POL-SUBJ-BIND 反例：问号、前置条件、来源条件与单引号不得逃逸", () => {
+  const cases = [
+    {
+      name: "binding-question",
+      leftText: "她是我妹妹小雅？她喜欢蓝色。",
+      left: description({ subject: "小雅", subjectQuote: "她是我妹妹小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "fact-question",
+      leftText: "她是我妹妹小雅，她喜欢蓝色？",
+      left: description({ subject: "小雅", subjectQuote: "她是我妹妹小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "preceding-condition",
+      leftText: "假如，她是我妹妹小雅，她喜欢蓝色。",
+      left: description({ subject: "小雅", subjectQuote: "她是我妹妹小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "named-speaker-report",
+      leftText: "小雅说她喜欢蓝色。",
+      rightText: "小雅喜欢蓝色。",
+      left: description({ subject: "小雅", subjectQuote: "小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "pseudo-name-context",
+      leftText: "她喜欢蓝色。",
+      leftSource: directSource("她喜欢蓝色。", { messages: ["我妹妹叫小雅。"] }),
+      left: description({ subject: "小雅", subjectQuote: "她" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "negated-call-context",
+      leftText: "她喜欢蓝色。",
+      leftSource: directSource("她喜欢蓝色。", { messages: ["我妹妹不叫小雅。"] }),
+      left: description({ subject: "小雅", subjectQuote: "她" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "hypothetical-call-context",
+      leftText: "她喜欢蓝色。",
+      leftSource: directSource("她喜欢蓝色。", { messages: ["假如我妹妹叫小雅。"] }),
+      left: description({ subject: "小雅", subjectQuote: "她" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "source-utterance-condition",
+      leftText: "她是我妹妹小雅，她喜欢蓝色。",
+      leftSource: directSource("她是我妹妹小雅，她喜欢蓝色。", {
+        content: "假如她是我妹妹小雅，她喜欢蓝色。",
+      }),
+      left: description({ subject: "小雅", subjectQuote: "她是我妹妹小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "single-quote-binding",
+      leftText: "‘你好，她是我妹妹小雅’，她喜欢蓝色。",
+      left: description({ subject: "小雅", subjectQuote: "她是我妹妹小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "corner-quote-binding",
+      leftText: "『你好，她是我妹妹小雅』，她喜欢蓝色。",
+      left: description({ subject: "小雅", subjectQuote: "她是我妹妹小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "context-condition",
+      leftText: "她喜欢蓝色。",
+      leftSource: directSource("她喜欢蓝色。", { messages: ["假如，她是我妹妹小雅。"] }),
+      left: description({ subject: "小雅", subjectQuote: "她" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "context-single-quote",
+      leftText: "她喜欢蓝色。",
+      leftSource: directSource("她喜欢蓝色。", { messages: ["‘你好，她是我妹妹小雅’。"] }),
+      left: description({ subject: "小雅", subjectQuote: "她" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "source-utterance-condition-comma",
+      leftText: "她是我妹妹小雅，她喜欢蓝色。",
+      leftSource: directSource("她是我妹妹小雅，她喜欢蓝色。", {
+        content: "假如，她是我妹妹小雅，她喜欢蓝色。",
+      }),
+      left: description({ subject: "小雅", subjectQuote: "她是我妹妹小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "ascii-single-quote-binding",
+      leftText: "'你好，她是我妹妹小雅'，她喜欢蓝色。",
+      left: description({ subject: "小雅", subjectQuote: "她是我妹妹小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "corrected-source-condition",
+      leftText: "她是我妹妹小雅，她喜欢蓝色。",
+      leftSource: correctedSource("她是我妹妹小雅，她喜欢蓝色。", [
+        { start: 3, end: 10, text: "她是我妹妹小雅" },
+        { start: 11, end: 17, text: "她喜欢蓝色。" },
+      ], "假如，她是我妹妹小雅，她喜欢蓝色。"),
+      left: description({ subject: "小雅", subjectQuote: "她是我妹妹小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+    },
+    {
+      name: "corrected-single-segment",
+      leftText: "她是我妹妹小雅，她喜欢蓝色。",
+      leftSource: correctedSource("她是我妹妹小雅，她喜欢蓝色。", [
+        { start: 0, end: 7, text: "她是我妹妹小雅" },
+        { start: 8, end: 14, text: "她喜欢蓝色。" },
+      ]),
+      left: description({ subject: "小雅", subjectQuote: "她是我妹妹小雅" }),
+      right: description({ subject: "小雅", subjectQuote: "小雅" }),
+      expected: "equivalent",
+    },
+    {
+      name: "corrected-cross-segment",
+      leftText: "她是我妹妹小，雅，她喜欢蓝色。",
+      leftSource: correctedSource("她是我妹妹小，雅，她喜欢蓝色。", [
+        { start: 0, end: 6, text: "她是我妹妹小" },
+        { start: 7, end: 15, text: "雅，她喜欢蓝色。" },
+      ]),
+      left: description({ subject: "妹妹小", subjectQuote: "她是我妹妹小" }),
+      rightText: "妹妹小喜欢蓝色。",
+      right: description({ subject: "妹妹小", subjectQuote: "妹妹小" }),
+    },
+  ];
+  const failures = [];
+  for (const [index, item] of cases.entries()) {
+    const parsedPair = pair(`n${index}`, item.leftText, item.rightText ?? "小雅喜欢蓝色。");
+    if (item.leftSource) parsedPair.left.sourceContext = item.leftSource;
+    const parsed = single([parsedPair], "equivalent", item.left, item.right);
+    const actual = parsed.results[0].effectiveRelation;
+    const expected = item.expected ?? "uncertain";
+    if (actual !== expected) failures.push(`${item.name}: ${actual} !== ${expected}`);
+  }
+  assert.deepEqual(failures, []);
+});
+
 test("生产协议只导出约定入口", () => {
   assert.deepEqual(Object.keys(protocol).sort(), [
     "POLICY_VERSION",

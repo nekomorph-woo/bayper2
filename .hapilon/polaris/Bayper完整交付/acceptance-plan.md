@@ -79,3 +79,10 @@ S08 最终验收入口的 Part B 已在该 Contract 文件内按 setup/driver/ob
 2026-10-27 来源身份 v2 有限能力已由 master 独立运行 **17 套件 163/163 PASS、0 skipped、exit 0** 受托接受；真实 SQLite/chat 核心，聊天模型 HTTP 为构造。实际运行范围与逐 Case 矩阵见 [evaluation.md](evaluation.md) 与 [evidence/source-identity-v2-acceptance-20261027/](evidence/source-identity-v2-acceptance-20261027/master-final-summary.md)。该接受不是 S03/Goal 完成；UI、真实模型/live 未在该批执行。迁移 v1 已另行按下段独立验收，不把来源身份验收当迁移完成。
 
 2026-10-27 master 另以 18 套件 **170/170 PASS、0 skipped、exit 0** 独立验收 POL-MIG-001～006 v1 迁移有限能力（master 受托，不是用户亲自确认）；真实依赖为真实 SQLite/构造旧库，无 GUI/API/真实模型，证据 [master-migration-YKY21Zj2](evidence/master-migration-YKY21Zj2/stdout.log)。缺失历史边不恢复、孤儿旧键兼容、非拆分身份保守检查；后续接入真实语义纠正/删除/共享生产入口，不宣称 S03/Goal 完成。
+
+## S03n 主体绑定门（2026-10-27 r70，已测有限接受）
+
+- 计划：[s03n-subject-binding-plan.md](s03n-subject-binding-plan.md)；过程证据：[s03n-binding-conflict-report-r1.md](evidence/s03m-b2/s03n-binding-conflict-report-r1.md)。
+- Runner：`node --test --test-concurrency=1 tests/acceptance/memory-relation-protocol.spec.cjs`（绑定表）；`tests/acceptance/memory-semantic-operations.spec.cjs`（001/002 真实传播、003/004 不传播）；`tests/acceptance/memory-source-relation.spec.cjs`（001/002 v2）。
+- master 最终五套 **248/248 pass、0 skip、tests.exit 0、before/after 一致**（`evidence/master-s03n-final-NSKiCUx4`），并查看 live L1/L2、holdout 后**受托接受 S03n 已测主体绑定反证防护与 source Case v2**（非用户确认）。live L2 8 REVIEW/3 FAIL（C02/C03/C07），DB falseMerge 0；L1 10/11（C07）；holdout 15/16，falseMerge 0、missedEquivalent 0，仅 15 分类 FAIL。
+- C02/C03 为模型 `memoryOperation: null` 并澄清、产品如实显示未改记忆，**不是绑定门错误**，不得改 Expected 抹掉。自然姓名/弱指代、C07/15、完整主体识别/S03 仍未覆盖；保守拦截不等于全面支持。版本 `0.1.199 → 0.1.200` 待 snap。

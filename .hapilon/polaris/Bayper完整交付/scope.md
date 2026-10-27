@@ -76,7 +76,15 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 
 工具组织REQ-41贯穿所有切片：现有SQLite/造型目录工具是已存在能力，新增项目工具仍须自包含审查，不将此横向约束标作一次性完成。
 
-## 当前阶段：S03m B2 R1/R2 已测参数与聊天证据契约改进获有限接受；语义总体不接受，VERSION `0.1.199` 待 snap（2026-10-27 r66）
+## 当前阶段：S03n 已测主体绑定反证防护与 source Case v2 获有限接受；不是完整主体识别/自然指代/S03（2026-10-27 r70）
+
+master 最终五套 **248/248 pass、0 skip、tests.exit 0、before/after 一致**（`evidence/master-s03n-final-NSKiCUx4`）；实际查看请求/响应/DB 前后后，**受托接受 S03n 已测主体绑定反证防护与 source Case v2**（不是用户亲自确认）。live L2 8 REVIEW / 3 FAIL（C02/C03/C07），DB falseMerge 0，44 chat + 8 relation + 1 models；L1 10/11（C07）；grounded holdout 15/16，falseMerge 0、missedEquivalent 0，仅 pair 15 分类 FAIL；11 目录均核无残留。**C02/C03 是模型 `memoryOperation: null` 并澄清、产品如实显示未改记忆，不是绑定门错误；不得改 Expected 抹掉。**
+
+- 生产约 256 行职责可理解，本批不再重构或加新门；版本 `0.1.199 → 0.1.200`（10 文件 11 处，不升级依赖），待 master snap。
+- **能力缺口保留**：自然姓名/弱指代支持、C07/15 分类、真实模型语义总体、完整 S03 与 `POL-SEMOP-001～008` 聚合均未完成；保守拦截不等于全面支持。
+- 下一步仅登记“操作识别与澄清反馈闭环”建议，本轮禁止实现/第三轮 prompt。正式方案 [s03n-subject-binding-plan.md](s03n-subject-binding-plan.md)；未改 Git/API/.env/prompt/skill、未用子代理。
+
+## 历史阶段：S03m B2 R1/R2 已测参数与聊天证据契约改进获有限接受；语义总体不接受（2026-10-27 r66）
 
 master 独立五套件 **242/242 pass、0 skip、exit 0、before/after 一致**，L1 **10/11**，L2 十项实际操作审查可接受；据此接受 R1/R2 **已测参数与聊天证据契约改进**（不是用户亲自确认、不是真实模型语义/人类体验，不接受完整 S03/Goal）。**语义总体验收明确不接受**：holdout 12 未绑定“她”的既有 false merge、C07/holdout 15 的 different vs Expected uncertain 均保留，不改 Expected/数据/评分。
 

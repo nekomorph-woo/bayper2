@@ -137,7 +137,7 @@ function assertCode(fn, code, label) {
   assert.throws(fn, (error) => error?.code === code, label);
 }
 
-test("POL-SOURCE-REL-001 真实聊天快照区分完整原话与片段，只发送语义字段", async (t) => {
+test("POL-SOURCE-REL-001（v2）真实聊天快照区分完整原话与片段，只发送语义字段", async (t) => {
   assert.equal(protocol.POLICY_VERSION, "s03l-grounded-relation-v1");
   assert.equal(SOURCE_POLICY_VERSION, "s03l-source-grounded-relation-v1");
   assert.deepEqual(Object.keys(protocol).sort(), [
@@ -196,11 +196,14 @@ test("POL-SOURCE-REL-001 真实聊天快照区分完整原话与片段，只发�
     requests: ctx.server.requests.length,
   }, before);
 
-  // 主体“姐姐”只存在于完整原话，不在记忆片段中；引用按完整原话接受。
+  // v2（2026-10-27 master 受托）：引用结构仍合法、模型 raw 可 equivalent；
+  // 但 excerpt 未给出明确身份绑定，合法引用不再等于跨角色操作授权。
   const subject = { subject: "姐姐", subjectQuote: "姐姐", scope: "current", time: null, timeQuote: null };
   const parsed = single(pairs, "equivalent", subject, { ...subject });
-  assert.equal(parsed.results[0].effectiveRelation, "equivalent");
-  assert.deepEqual(parsed.results[0].reasons, []);
+  assert.equal(parsed.results[0].relation, "equivalent");
+  assert.equal(parsed.results[0].effectiveRelation, "uncertain");
+  assert.ok(parsed.results[0].reasons.some((reason) =>
+    reason.includes("第三人称绑定证据不足")));
 
   // 来源快照上的 Expected/指令等额外字段只被忽略，不进入请求，也不改 system。
   const decorated = {
@@ -249,7 +252,7 @@ test("POL-SOURCE-REL-001 真实聊天快照区分完整原话与片段，只发�
   assert.equal(multilineSent.sourceContext.excerpt.includes("\n"), true);
 });
 
-test("POL-SOURCE-REL-002 引用按单条消息校验，跨消息拼接与不存在引用拒绝", async (t) => {
+test("POL-SOURCE-REL-002（v2）引用按单条消息校验，跨消息拼接与不存在引用拒绝", async (t) => {
   const ctx = await setup(t);
   const conversation = openConversation(ctx.store);
   const prior = "我姐姐叫小雨。";
@@ -262,16 +265,23 @@ test("POL-SOURCE-REL-002 引用按单条消息校验，跨消息拼接与不存�
   assert.equal(source.excerpt, "她喜欢蓝色");
 
   const pairs = [pair("pronoun", sourceSide("她喜欢蓝色", source), plainSide("小雨喜欢蓝色"))];
+  // v2：前文姓名引用结构合法、模型 raw 可 equivalent；`叫 X` 不是明确指代绑定，
+  // effective 必须降 uncertain，不能据此授权跨角色操作。
   const fromContext = { subject: "小雨", subjectQuote: "小雨", scope: "current", time: null, timeQuote: null };
   const accepted = single(pairs, "equivalent", fromContext, { ...fromContext });
-  assert.equal(accepted.results[0].effectiveRelation, "equivalent");
-  assert.deepEqual(accepted.results[0].reasons, []);
+  assert.equal(accepted.results[0].relation, "equivalent");
+  assert.equal(accepted.results[0].effectiveRelation, "uncertain");
+  assert.ok(accepted.results[0].reasons.some((reason) =>
+    reason.includes("第三人称绑定证据不足")));
 
-  // 结构上合法但语义可疑的指代仍会通过，说明引用存在不等于语义正确。
+  // 结构上合法但语义可疑的指代：v2 保留 raw equivalent，但 effective 必须 uncertain。
   const structuralOnly = single(pairs, "equivalent",
     { subject: "小雨", subjectQuote: "她", scope: "current", time: null, timeQuote: null },
     { ...fromContext });
-  assert.equal(structuralOnly.results[0].effectiveRelation, "equivalent");
+  assert.equal(structuralOnly.results[0].relation, "equivalent");
+  assert.equal(structuralOnly.results[0].effectiveRelation, "uncertain");
+  assert.ok(structuralOnly.results[0].reasons.some((reason) =>
+    reason.includes("第三人称绑定证据不足")));
 
   for (const quote of ["我姐姐叫小雨她喜欢蓝色", "小雨。她喜欢蓝色", "我妹妹"]) {
     assertCode(() => single(pairs, "equivalent",

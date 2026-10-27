@@ -719,10 +719,10 @@ master 独立两套件 **127/127 pass、0 skipped、exit 0**、before/after 相�
 - 两轮调优已用完，禁止第三轮 prompt/参数盲调；S03 未完成。未调 API、未读 `.env`、未改代码/测试/版本/Git/skill、未用子代理，停止等待 master 决策。
 - skill 复盘：留出组捕获了主 11 未暴露的 false merge，说明“主集+留出+原始结果保留”的证据分层有效；本轮未发现需修改 skill 的实际流程缺陷，不机械修订。
 
-### 13.22 第三人称绑定门方案（2026-10-27 r66，待 master 审核，未批准未实施）
+### 13.22 第三人称绑定门方案（2026-10-27 r66，待 master 审核，未批准未实施；已由 §13.24 修订）
 
 - 触发：holdout 12 中模型把外层说话者“用户”当作内层“她”的主体，现有 `subjectQuote` 只验字面子串，`equivalentReasons` 只比较 subject/scope/time，导致无绑定证据仍 effective equivalent。
-- 方案短文 [third-person-binding-gate-plan.md](evidence/s03m-b2/third-person-binding-gate-plan.md)：评估现有字段能否表达绑定、方案 A（复用 subjectQuote 要求明确身份原话 + 唯一窗口 + 排除否定/假设/截断，生产约 60～80 行、测试 100～160 行）、方案 B（纯本地保守，误伤正例）、方案 C（新增 subjectBinding 字段，规模更大）；附正例 P1～P4、负例 N1～N9 与数据库 Oracle。
+- 方案短文 [third-person-binding-gate-plan.md](evidence/s03m-b2/third-person-binding-gate-plan.md)：评估现有字段能否表达绑定、方案 A（复用 subjectQuote 要求明确身份原话 + 唯一窗口 + 排除否定/假设/截断，生产约 60～80 行、测试 100～160 行）、方案 B（纯本地保守，误伤正例）、方案 C（新增 subjectBinding 字段，规模更大）；附正例 P1～P4、负例 N1～N9 与数据库 Oracle。**该旧 P1 仅为跨消息弱证据，不称已支持。**
 - 明确不采用：引号内一律豁免、前文出现人物词即算绑定、全量禁第三人称/第三方事实、硬编码样例、改 Expected/评分、关闭关联。
 - 仅文档与方案，未改代码/测试/Expected/dataset/评分，未调第三轮 prompt/API/.env/skill/子代理；待 master 决定是否实施及选 A 还是 C。
 
@@ -731,3 +731,30 @@ master 独立两套件 **127/127 pass、0 skipped、exit 0**、before/after 相�
 - master 审查接受 R1/R2 **已测参数与聊天证据契约改进**：独立五套件 **242/242 pass、0 skip、exit 0、before/after 一致**，L1 **10/11**，L2 十项实际操作审查可接受；**语义总体验收明确不接受**，holdout 12 既有安全缺口与 C07/holdout 15 分类 FAIL 保留，不改 Expected/数据/评分。
 - 版本 `0.1.198 → 0.1.199`，严格既有 10 文件 11 处字面量，不升级依赖、不重生成 lock、未 Git。工作区生产/测试/工具保持 master-r2 证据 SHA，本轮未再改。
 - 绑定门方案见 §13.22 与 `evidence/s03m-b2/third-person-binding-gate-plan.md`，待 master 审核，未批准未实施。S03 与真实模型语义仍 NOT_COVERED；未调 API/.env/skill/子代理，未用子代理。
+
+### 13.24 S03n 主体绑定门正式待审方案（2026-10-27 r67，待 master 审查）
+
+- master 已 snap `9785c7e`（VERSION `0.1.199`，未推送）；方案 A **未批准实现**。正式计划 [s03n-subject-binding-plan.md](s03n-subject-binding-plan.md)，旧 evidence 方案原件保留但未批准。
+- 修正：旧 P1“我妹妹叫小雅”+ 后文“她喜欢蓝色”为跨消息弱证据，**不称已支持**（POL-SUBJ-BIND-004 期望 uncertain）；新正例 POL-SUBJ-BIND-001 使用同一 text `她是我妹妹小雅，她喜欢蓝色。`，left subject=`小雅`、subjectQuote=`她是我妹妹小雅`。
+- 判据：绑定分句必须位于分句起点（她/他 + 是/叫 + 含 subject 的指称词），前置且紧邻事实分句；整段恰好两次同一代词；排除否定/假设/疑问、引号内、并列指称、跨消息/截断；不做人物词检测，不称唯一窗口或语义证明。附稳定 Case ID POL-SUBJ-BIND-001～017 的 Given/When/Expected/Oracle/Boundary。
+- 规模：生产约 60～80 行；超过 100 行时收缩支持面并列出跨消息/复数/引号/同名等不支持项，不压行；测试预计 100～160 行。实施前需另行批准 prompt 指令；本轮不调 prompt/协议，未改代码/测试/版本/Git/API/.env/skill，未用子代理。
+
+### 13.25 S03n 绑定门实施与冲突（2026-10-27 r68，待 master 评审）
+
+- 已实施明确身份绑定门（同 text / 最近保留用户前文）；同一指代可重复；条件、否定、假设、问句、引号、ASCII `'`、跨 segment、多竞争、裸姓名均 uncertain。未批准 `namedAntecedent` 姓名/`叫 X` fallback 已移除。
+- 修复：分句 trailing `？`、完整句范围前置条件、direct utterance 条件/引号、corrected_v2 逐 segment 条件与单段绑定；001/002 真实 chat 正例传播，004 relation HTTP 1 次、A 阶段 1、B 不变/无 edge。
+- 五套：37/37、98/98、10/10、99/99、source-relation 2/4（exit 1、FAIL 2、ERROR 0）；`POL-SOURCE-REL-001/002` raw 可 equivalent 但 effective uncertain，保留旧 Expected FAIL，待 master 决定迁移/更严格命名规则/已知限制。
+- 生产新增约 256 行、测试 +438，超早期估计；冲突、位置与裁剪选项见 `evidence/s03m-b2/s03n-binding-conflict-report-r1.md`。未 live、未改 prompt/协议/旧 Expected/版本/Git/API/.env/skill。
+
+### 13.26 POL-SOURCE-REL-001/002 迁移 v2（2026-10-27 r69，master 受托，非用户确认）
+
+- master 证据 `evidence/master-s03n-review-ssLemyz2`：**248 tests / 246 pass / 2 fail / 0 skip、tests.exit 1、before/after 相同**，失败仅 001/002，批准迁移 v2。
+- v2：引用结构合法与 raw equivalent 保留；新增 effective **uncertain** 与具体绑定不足理由；合法引用不再等于跨角色操作授权。旧 FAIL/v1 证据不覆盖。
+- 仅改 `tests/acceptance/memory-source-relation.spec.cjs` 两 Case 必要断言/版本说明，保留引用字段、上下文完整性、错误引用拒绝、存储零写等原断言；v2 独立 `attempt-20261027-221802-s03n-source-relation-v2-final` **4/4、exit 0、SHA 一致**。
+- 未改生产/其他测试/工具；自然姓名/弱指代能力与真实模型验证仍未完成，S03 缺口保留。master 将复跑五套与真实 holdout。
+
+### 13.27 S03n 最终有限接受与 0.1.200 收口（2026-10-27 r70，待 master snap）
+
+- master 最终五套 `evidence/master-s03n-final-NSKiCUx4`：**248/248 pass、0 skip、tests.exit 0、before/after 一致**；live L2 8 REVIEW/3 FAIL（C02/C03/C07），44 chat + 8 relation + 1 models，DB falseMerge 0，11 目录无残留；live L1 `master-s03n-live-brz61rpr` 10/11（C07）；holdout 15/16，falseMerge 0、missedEquivalent 0，仅 15 分类 FAIL。
+- 据此**受托接受 S03n 已测主体绑定反证防护与 source Case v2**（非用户确认），不是完整主体识别/自然指代/语义 S03。C02/C03 为模型 `memoryOperation:null` 并澄清、产品未改记忆，不是绑定门错误，不得改 Expected 抹掉；C07/15 分类 FAIL 保留。
+- 版本 `0.1.199 → 0.1.200`（10 文件 11 处），不升级依赖、未 Git。生产约 256 行职责可理解，本批不再重构/加新门。下一步仅登记操作识别与澄清反馈闭环，本轮不实现/第三轮 prompt。
