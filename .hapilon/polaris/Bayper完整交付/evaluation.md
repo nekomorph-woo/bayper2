@@ -354,3 +354,11 @@ Codex独立窗口回归18/18通过（s03b-codex-window-r2.log）：含8项真实
 ## 凛困倦候选（2026-10-28）
 
 按[s07-drowsy-plan.md](s07-drowsy-plan.md)：POL-DROWSY-ASSET-001/002导出与独立播放器范围PASS；003静态比较完成，跨动作连续播放、正式触发/中断NOT_COVERED。源/导出/提示词和master证据详[制作记录](../../../assets/characters/rin/source/drowsy-pixel-notes.md)。不代表S07或正式资源全库通过。
+
+## S03p 时间澄清后端阶段接受（2026-10-28，Codex 受托）
+
+master基于实际diff、真实chat/SQLite业务Case与独立执行结果，有限接受 preference 模糊时间→“就今天”的后端承接、双来源有效读、更正删除防回流与重试生命周期；不接受完整S03或整个产品。生产630行增量按必要职责审查保留，未预先报告超规模的执行偏差保留，后续不机械照搬。
+
+证据：`evidence/master-s03p-core-JfUqOFGB` 五套353/353、0skip、exit0、前后SHA一致；补齐后 `evidence/master-s03p-coverage-c10d1Wal` 两套242/242、0skip、exit0、前后SHA一致，其他三套生产未变。模型为构造HTTP，非真实模型体验。GUI Runner仅静态检查，POL-CHATMEM-CORRECT-TIME-GUI-001仍NOT_COVERED；等待睡眠任务释放GUI后继续。
+
+本阶段按snap保存实现、Case、Runner及记录；快照不代表GUI或父级通过，不推送。

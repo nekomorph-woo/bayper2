@@ -3887,3 +3887,438 @@ test("POL-CHATMEM-CLARIFY-002g2 显式null第三方内容零写", async (t) => {
   assert.equal(temporaryEntryOf(ctx.store, "a"), null);
   assert.equal(countRows(ctx.store.dbPath, "memory_entries"), entriesBefore);
 });
+
+/* S03p correct 时间澄清承接：真实 chat/SQLite，模型 HTTP 构造。
+   基线先在旧生产执行，验证失败后再实现；不改旧 Case/Expected。 */
+const S03P_MEM_TABLES = [
+  "memory_entries",
+  "memory_fact_identities",
+  "memory_fact_relation_edges",
+  "memory_temporary_links",
+  "memory_temporary_entry_links",
+  "memory_derivations",
+  "memory_source_controls",
+  "memory_context_versions",
+];
+
+function s03pMemoryRows(store) {
+  return withDatabase(store.dbPath, (db) => Object.fromEntries(
+    S03P_MEM_TABLES.map((table) => [
+      table,
+      db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all(),
+    ]),
+  ));
+}
+
+async function askS03pTime(ctx, conversation, {
+  text = "不是咖啡，我最近想喝茶，请帮我改过来。",
+  requestId,
+  mode = "null",
+  reply = "已经改好了。",
+} = {}) {
+  ctx.server.enqueue(({ body, res }) => sendEnvelope(res, {
+    reply,
+    memoryCandidates: [],
+    memoryOperation: mode === "null"
+      ? null
+      : {
+        action: "correct",
+        target: targetFromRequest(body, "咖啡"),
+        excerpt: "我最近想喝茶",
+        evidence: "请帮我改过来",
+      },
+  }));
+  return ctx.store.chat.sendMessage({
+    characterId: "a",
+    conversationId: conversation.id,
+    text,
+    requestId: requestId ?? crypto.randomUUID(),
+  });
+}
+
+async function answerS03pTime(ctx, conversation, text, requestId) {
+  return ctx.store.chat.sendMessage({
+    characterId: "a",
+    conversationId: conversation.id,
+    text,
+    requestId,
+  });
+}
+
+async function seedS03pCoffee(ctx, conversation) {
+  return seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。",
+    factKey: "pref.coffee",
+  });
+}
+
+test("POL-CHATMEM-CORRECT-TIME-001 明确偏好+最近先本地提问，不写记忆", async (t) => {
+  for (const mode of ["operation", "null"]) {
+    await t.test(mode, async (t2) => {
+      const ctx = await setupContext(t2, `CORRECT-TIME-001-${mode}`);
+      const conversation = openConversation(ctx.store);
+      const seeded = await seedS03pCoffee(ctx, conversation);
+      const memBefore = s03pMemoryRows(ctx.store);
+      const chatBefore = chatRequests(ctx).length;
+
+      const result = await askS03pTime(ctx, conversation, { mode });
+
+      assert.equal(result.status, "completed");
+      assert.match(result.reply, /时间范围我还不确定/u);
+      assert.match(result.reply, /就今天/u);
+      assert.equal(result.reply.includes("已经改好了"), false, "不得透传模型成功文案");
+      assert.equal(result.memoryApplied, 0);
+      assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+      assert.deepEqual(s03pMemoryRows(ctx.store), memBefore, "澄清不得改动记忆业务表");
+      assert.equal(chatRequests(ctx).length, chatBefore + 1);
+      assert.equal(relationRequests(ctx).length, 0);
+      assert.equal(entryOf(ctx.store, "a", "pref.coffee").version, seeded.version);
+      assert.equal(
+        conversationMessages(ctx, conversation.id).filter((message) => message.role === "assistant").at(-1).content,
+        result.reply,
+      );
+    });
+  }
+});
+
+test("POL-CHATMEM-CORRECT-TIME-004 时间式无效回答本地未操作，普通问题不被误拒", async (t) => {
+  for (const answer of ["就今天？", "“就今天”", "明天吧", "长期吧"]) {
+    await t.test(`invalid ${answer}`, async (t2) => {
+      const ctx = await setupContext(t2, `CORRECT-TIME-004-invalid-${answer}`);
+      const conversation = openConversation(ctx.store);
+      const seeded = await seedS03pCoffee(ctx, conversation);
+      await askS03pTime(ctx, conversation, { requestId: `s03p-004-q-${answer}` });
+      const memBefore = s03pMemoryRows(ctx.store);
+      const chatBefore = chatRequests(ctx).length;
+
+      const result = await answerS03pTime(ctx, conversation, answer, `s03p-004-a-${answer}`);
+
+      assert.equal(result.status, "completed");
+      assert.match(result.reply, /没有改动任何记忆/u);
+      assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+      assert.deepEqual(s03pMemoryRows(ctx.store), memBefore);
+      assert.equal(chatRequests(ctx).length, chatBefore, "时间式无效回答不得调用聊天模型");
+      assert.equal(relationRequests(ctx).length, 0);
+      assert.equal(entryOf(ctx.store, "a", "pref.coffee").version, seeded.version);
+
+      // pending 已清除：下一次“就今天”按普通聊天处理，不执行旧 correct。
+      ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+        reply: "我记下了。", memoryCandidates: [], memoryOperation: null,
+      }));
+      const followUp = await answerS03pTime(ctx, conversation, "就今天", `s03p-004-f-${answer}`);
+      assert.equal(followUp.status, "completed");
+      assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+      assert.equal(entryOf(ctx.store, "a", "pref.coffee").version, seeded.version);
+    });
+  }
+
+  for (const answer of ["如果是今天呢？", "就今天，而且我要加糖"]) {
+    await t.test(`ordinary ${answer}`, async (t2) => {
+      const ctx = await setupContext(t2, `CORRECT-TIME-004-ordinary-${answer}`);
+      const conversation = openConversation(ctx.store);
+      const seeded = await seedS03pCoffee(ctx, conversation);
+      await askS03pTime(ctx, conversation, { requestId: `s03p-004o-q-${answer}` });
+      const memBefore = s03pMemoryRows(ctx.store);
+      const chatBefore = chatRequests(ctx).length;
+      ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+        reply: "我记下了。", memoryCandidates: [], memoryOperation: null,
+      }));
+
+      const result = await answerS03pTime(ctx, conversation, answer, `s03p-004o-a-${answer}`);
+
+      assert.equal(result.status, "completed");
+      assert.equal(chatRequests(ctx).length, chatBefore + 1, "普通问题应走正常聊天");
+      assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+      assert.deepEqual(s03pMemoryRows(ctx.store), memBefore);
+      assert.equal(relationRequests(ctx).length, 0);
+      assert.equal(entryOf(ctx.store, "a", "pref.coffee").version, seeded.version);
+    });
+  }
+});
+
+test("POL-CHATMEM-CORRECT-TIME-004b 普通换话题允许 grounded 新事实提炼", async (t) => {
+  const ctx = await setupContext(t, "CORRECT-TIME-004b-ordinary-extraction");
+  const conversation = openConversation(ctx.store);
+  const seeded = await seedS03pCoffee(ctx, conversation);
+  await askS03pTime(ctx, conversation, { requestId: "s03p-004b-q" });
+  const chatBefore = chatRequests(ctx).length;
+  ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+    reply: "杭州很好。",
+    memoryCandidates: [{
+      factKey: "detail.city",
+      body: "用户住在杭州",
+      kind: "detail",
+      trust: "stated",
+      evidence: "我住在杭州",
+    }],
+    memoryOperation: null,
+  }));
+
+  const result = await answerS03pTime(
+    ctx, conversation, "今天天气不错，我住在杭州。", "s03p-004b-a",
+  );
+
+  assert.equal(result.status, "completed");
+  assert.equal(result.memoryApplied, 1, "普通聊天的新事实应正常提炼");
+  assert.ok(entryOf(ctx.store, "a", "detail.city"));
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+  assert.equal(relationRequests(ctx).length, 0);
+  assert.equal(chatRequests(ctx).length, chatBefore + 1);
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee").version, seeded.version, "旧 correct 不得发生");
+});
+
+test("POL-CHATMEM-CORRECT-TIME-005 原内容不完整/模糊/非偏好不建 pending", async (t) => {
+  const cases = [
+    {
+      name: "two-anchors",
+      seed: { factKey: "pref.coffee", text: "我平时喝咖啡一定要加糖。" },
+      text: "不是咖啡，我最近想喝茶，我最近想喝咖啡，请帮我改过来。",
+      excerpt: "我最近想喝茶",
+      needle: "咖啡",
+      kind: "preference",
+    },
+    {
+      name: "uncertain",
+      seed: { factKey: "pref.coffee", text: "我平时喝咖啡一定要加糖。" },
+      text: "不是咖啡，我最近可能想喝茶，请帮我改过来。",
+      excerpt: "我最近可能想喝茶",
+      needle: "咖啡",
+      kind: "preference",
+    },
+    {
+      name: "future",
+      seed: { factKey: "pref.coffee", text: "我平时喝咖啡一定要加糖。" },
+      text: "不是咖啡，我明天想喝茶，请帮我改过来。",
+      excerpt: "我明天想喝茶",
+      needle: "咖啡",
+      kind: "preference",
+    },
+    {
+      name: "experience",
+      seed: { factKey: "exp.meteor", text: "我们昨天去看流星了。", kind: "experience" },
+      text: "不是流星，我最近去看烟花了，请帮我改过来。",
+      excerpt: "我最近去看烟花了",
+      needle: "流星",
+      kind: "experience",
+    },
+  ];
+  for (const item of cases) {
+    await t.test(item.name, async (t2) => {
+      const ctx = await setupContext(t2, `CORRECT-TIME-005-${item.name}`);
+      const conversation = openConversation(ctx.store);
+      await seedChatFact(ctx, conversation, {
+        text: item.seed.text, factKey: item.seed.factKey, kind: item.seed.kind,
+      });
+      ctx.server.enqueue(({ body, res }) => sendEnvelope(res, {
+        reply: "已经改好了。",
+        memoryCandidates: [],
+        memoryOperation: {
+          action: "correct",
+          target: targetFromRequest(body, item.needle),
+          excerpt: item.excerpt,
+          evidence: "请帮我改过来",
+        },
+      }));
+      const question = await ctx.store.chat.sendMessage({
+        characterId: "a",
+        conversationId: conversation.id,
+        text: item.text,
+        requestId: `s03p-005-q-${item.name}`,
+      });
+      assert.equal(question.status, "completed");
+      assert.equal(question.reply.includes("就今天"), false, "不完整/模糊/非偏好不得建时间 pending");
+      assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+      const memBefore = s03pMemoryRows(ctx.store);
+      ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+        reply: "我记下了。", memoryCandidates: [], memoryOperation: null,
+      }));
+      const answer = await answerS03pTime(ctx, conversation, "就今天", `s03p-005-a-${item.name}`);
+      assert.equal(answer.status, "completed");
+      assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+      assert.deepEqual(s03pMemoryRows(ctx.store), memBefore);
+    });
+  }
+});
+
+test("POL-CHATMEM-CORRECT-TIME-006 TTL 与跨日本地过期", async (t) => {
+  for (const [name, advanceMs] of [["ttl", 11 * 60 * 1000], ["cross-day", 24 * 60 * 60 * 1000]]) {
+    await t.test(name, async (t2) => {
+      const ctx = await setupContext(t2, `CORRECT-TIME-006-${name}`);
+      const conversation = openConversation(ctx.store);
+      await seedS03pCoffee(ctx, conversation);
+      await askS03pTime(ctx, conversation, { requestId: `s03p-006-q-${name}` });
+      const memBefore = s03pMemoryRows(ctx.store);
+      const chatBefore = chatRequests(ctx).length;
+      ctx.advance(advanceMs);
+
+      const result = await answerS03pTime(ctx, conversation, "就今天", `s03p-006-a-${name}`);
+
+      assert.equal(result.status, "completed");
+      assert.match(result.reply, /过期/u);
+      assert.match(result.reply, /没有改动/u);
+      assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+      assert.deepEqual(s03pMemoryRows(ctx.store), memBefore);
+      assert.equal(chatRequests(ctx).length, chatBefore);
+      assert.equal(relationRequests(ctx).length, 0);
+    });
+  }
+});
+
+test("POL-CHATMEM-CORRECT-TIME-007 公开更正/删除目标后回答失效", async (t) => {
+  for (const action of ["correct", "delete"]) {
+    await t.test(action, async (t2) => {
+      const ctx = await setupContext(t2, `CORRECT-TIME-007-${action}`);
+      const conversation = openConversation(ctx.store);
+      await seedS03pCoffee(ctx, conversation);
+      await askS03pTime(ctx, conversation, { requestId: `s03p-007-q-${action}` });
+      const target = entryOf(ctx.store, "a", "pref.coffee");
+      if (action === "correct") {
+        ctx.store.memory.correct({
+          characterId: "a",
+          entryId: target.id,
+          expectedVersion: target.version,
+          body: "用户平时只喝红茶",
+        });
+      } else {
+        ctx.store.memory.forget({
+          characterId: "a",
+          entryId: target.id,
+          expectedVersion: target.version,
+          scope: "all",
+        });
+      }
+      const chatBefore = chatRequests(ctx).length;
+
+      const result = await answerS03pTime(ctx, conversation, "就今天", `s03p-007-a-${action}`);
+
+      assert.equal(result.status, "completed");
+      assert.match(result.reply, /已经变化|没有改动/u);
+      assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+      assert.equal(chatRequests(ctx).length, chatBefore);
+      assert.equal(relationRequests(ctx).length, 0);
+      if (action === "correct") {
+        assert.equal(entryOf(ctx.store, "a", "pref.coffee").body, "用户平时只喝红茶");
+      } else {
+        assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+      }
+    });
+  }
+});
+
+test("POL-CHATMEM-CORRECT-TIME-010 事务失败保留授权标记并同 request 重试", async (t) => {
+  const ctx = await setupContext(t, "CORRECT-TIME-010-retry");
+  const conversation = openConversation(ctx.store);
+  await seedS03pCoffee(ctx, conversation);
+  await askS03pTime(ctx, conversation, { requestId: "s03p-010-q" });
+  withDatabase(ctx.store.dbPath, (db) => db.exec(`
+    CREATE TRIGGER fail_s03p_temp BEFORE INSERT ON memory_entries
+    WHEN NEW.source_id LIKE 'chat-current:%'
+    BEGIN SELECT RAISE(ABORT, 'fixture s03p failure'); END;
+  `));
+  const first = await answerS03pTime(ctx, conversation, "就今天", "s03p-010-a");
+
+  assert.equal(first.status, "failed");
+  const failed = requestRowFull(ctx.store.dbPath, "s03p-010-a");
+  assert.equal(failed.error_code, "CORRECT_TIME_SELECTION_FAILED");
+  assert.equal(JSON.parse(failed.operation_proof).kind, "correct-time-selection");
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null, "失败必须零写");
+
+  withDatabase(ctx.store.dbPath, (db) => db.exec("DROP TRIGGER fail_s03p_temp"));
+  const usersBefore = conversationMessages(ctx, conversation.id)
+    .filter((message) => message.role === "user").length;
+  const retry = await ctx.store.chat.retryRequest({
+    characterId: "a", requestId: "s03p-010-a",
+  });
+  assert.equal(retry.status, "completed");
+  assert.ok(temporaryEntryOf(ctx.store, "a"), "重试应只执行一次并生成临时");
+  assert.equal(
+    conversationMessages(ctx, conversation.id).filter((message) => message.role === "user").length,
+    usersBefore,
+    "重试不得追加用户消息",
+  );
+  const retried = requestRowFull(ctx.store.dbPath, "s03p-010-a");
+  assert.equal(retried.status, "completed");
+  assert.equal(JSON.parse(retried.operation_proof).kind, "correct-time-selection",
+    "成功后仍须保留回答的授权/审计标记");
+});
+
+test("POL-CHATMEM-CORRECT-TIME-010b 目标变化/重启后重试返回 expired", async (t) => {
+  for (const change of ["target", "restart"]) {
+    await t.test(change, async (t2) => {
+      const ctx = await setupContext(t2, `CORRECT-TIME-010b-${change}`);
+      const conversation = openConversation(ctx.store);
+      await seedS03pCoffee(ctx, conversation);
+      await askS03pTime(ctx, conversation, { requestId: `s03p-010b-q-${change}` });
+      withDatabase(ctx.store.dbPath, (db) => db.exec(`
+        CREATE TRIGGER fail_s03p_temp BEFORE INSERT ON memory_entries
+        WHEN NEW.source_id LIKE 'chat-current:%'
+        BEGIN SELECT RAISE(ABORT, 'fixture s03p failure'); END;
+      `));
+      const first = await answerS03pTime(ctx, conversation, "就今天", `s03p-010b-a-${change}`);
+      assert.equal(first.status, "failed");
+      withDatabase(ctx.store.dbPath, (db) => db.exec("DROP TRIGGER fail_s03p_temp"));
+      if (change === "target") {
+        const target = entryOf(ctx.store, "a", "pref.coffee");
+        ctx.store.memory.correct({
+          characterId: "a",
+          entryId: target.id,
+          expectedVersion: target.version,
+          body: "用户平时只喝红茶",
+        });
+      } else {
+        ctx.reopen();
+      }
+      const retry = await ctx.store.chat.retryRequest({
+        characterId: "a", requestId: `s03p-010b-a-${change}`,
+      });
+      assert.equal(retry.status, "stale");
+      assert.equal(retry.errorCode, "CORRECT_TIME_SELECTION_EXPIRED");
+      assert.equal(temporaryEntryOf(ctx.store, "a"), null, "不得重放旧授权");
+    });
+  }
+});
+
+test("POL-CHATMEM-CORRECT-TIME-010c 失败后跨本地日同 request retry 仍 expired", async (t) => {
+  const ctx = await setupContext(t, "CORRECT-TIME-010c-cross-day-retry");
+  const conversation = openConversation(ctx.store);
+  const seeded = await seedS03pCoffee(ctx, conversation);
+  await askS03pTime(ctx, conversation, { requestId: "s03p-010c-q" });
+  withDatabase(ctx.store.dbPath, (db) => db.exec(`
+    CREATE TRIGGER fail_s03p_temp BEFORE INSERT ON memory_entries
+    WHEN NEW.source_id LIKE 'chat-current:%'
+    BEGIN SELECT RAISE(ABORT, 'fixture s03p failure'); END;
+  `));
+  const first = await answerS03pTime(ctx, conversation, "就今天", "s03p-010c-a");
+  assert.equal(first.status, "failed");
+  withDatabase(ctx.store.dbPath, (db) => db.exec("DROP TRIGGER fail_s03p_temp"));
+  const usersBefore = conversationMessages(ctx, conversation.id)
+    .filter((message) => message.role === "user").length;
+  const assistantsBefore = conversationMessages(ctx, conversation.id)
+    .filter((message) => message.role === "assistant").length;
+
+  ctx.advance(24 * 60 * 60 * 1000);
+  const retry = await ctx.store.chat.retryRequest({
+    characterId: "a", requestId: "s03p-010c-a",
+  });
+
+  assert.equal(retry.status, "stale");
+  assert.equal(retry.errorCode, "CORRECT_TIME_SELECTION_EXPIRED");
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null, "跨日重试不得重放旧授权");
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee").body, seeded.body);
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee").version, seeded.version);
+  assert.equal(
+    conversationMessages(ctx, conversation.id).filter((message) => message.role === "user").length,
+    usersBefore,
+    "跨日重试不得追加用户消息",
+  );
+  assert.equal(
+    conversationMessages(ctx, conversation.id)
+      .filter((message) => message.role === "assistant").length,
+    assistantsBefore,
+    "跨日重试不得追加回答",
+  );
+  const row = requestRowFull(ctx.store.dbPath, "s03p-010c-a");
+  assert.equal(row.status, "stale");
+  assert.equal(row.error_code, "CORRECT_TIME_SELECTION_EXPIRED");
+  assert.equal(row.operation_proof, null, "失效重试后清除授权标记");
+});

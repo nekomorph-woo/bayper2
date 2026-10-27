@@ -128,7 +128,8 @@
 
     function entryMeta(entry) {
       const kind = KIND_LABELS[entry.kind] ?? entry.kind;
-      return `${kind} · ${sourceLabel(entry)}${entry.sharingRestricted ? " · 已禁止分享" : ""}`;
+      return `${kind} · ${sourceLabel(entry)}${entry.sharingRestricted ? " · 已禁止分享" : ""}` +
+        `${entry.effective === false ? " · 已失效（来源已变化）" : ""}`;
     }
 
     function relayTargets() {

@@ -14,6 +14,8 @@ const {
   detectOperationIntent,
   planOperation,
   parseForgetTargetAnswer,
+  parseCorrectTimeAnswer,
+  endOfLocalDay,
   applyChatOperation,
   operationReply,
   relayFailureReply,
@@ -21,6 +23,7 @@ const {
   REPLIES,
 } = require("./chat-memory-operations.cjs");
 const { detectSharingSetting } = require("./chat-sharing-setting.cjs");
+const { locateCorrectionSegments } = require("./memory-correction-evidence.cjs");
 const {
   createChatMemoryVerification,
   provenDerivedMembers,
@@ -49,8 +52,12 @@ const NEGATION_CHARS = new Set(["不", "没", "无", "别", "未", "非", "勿"]
 const LOCAL_SHARING_SETTING_ERROR = "LOCAL_SHARING_SETTING_FAILED";
 const FORGET_SELECTION_FAILED = "FORGET_SELECTION_FAILED";
 const FORGET_SELECTION_EXPIRED = "FORGET_SELECTION_EXPIRED";
+const CORRECT_TIME_SELECTION_FAILED = "CORRECT_TIME_SELECTION_FAILED";
+const CORRECT_TIME_SELECTION_EXPIRED = "CORRECT_TIME_SELECTION_EXPIRED";
 const FORGET_CLARIFICATION_TTL_MS = 10 * 60 * 1000;
 const FORGET_SELECTION_MARKER = JSON.stringify({ kind: "forget-selection", version: 1 });
+const CORRECT_TIME_SELECTION_MARKER =
+  JSON.stringify({ kind: "correct-time-selection", version: 1 });
 const RETRYABLE_ERRORS = new Set([
   "TIMEOUT",
   "NETWORK_ERROR",
@@ -59,6 +66,7 @@ const RETRYABLE_ERRORS = new Set([
   "INTERRUPTED",
   LOCAL_SHARING_SETTING_ERROR,
   FORGET_SELECTION_FAILED,
+  CORRECT_TIME_SELECTION_FAILED,
 ]);
 /* 操作目标在模型响应期间被本地修改或删除时，整笔请求转为 stale，
    不展示迟到回复，也不执行旧目标。 */
@@ -132,6 +140,8 @@ function createChatService({
   const inFlight = new Set();
   const forgetClarifications = new Map();
   const forgetSelections = new Map();
+  const correctTimeClarifications = new Map();
+  const correctTimeSelections = new Map();
   let disposed = false;
   const verification = memorySourceContext
     ? createChatMemoryVerification({
@@ -190,9 +200,13 @@ function createChatService({
     return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
   }
 
-  function forgetClarificationAlive(pending, at) {
+  function clarificationAlive(pending, at) {
     return at - pending.createdAt <= FORGET_CLARIFICATION_TTL_MS &&
       localDayOf(at) === localDayOf(pending.createdAt);
+  }
+
+  function forgetClarificationAlive(pending, at) {
+    return clarificationAlive(pending, at);
   }
 
   function peekForgetClarification(characterId, conversationId, at) {
@@ -237,9 +251,12 @@ function createChatService({
   }
 
   /* 失败的选择回合在用户开启新回合时转为 stale；不能仅清标记后让 retry
-     退回普通聊天，也不能打断仍在途的请求。 */
-  function invalidateFailedForgetSelections(characterId, conversationId, at) {
-    for (const [requestId, snapshot] of [...forgetSelections]) {
+     退回普通聊天，也不能打断仍在途的请求。两个选择只共用这份清理，业务
+     重验和执行仍各自独立。 */
+  function invalidateFailedSelections({
+    selections, errorCode, characterId, conversationId, at,
+  }) {
+    for (const [requestId, snapshot] of [...selections]) {
       if (snapshot.characterId !== characterId || snapshot.conversationId !== conversationId) {
         continue;
       }
@@ -248,23 +265,50 @@ function createChatService({
         store.updateRequest(requestId, {
           status: "stale",
           completedAt: at,
-          errorCode: FORGET_SELECTION_EXPIRED,
+          errorCode,
           memoryApplied: 0,
         });
         store.clearOperationProof(requestId);
-        forgetSelections.delete(requestId);
+        selections.delete(requestId);
       } else if (request?.status !== "pending") {
-        forgetSelections.delete(requestId);
+        selections.delete(requestId);
       }
     }
   }
 
-  function forgetSelectionMarkerOf(request) {
+  function selectionMarkerOf(request, kind) {
     try {
       const proof = JSON.parse(request?.operationProof ?? "null");
-      return proof?.kind === "forget-selection" ? proof : null;
+      return proof?.kind === kind ? proof : null;
     } catch {
       return null;
+    }
+  }
+
+  /* 关闭会话/退出时只做同一形清理；选择重验与执行业务仍留在各自的 run 函数。 */
+  function clearSelectionsForConversation({ selections, characterId, conversationId }) {
+    for (const requestId of [...selections.keys()]) {
+      const snapshot = selections.get(requestId);
+      if (snapshot?.characterId === characterId && snapshot?.conversationId === conversationId) {
+        store.clearOperationProof(requestId);
+        selections.delete(requestId);
+      }
+    }
+  }
+
+  function disposeSelections({ selections, errorCode, at }) {
+    for (const requestId of [...selections.keys()]) {
+      const request = store.getRequest(requestId);
+      if (request?.status === "failed") {
+        store.updateRequest(requestId, {
+          status: "stale",
+          completedAt: at,
+          errorCode,
+          memoryApplied: 0,
+        });
+      }
+      store.clearOperationProof(requestId);
+      selections.delete(requestId);
     }
   }
 
@@ -312,14 +356,21 @@ function createChatService({
     return null;
   }
 
+  async function completeSelectionReply({ request, reply, clearMarker = false }) {
+    if (clearMarker) {
+      store.clearOperationProof(request.id);
+    }
+    return runModelRequest({
+      request: store.getRequest(request.id),
+      messages: [],
+      contextVersion: request.contextVersion,
+      preplannedPlan: { kind: "respond", reply },
+    });
+  }
+
   async function completeForgetSelectionReply({ request, reply }) {
     try {
-      return await runModelRequest({
-        request: store.getRequest(request.id),
-        messages: [],
-        contextVersion: request.contextVersion,
-        preplannedPlan: { kind: "respond", reply },
-      });
+      return await completeSelectionReply({ request, reply });
     } finally {
       forgetSelections.delete(request.id);
     }
@@ -358,6 +409,167 @@ function createChatService({
       return result;
     }
     forgetSelections.delete(request.id);
+    if (result.status !== "completed") {
+      store.clearOperationProof(request.id);
+    }
+    return result;
+  }
+
+  function peekCorrectTimeClarification(characterId, conversationId, at) {
+    const key = forgetClarificationKey(characterId, conversationId);
+    const pending = correctTimeClarifications.get(key);
+    if (!pending) {
+      return { pending: null, expired: false };
+    }
+    if (clarificationAlive(pending, at)) {
+      return { pending, expired: false };
+    }
+    correctTimeClarifications.delete(key);
+    return { pending, expired: true };
+  }
+
+  function clearCorrectTimeClarification(characterId, conversationId) {
+    correctTimeClarifications.delete(forgetClarificationKey(characterId, conversationId));
+  }
+
+  function registerCorrectTimeClarification({ request, userMessage, clarification, at }) {
+    const entry = clarification.target.entry;
+    correctTimeClarifications.set(forgetClarificationKey(request.characterId, request.conversationId), {
+      characterId: request.characterId,
+      conversationId: request.conversationId,
+      originalRequestId: request.id,
+      originalUserMessageId: userMessage.id,
+      originalSourceId: userMessage.sourceId,
+      originalCommandText: userMessage.content,
+      contextVersion: request.contextVersion,
+      createdAt: at,
+      evidence: clarification.evidence,
+      body: clarification.body,
+      trust: clarification.trust,
+      target: {
+        entryId: entry.id,
+        version: entry.version,
+        factIdentityId: entry.factIdentityId,
+        sourceIdHash: sourceHash(entry.sourceId),
+      },
+    });
+  }
+
+  /* 同一套重验同时服务执行与 retry：两个真实来源、目标版本/身份/来源哈希、
+     会话日/TTL、context 与 source-context 都必须仍然成立；sourceId 只作追溯。 */
+  function correctTimeSelectionChanged(snapshot, at) {
+    if (!clarificationAlive(snapshot, at)) {
+      return REPLIES.correctTimeExpired;
+    }
+    if (localDayOf(snapshot.answerAt) !== localDayOf(snapshot.createdAt)) {
+      return REPLIES.correctTimeExpired;
+    }
+    const entry = memory.getHeldEntry({
+      characterId: snapshot.characterId,
+      entryId: snapshot.entryId,
+    });
+    if (!entry ||
+      entry.version !== snapshot.version ||
+      entry.factIdentityId !== snapshot.factIdentityId ||
+      sourceHash(entry.sourceId) !== snapshot.sourceIdHash ||
+      entry.expiresAt !== null) {
+      return REPLIES.correctTimeChanged;
+    }
+    const original = store.getMessage(snapshot.originalUserMessageId);
+    const answer = store.getMessage(snapshot.answerUserMessageId);
+    if (!original || !answer ||
+      original.role !== "user" || answer.role !== "user" ||
+      original.characterId !== snapshot.characterId ||
+      answer.characterId !== snapshot.characterId ||
+      original.conversationId !== snapshot.conversationId ||
+      answer.conversationId !== snapshot.conversationId ||
+      original.sourceId !== snapshot.originalSourceId ||
+      answer.sourceId !== snapshot.answerSourceId ||
+      original.content !== snapshot.originalCommandText ||
+      parseCorrectTimeAnswer(answer.content).kind !== "select" ||
+      localDayOf(original.createdAt) !== localDayOf(answer.createdAt) ||
+      snapshot.expiresAt !== endOfLocalDay(answer.createdAt)) {
+      return REPLIES.correctTimeChanged;
+    }
+    if (!locateCorrectionSegments(original.content, snapshot.body)) {
+      return REPLIES.correctTimeChanged;
+    }
+    const excluded = new Set(memory.listExcludedSources(snapshot.characterId));
+    if ([original.sourceId, answer.sourceId, entry.sourceId]
+      .some((sourceId) => excluded.has(sourceHash(sourceId)))) {
+      return REPLIES.correctTimeChanged;
+    }
+    if (!memory.isContextCurrent(snapshot.characterId, snapshot.contextVersion)) {
+      return REPLIES.correctTimeChanged;
+    }
+    if (memorySourceContext) {
+      try {
+        const resolved = memorySourceContext.resolve({
+          characterId: snapshot.characterId,
+          entryId: entry.id,
+          expectedVersion: entry.version,
+          nowMs: at,
+        });
+        if (resolved.status !== "ok") {
+          return REPLIES.correctTimeChanged;
+        }
+      } catch {
+        return REPLIES.correctTimeChanged;
+      }
+    }
+    return null;
+  }
+
+  async function completeCorrectTimeReply({ request, reply }) {
+    return completeSelectionReply({ request, reply, clearMarker: true });
+  }
+
+  async function runCorrectTimeSelection({ request, snapshot }) {
+    const at = currentMs();
+    const changed = correctTimeSelectionChanged(snapshot, at);
+    if (changed) {
+      correctTimeSelections.delete(request.id);
+      return completeCorrectTimeReply({
+        request: store.getRequest(request.id),
+        reply: changed,
+      });
+    }
+    const entry = memory.getHeldEntry({
+      characterId: snapshot.characterId,
+      entryId: snapshot.entryId,
+    });
+    if (!entry) {
+      correctTimeSelections.delete(request.id);
+      return completeCorrectTimeReply({
+        request: store.getRequest(request.id),
+        reply: REPLIES.correctTimeChanged,
+      });
+    }
+    const operation = {
+      action: "correct",
+      target: { entry },
+      body: snapshot.body,
+      trust: snapshot.trust,
+      evidence: snapshot.evidence,
+      mode: "temporary",
+      expiresAt: snapshot.expiresAt,
+      contentSourceId: snapshot.originalSourceId,
+      timeSourceId: snapshot.answerSourceId,
+    };
+    const result = await runModelRequest({
+      request: store.getRequest(request.id),
+      messages: [],
+      contextVersion: request.contextVersion,
+      preplannedPlan: { kind: "execute", operation },
+      selection: true,
+      selectionErrorCode: CORRECT_TIME_SELECTION_FAILED,
+      keepSelectionProof: true,
+    });
+    if (result.status === "failed" && result.errorCode === CORRECT_TIME_SELECTION_FAILED) {
+      // 事务未提交：保留快照和授权标记，允许同 request 重试。
+      return result;
+    }
+    correctTimeSelections.delete(request.id);
     if (result.status !== "completed") {
       store.clearOperationProof(request.id);
     }
@@ -420,13 +632,19 @@ function createChatService({
     if (entry.temporarySource) {
       const temporary = entry.temporarySource;
       if (temporary.kind === "direct") {
-        source = "用户今天明确说明";
+        source = temporary.timeAuthorizedToday
+          ? "用户今天明确说明，且只授权今天；正文保留用户原话"
+          : "用户今天明确说明";
       } else if (temporary.kind === "edit") {
-        source = "用户在面板修改了今日理解，不是聊天原话";
+        source = temporary.timeAuthorizedToday
+          ? "用户在面板修改了今日理解，不是聊天原话；原授权只到今天"
+          : "用户在面板修改了今日理解，不是聊天原话";
       } else if (temporary.relayFrom) {
-        source = `听${identityLabel(temporary.relayFrom)}转告${identityLabel(temporary.originCharacterId)}的今日说明，不是直接告知`;
+        source = `听${identityLabel(temporary.relayFrom)}转告${identityLabel(temporary.originCharacterId)}的今日说明` +
+          `${temporary.timeAuthorizedToday ? "，原授权只到今天" : ""}，不是直接告知`;
       } else {
-        source = `经${identityLabel(temporary.originCharacterId)}的今日说明同步，不是直接告知`;
+        source = `经${identityLabel(temporary.originCharacterId)}的今日说明同步` +
+          `${temporary.timeAuthorizedToday ? "，原授权只到今天" : ""}，不是直接告知`;
       }
       source = `${source}；今日理解优先于长期偏好`;
     } else if (!entry.derived) {
@@ -1584,6 +1802,8 @@ function createChatService({
     operationContext = { candidates: [], recentText: "" },
     preplannedPlan = null,
     selection = false,
+    selectionErrorCode = FORGET_SELECTION_FAILED,
+    keepSelectionProof = false,
   }) {
     const controller = new AbortController();
     controllers.set(request.id, controller);
@@ -1829,6 +2049,16 @@ function createChatService({
               originVersion: operationResult.originVersion,
               rootIdentityId: operationResult.rootIdentityId,
               initiatorCharacterId: request.characterId,
+              ...(operationPlan.operation.timeSourceId
+                ? {
+                  timeAuthorization: {
+                    kind: "today",
+                    contentSourceId: operationPlan.operation.contentSourceId ?? null,
+                    timeSourceId: operationPlan.operation.timeSourceId,
+                    answerUserMessageId: userMessage.id,
+                  },
+                }
+                : {}),
               entries: operationResult.entries,
               candidates: candidateScan.candidates.map((candidate) => ({
                 identityId: candidate.identityId,
@@ -1940,13 +2170,21 @@ function createChatService({
           assistantMessageId: assistantId,
           memoryApplied,
         });
-        if (selection) {
+        if (selection && !keepSelectionProof) {
           store.clearOperationProof(request.id);
         }
         return updated;
       });
       if (operationPlan.kind === "clarifyForget" && completed?.status === "completed") {
         registerForgetClarification({
+          request: completed,
+          userMessage,
+          clarification: operationPlan.clarification,
+          at: completedAt,
+        });
+      }
+      if (operationPlan.kind === "clarifyCorrectTime" && completed?.status === "completed") {
+        registerCorrectTimeClarification({
           request: completed,
           userMessage,
           clarification: operationPlan.clarification,
@@ -1979,8 +2217,8 @@ function createChatService({
         return failRequest(
           request.id,
           error instanceof AppError
-            ? error.code ?? FORGET_SELECTION_FAILED
-            : FORGET_SELECTION_FAILED,
+            ? error.code ?? selectionErrorCode
+            : selectionErrorCode,
         );
       }
       const code = error?.code ?? "NETWORK_ERROR";
@@ -2056,7 +2294,20 @@ function createChatService({
       return requestResult(existing);
     }
 
-    invalidateFailedForgetSelections(characterId, conversation.id, at);
+    invalidateFailedSelections({
+      selections: forgetSelections,
+      errorCode: FORGET_SELECTION_EXPIRED,
+      characterId,
+      conversationId: conversation.id,
+      at,
+    });
+    invalidateFailedSelections({
+      selections: correctTimeSelections,
+      errorCode: CORRECT_TIME_SELECTION_EXPIRED,
+      characterId,
+      conversationId: conversation.id,
+      at,
+    });
     const clarificationState = peekForgetClarification(characterId, conversation.id, at);
     if (clarificationState.pending) {
       const pending = clarificationState.pending;
@@ -2125,6 +2376,76 @@ function createChatService({
       }
     }
 
+    /* 时间澄清承接：先判是否时间式选择；普通问题/新操作不被误拒。 */
+    const correctTimeState = peekCorrectTimeClarification(characterId, conversation.id, at);
+    if (correctTimeState.pending) {
+      const pending = correctTimeState.pending;
+      const intent = detectOperationIntent(userText);
+      if (intent.action || intent.reason === "multiple_actions") {
+        clearCorrectTimeClarification(characterId, conversation.id);
+      } else {
+        const answer = parseCorrectTimeAnswer(userText);
+        if (answer.kind === "none") {
+          clearCorrectTimeClarification(characterId, conversation.id);
+        } else {
+          clearCorrectTimeClarification(characterId, conversation.id);
+          const answerContextVersion = memory.getContextVersion(characterId);
+          const userMessageId = recordUserTurn({
+            characterId,
+            conversationId: conversation.id,
+            userText,
+            requestId: id,
+            at,
+            contextVersion: answerContextVersion,
+            operationProof: answer.kind === "select" ? CORRECT_TIME_SELECTION_MARKER : null,
+          });
+          const answerRequest = store.getRequest(id);
+          if (correctTimeState.expired) {
+            return completeCorrectTimeReply({
+              request: answerRequest,
+              reply: REPLIES.correctTimeExpired,
+            });
+          }
+          if (answer.kind === "cancel") {
+            return completeCorrectTimeReply({
+              request: answerRequest,
+              reply: REPLIES.correctTimeCancelled,
+            });
+          }
+          if (answer.kind === "invalid") {
+            return completeCorrectTimeReply({
+              request: answerRequest,
+              reply: REPLIES.correctTimeInvalid,
+            });
+          }
+          const answerMessage = store.getMessage(userMessageId);
+          const snapshot = {
+            characterId,
+            conversationId: conversation.id,
+            originalRequestId: pending.originalRequestId,
+            originalUserMessageId: pending.originalUserMessageId,
+            originalSourceId: pending.originalSourceId,
+            originalCommandText: pending.originalCommandText,
+            contextVersion: pending.contextVersion,
+            createdAt: pending.createdAt,
+            evidence: pending.evidence,
+            body: pending.body,
+            trust: pending.trust,
+            entryId: pending.target.entryId,
+            version: pending.target.version,
+            factIdentityId: pending.target.factIdentityId,
+            sourceIdHash: pending.target.sourceIdHash,
+            answerUserMessageId: userMessageId,
+            answerSourceId: answerMessage.sourceId,
+            answerAt: at,
+            expiresAt: endOfLocalDay(at),
+          };
+          correctTimeSelections.set(id, snapshot);
+          return trackRequest(runCorrectTimeSelection({ request: answerRequest, snapshot }));
+        }
+      }
+    }
+
     /* 无条件全局设置指令只在本轮原话中识别；命中后不组装模型上下文，
        也不读取凭据。无授权或混合任务的输入只做本地未更改说明。 */
     const setting = detectSharingSetting(userText);
@@ -2185,7 +2506,7 @@ function createChatService({
     }
     const selectionSnapshot = forgetSelections.get(request.id);
     if (!selectionSnapshot &&
-      (forgetSelectionMarkerOf(request) || request.errorCode === FORGET_SELECTION_FAILED)) {
+      (selectionMarkerOf(request, "forget-selection") || request.errorCode === FORGET_SELECTION_FAILED)) {
       return staleRequest(request.id, FORGET_SELECTION_EXPIRED);
     }
     if (selectionSnapshot) {
@@ -2204,6 +2525,29 @@ function createChatService({
       return trackRequest(runForgetSelection({
         request: selectionPending,
         snapshot: selectionSnapshot,
+      }));
+    }
+    const timeSnapshot = correctTimeSelections.get(request.id);
+    if (!timeSnapshot &&
+      (selectionMarkerOf(request, "correct-time-selection") || request.errorCode === CORRECT_TIME_SELECTION_FAILED)) {
+      return staleRequest(request.id, CORRECT_TIME_SELECTION_EXPIRED);
+    }
+    if (timeSnapshot) {
+      const retryAt = currentMs(nowMs);
+      const changed = correctTimeSelectionChanged(timeSnapshot, retryAt);
+      if (changed) {
+        correctTimeSelections.delete(request.id);
+        store.clearOperationProof(request.id);
+        return staleRequest(request.id, CORRECT_TIME_SELECTION_EXPIRED);
+      }
+      const selectionPending = store.prepareRetry(
+        request.id,
+        memory.getContextVersion(characterId),
+        CORRECT_TIME_SELECTION_MARKER,
+      );
+      return trackRequest(runCorrectTimeSelection({
+        request: selectionPending,
+        snapshot: timeSnapshot,
       }));
     }
     if (
@@ -2244,6 +2588,12 @@ function createChatService({
     if (clarification?.originalRequestId === request.id) {
       clearForgetClarification(characterId, request.conversationId);
     }
+    const timeClarification = correctTimeClarifications.get(
+      forgetClarificationKey(characterId, request.conversationId),
+    );
+    if (timeClarification?.originalRequestId === request.id) {
+      clearCorrectTimeClarification(characterId, request.conversationId);
+    }
     const selectionSnapshot = forgetSelections.get(request.id);
     if (selectionSnapshot && request.status !== "pending") {
       forgetSelections.delete(request.id);
@@ -2253,6 +2603,19 @@ function createChatService({
           status: "stale",
           completedAt: at,
           errorCode: FORGET_SELECTION_EXPIRED,
+          memoryApplied: 0,
+        });
+      }
+    }
+    const timeSnapshot = correctTimeSelections.get(request.id);
+    if (timeSnapshot && request.status !== "pending") {
+      correctTimeSelections.delete(request.id);
+      store.clearOperationProof(request.id);
+      if (request.status === "failed") {
+        store.updateRequest(request.id, {
+          status: "stale",
+          completedAt: at,
+          errorCode: CORRECT_TIME_SELECTION_EXPIRED,
           memoryApplied: 0,
         });
       }
@@ -2282,6 +2645,10 @@ function createChatService({
       forgetSelections.delete(request.id);
       store.clearOperationProof(request.id);
     }
+    if (timeSnapshot) {
+      correctTimeSelections.delete(request.id);
+      store.clearOperationProof(request.id);
+    }
     return { cancelled: true, status: "cancelled", requestId: request.id };
   }
 
@@ -2297,14 +2664,31 @@ function createChatService({
     }
     const at = currentMs(nowMs);
     clearForgetClarification(characterId, existing.id);
-    invalidateFailedForgetSelections(characterId, existing.id, at);
-    for (const requestId of [...forgetSelections.keys()]) {
-      const snapshot = forgetSelections.get(requestId);
-      if (snapshot?.characterId === characterId && snapshot?.conversationId === existing.id) {
-        store.clearOperationProof(requestId);
-        forgetSelections.delete(requestId);
-      }
-    }
+    clearCorrectTimeClarification(characterId, existing.id);
+    invalidateFailedSelections({
+      selections: forgetSelections,
+      errorCode: FORGET_SELECTION_EXPIRED,
+      characterId,
+      conversationId: existing.id,
+      at,
+    });
+    invalidateFailedSelections({
+      selections: correctTimeSelections,
+      errorCode: CORRECT_TIME_SELECTION_EXPIRED,
+      characterId,
+      conversationId: existing.id,
+      at,
+    });
+    clearSelectionsForConversation({
+      selections: forgetSelections,
+      characterId,
+      conversationId: existing.id,
+    });
+    clearSelectionsForConversation({
+      selections: correctTimeSelections,
+      characterId,
+      conversationId: existing.id,
+    });
     const closed = store.closeConversation(existing.id, at);
     const cancelledRequestIds = [];
     for (const request of store.listPendingRequests(existing.id)) {
@@ -2338,20 +2722,18 @@ function createChatService({
     }
     disposed = true;
     const at = currentMs();
-    for (const requestId of [...forgetSelections.keys()]) {
-      const request = store.getRequest(requestId);
-      if (request?.status === "failed") {
-        store.updateRequest(requestId, {
-          status: "stale",
-          completedAt: at,
-          errorCode: FORGET_SELECTION_EXPIRED,
-          memoryApplied: 0,
-        });
-      }
-      store.clearOperationProof(requestId);
-      forgetSelections.delete(requestId);
-    }
+    disposeSelections({
+      selections: forgetSelections,
+      errorCode: FORGET_SELECTION_EXPIRED,
+      at,
+    });
+    disposeSelections({
+      selections: correctTimeSelections,
+      errorCode: CORRECT_TIME_SELECTION_EXPIRED,
+      at,
+    });
     forgetClarifications.clear();
+    correctTimeClarifications.clear();
     const cancelled = store.cancelAllPendingRequests(at);
     for (const controller of controllers.values()) {
       controller.abort();

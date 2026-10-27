@@ -185,3 +185,7 @@ S08 是最终验收入口，不新增 S09 父级；7 个 `POL-FINAL` ID 是既�
 ## POL-LIVE-CLARIFY-001：删除目标两轮澄清（2026-10-28）
 
 正式Given/When/Expected/Oracle与边界见[s03o-live-clarification-plan.md](s03o-live-clarification-plan.md)，工具数据C12，入口`node tools/memory-tuning/chat-operation-probe.cjs --mode l1|l2 --case C12 --out <新文件>`。独立结果见[s03o-live-clarification-review.md](s03o-live-clarification-review.md)：L1构造聊天＋真实关系两轮PASS；L2真实模型直删，完整两轮NOT_COVERED。不得由L1推断全真实两轮或完整S03通过。
+
+## S03p 今日时间澄清（2026-10-28）
+
+POL-CHATMEM-CORRECT-TIME-001～011及002b/004b/010b/010c：Contract见[s03p-temporal-clarification-plan.md](s03p-temporal-clarification-plan.md)，细分Runner及证据见[s03p-review.md](s03p-review.md)。master受托批准并有限接受已测后端范围；真实chat/SQLite+构造模型HTTP。POL-CHATMEM-CORRECT-TIME-GUI-001为真实界面两轮承接与失效标签，Runner位于tests/acceptance/chat-verification-ui.spec.cjs，已编写但未执行，NOT_COVERED。

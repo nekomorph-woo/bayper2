@@ -99,6 +99,15 @@ const REPLIES = Object.freeze({
     "这句话里包含不止一个操作，我这次先不改动记忆；你想先纠正、忘记、禁止分享，还是只留给当前角色记得哪一件事？",
   temporalClarification:
     "你说的这个时间范围我还不确定，先不改动长期记忆；能说清楚是今天，还是到什么时候吗？",
+  temporalTodayOffer:
+    "你说的这个时间范围我还不确定，先不改动长期记忆；如果这条只算今天，回复“就今天”；如果要改成长期的，请把完整的新内容和时间再说一次。",
+  correctTimeInvalid:
+    "我没有确认你要把这条限定到哪一天，这次没有改动任何记忆；目前我只能把这条理解限定到今天，请回复“就今天”。",
+  correctTimeChanged:
+    "我准备按今天记录的那条记忆已经变化，这次没有改动；请重新完整告诉我要更正的内容和时间。",
+  correctTimeExpired:
+    "这次确认已经过期，我没有改动任何记忆；如果只想算今天，请重新完整告诉我。",
+  correctTimeCancelled: "好，这次没有改动任何记忆。",
   subjectClarification:
     "这句话不是明确在说你自己的经历，我先没有改动你的记忆；如果要更正的是你自己的经历，请明确说“不是我，是……”。",
   uncertaintyClarification:
@@ -946,6 +955,82 @@ function correctionBody({ anchor, clauses, kind, nowYear }) {
   };
 }
 
+/* S03p 今日时间授权的封闭回答。接受“今天/就今天/仅今天”等有限说法；
+   问号、引用、假设、其他时间或附加内容都不构成今日授权。chat 承接和
+   来源核验共用此判定，避免只凭 message ID 推断授权。 */
+const TODAY_AUTHORIZATION_CORES = new Set([
+  "今天", "就今天", "仅今天", "只今天", "只是今天", "只限今天",
+]);
+const TODAY_UNSUPPORTED =
+  /^(?:就|仅|只|只是|只限|仅限于)?(?:今晚|今夜|明天|明日|昨天|前天|以后|将来|长期|永远|最近|这几天|暂时)(?:吧|就好|就行|而已|一天)?$/u;
+const CORRECT_TIME_CANCEL = new Set([
+  "取消", "算了", "不用了", "先不改了", "不改了", "不改成今天了",
+]);
+
+function parseCorrectTimeAnswer(text) {
+  const raw = String(text ?? "").normalize("NFKC").trim();
+  if (!raw) {
+    return { kind: "none" };
+  }
+  const withoutEnd = raw.replace(/[。！!]+$/u, "").trim();
+  const withoutLead = withoutEnd.replace(/^(?:对|嗯|是的)[，,、\s]*/u, "").trim();
+  const withoutParticle = withoutLead.replace(/(?:吧|就好|就行|而已|一天)$/u, "").trim();
+  if (CORRECT_TIME_CANCEL.has(withoutParticle)) {
+    return { kind: "cancel" };
+  }
+  const quoted = /[“”"「」『』‘’]/u.test(raw);
+  const question = /[？?]\s*$/u.test(raw) || /(?:吗|呢)[。！？!?，,]?\s*$/u.test(raw);
+  const hypothetical = hasMatch(HYPOTHETICAL, raw);
+  if (hypothetical) {
+    return { kind: "none" };
+  }
+  const shape = withoutParticle
+    .replace(/[？?]+$/u, "")
+    .replace(/^[“”"「」『』‘’]+|[“”"「」『』‘’]+$/gu, "")
+    .trim();
+  const accepted = TODAY_AUTHORIZATION_CORES.has(shape);
+  const unsupported = TODAY_UNSUPPORTED.test(shape);
+  if (accepted && !quoted && !question) {
+    return { kind: "select" };
+  }
+  if (accepted || unsupported) {
+    return { kind: "invalid" };
+  }
+  return { kind: "none" };
+}
+
+function isTodayAuthorizationAnswer(text) {
+  return parseCorrectTimeAnswer(text).kind === "select";
+}
+
+/* 只对“原新内容已明确、偏好长期锚、无冲突时间”的 vague 时间开放今日约束；
+   其他 vague、经历/身份/detail、未来/过去/年份仍要求完整重述。 */
+function todayAuthorizationEligible({ body, trust, target, intent, nowMs }) {
+  const entry = target?.entry;
+  if (trust !== "stated" || !entry || entry.kind !== "preference" ||
+    entry.expiresAt !== null) {
+    return false;
+  }
+  const anchors = intent.clauses.filter((clause) =>
+    !isCommandClause(clause) &&
+    !/^(?:不是|不|没|未|非|无|别)/u.test(clause.trim()) &&
+    substantiveTokensOf(clause).length > 0 &&
+    correctionAnchor(clause, intent));
+  if (anchors.length !== 1) {
+    return false;
+  }
+  const nowYear = yearOf(nowMs);
+  return hasMatch(VAGUE, body) &&
+    !hasMatch(TODAY, body) &&
+    !hasMatch(EARLY_DAY, body) &&
+    !hasMatch(OTHER_TEMPORAL, body) &&
+    !hasMatch(FUTURE_PLAN, body) &&
+    !hasMatch(UNCERTAINTY, body) &&
+    yearsIn(body).length === 0 &&
+    !hasFutureTime(body, nowYear) &&
+    !explicitPastEvent(body, nowYear);
+}
+
 /* correct 的本地核验只生成与模型建议同形的 operation；主体、时间、否定和
    版本约束与模型路径共用，不在这里直接写库。requireStated 仅用于模型显式
    null 的本地补全：不确定内容先澄清，避免把推断当成完整明确更正。 */
@@ -984,7 +1069,26 @@ function correctionPlan({
     return { reply: REPLIES.uncertaintyClarification };
   }
   if (info.temporal === "vague") {
-    return { reply: REPLIES.temporalClarification };
+    const eligible = todayAuthorizationEligible({
+      body: info.body,
+      trust: info.trust,
+      target,
+      intent,
+      nowMs,
+    });
+    return {
+      reply: eligible ? REPLIES.temporalTodayOffer : REPLIES.temporalClarification,
+      ...(eligible
+        ? {
+          temporalClarification: {
+            body: info.body,
+            trust: info.trust,
+            evidence,
+            target,
+          },
+        }
+        : {}),
+    };
   }
   const mode = info.temporal === "today" ? "temporary" : "replace";
   if (
@@ -1158,6 +1262,13 @@ function planOperation({
       if (completed?.operation) {
         return { kind: "execute", operation: completed.operation };
       }
+      if (completed?.temporalClarification) {
+        return {
+          kind: "clarifyCorrectTime",
+          reply: completed.reply,
+          clarification: completed.temporalClarification,
+        };
+      }
       // 模糊时间仍沿用现有澄清；本地补全不把它当成完整可执行更正。
       if (completed?.reply && intent.temporalHint !== "vague") {
         return { kind: "respond", reply: completed.reply };
@@ -1221,6 +1332,13 @@ function planOperation({
       nowMs,
       excerpt,
     });
+    if (planned.temporalClarification) {
+      return {
+        kind: "clarifyCorrectTime",
+        reply: planned.reply,
+        clarification: planned.temporalClarification,
+      };
+    }
     if (planned.reply) {
       return { kind: "respond", reply: planned.reply };
     }
@@ -1254,7 +1372,12 @@ function endOfLocalDay(nowMs) {
    已证明同一长期事实的持有者同步 copy；多条无法唯一证明时零写入抛错，
    由聊天层转成最小澄清。 */
 function applyTemporaryCorrection({ memory, characterId, entry, operation, nowMs, userSourceId }) {
-  const expiresAt = endOfLocalDay(nowMs);
+  const expiresAt = Number.isSafeInteger(operation.expiresAt)
+    ? operation.expiresAt
+    : endOfLocalDay(nowMs);
+  const contentSourceId = typeof operation.contentSourceId === "string"
+    ? operation.contentSourceId
+    : userSourceId;
   const result = memory.applyTemporaryUnderstanding({
     characterId,
     entryId: entry.id,
@@ -1262,7 +1385,8 @@ function applyTemporaryCorrection({ memory, characterId, entry, operation, nowMs
     body: operation.body,
     trust: operation.trust,
     expiresAt,
-    sourceId: userSourceId,
+    sourceId: contentSourceId,
+    timeSourceId: operation.timeSourceId ?? null,
     inTransaction: true,
     nowMs,
   });
@@ -1381,6 +1505,9 @@ module.exports = {
   planOperation,
   forgetTargetClarification,
   parseForgetTargetAnswer,
+  parseCorrectTimeAnswer,
+  isTodayAuthorizationAnswer,
+  endOfLocalDay,
   applyChatOperation,
   operationReply,
   relayFailureReply,

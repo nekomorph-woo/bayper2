@@ -265,6 +265,16 @@ function createShotDir() {
   return shotDir;
 }
 
+function createS03pShotDir() {
+  const shotDir = path.join(
+    repoRoot, ".hapilon", "polaris", "Bayper完整交付", "evidence",
+    "s03p-temporal-clarification", "gui-shots",
+    `${new Date().toISOString().replace(/[.:]/gu, "-")}-${process.pid}`,
+  );
+  fs.mkdirSync(shotDir, { recursive: true });
+  return shotDir;
+}
+
 async function openSeededUi(t) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bayper-verification-ui-"));
   const server = await startServer();
@@ -825,4 +835,81 @@ test("POL-SEMOP-003c GUI 真实异常退出遗留 pending：重开 interrupted�
     }
     await cleanupVerificationUiProcesses(ui.dataDir);
   }
+});
+
+/* S03p 最小 GUI：真实 Electron/SQLite，聊天与关系模型为本机构造 HTTP。
+   只验证两轮时间澄清、今日临时、长期不变与面板失效标签；不运行人类体验、
+   不调用真实模型。面板失效来源由协议 fixture 制造，不是公开撤权入口。 */
+test("POL-CHATMEM-CORRECT-TIME-GUI-001 两轮时间澄清与面板失效标签", { timeout: 180000 }, async (t) => {
+  const ui = await openSeededUi(t);
+  const shotDir = createS03pShotDir();
+  const page = ui.page;
+  const longBefore = readEntry(ui.dataDir, "rin", "pref.coffee");
+  assert.ok(longBefore, "种子长期偏好必须存在");
+
+  ui.server.enqueue(({ response }) => sendStructured(response, {
+    reply: "你想把咖啡改成什么？",
+    memoryCandidates: [],
+    memoryOperation: null,
+  }));
+  await page.locator("#chat-input").fill("不是咖啡，我最近想喝茶，请帮我改过来。");
+  await page.locator("#chat-send").click();
+  await waitForAssistantText(page, "就今天");
+  await page.screenshot({ path: path.join(shotDir, "time-clarify-question.png") });
+  assert.equal(
+    readTemporaryRows(ui.dataDir).filter((row) => row.character_id === "rin").length,
+    0,
+    "本地提问阶段不得写临时",
+  );
+  assert.deepEqual(readEntry(ui.dataDir, "rin", "pref.coffee"), longBefore);
+  assert.equal(await page.locator("#chat-input").isDisabled(), false);
+
+  ui.server.enqueue(ui.equivalentResponder(0));
+  await page.locator("#chat-input").fill("就今天");
+  await page.locator("#chat-send").click();
+  await waitForAssistantText(page, "只到今天结束有效");
+  await page.waitForFunction(() => {
+    const input = document.querySelector("#chat-input");
+    return input && !input.disabled;
+  });
+  await page.screenshot({ path: path.join(shotDir, "time-clarify-final.png") });
+
+  const longAfter = readEntry(ui.dataDir, "rin", "pref.coffee");
+  assert.equal(longAfter.body, longBefore.body, "长期偏好正文不得改");
+  assert.equal(longAfter.version, longBefore.version, "长期偏好版本不得改");
+  const aTemps = readTemporaryRows(ui.dataDir).filter((row) => row.character_id === "rin");
+  assert.equal(aTemps.length, 1, "A 必须只有一条今日临时");
+  assert.equal(aTemps[0].body, "不是咖啡，我最近想喝茶", "正文保留原话，不拼接今天");
+  assert.equal(
+    new Date(aTemps[0].expires_at).toDateString(),
+    new Date().toDateString(),
+    "今日临时应在当天结束到期",
+  );
+  const bTemps = readTemporaryRows(ui.dataDir).filter((row) => row.character_id === "hu");
+  assert.equal(bTemps.length, 1, "同主题 B 在 equivalent 下应同步今日临时");
+  assert.equal(bTemps[0].body, aTemps[0].body);
+
+  await page.locator("#memory-open").click();
+  await page.locator("#memory-overlay").waitFor({ state: "visible" });
+  await page.locator("#memory-character").selectOption("rin");
+  await page.locator(".memory-entry").first().waitFor({ state: "visible" });
+  const panelText = await page.locator("#memory-list").textContent();
+  assert.match(panelText, /不是咖啡，我最近想喝茶/u);
+  await page.screenshot({ path: path.join(shotDir, "time-memory-panel.png") });
+
+  // 协议 fixture：只把来源改坏以验证“已失效”标签，不声称存在聊天撤权入口。
+  const db = new DatabaseSync(path.join(ui.dataDir, DB_FILE));
+  db.exec("PRAGMA busy_timeout = 2000");
+  db.prepare("UPDATE memory_entries SET source_id = ? WHERE id = ?")
+    .run(`${aTemps[0].source_id}:garbage`, aTemps[0].id);
+  db.close();
+  await page.locator("#memory-close").click();
+  await page.locator("#memory-open").click();
+  await page.locator("#memory-overlay").waitFor({ state: "visible" });
+  await page.locator("#memory-character").selectOption("rin");
+  await page.waitForFunction(() => Array.from(
+    document.querySelectorAll(".memory-entry-meta"),
+  ).some((node) => node.textContent.includes("已失效（来源已变化）")));
+  await page.screenshot({ path: path.join(shotDir, "time-memory-invalid-label.png") });
+  console.log(`S03P_GUI_SHOTS ${shotDir}`);
 });

@@ -33,7 +33,7 @@ const LIMITS = Object.freeze({
   characterId: 200,
   factKey: 200,
   body: 2000,
-  sourceId: 200,
+  sourceId: 320,
   query: RETRIEVAL_CONFIG.maxQueryChars,
   shareEntries: 20,
   extractionFacts: 20,
@@ -601,11 +601,22 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     return input.inTransaction === true ? applyBatch() : store.transaction(applyBatch);
   }
 
+  /* 管理列表仍展示真实存储行；临时项另给 effective 标记，避免把来源已失效的
+     今日理解当作有效记忆。真正的有效读取仍由 search/buildContext 的来源校验。 */
+  function effectiveEntry(entry, nowMs) {
+    return {
+      ...entry,
+      effective: !temporary.isTemporaryEntry(entry) ||
+        Boolean(temporary.temporaryInfo(entry, nowMs)),
+    };
+  }
+
   function listMemories(characterIdInput, options = {}) {
     const characterId = characterIdOf(characterIdInput);
     const nowMs = resolveNow(options.nowMs);
     const limit = limitOf(options.limit, LIMITS.list, LIMITS.list);
-    return store.listActiveEntries(characterId, nowMs, limit);
+    return store.listActiveEntries(characterId, nowMs, limit)
+      .map((entry) => effectiveEntry(entry, nowMs));
   }
 
   /* 管理界面使用有界页大小；稳定性由 SQL 的 importance/updated_at/id 排序保证。
@@ -627,7 +638,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     );
     return {
       entries: rows.slice(0, pageSize).map((entry) => ({
-        ...entry,
+        ...effectiveEntry(entry, nowMs),
         sharingRestricted: isShareRestricted(entry),
       })),
       page,
@@ -1035,6 +1046,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
               holderLongEntryId: parsed.holderLongEntryId,
               holderLongVersion: parsed.holderLongVersion,
               messageSourceId: parsed.messageSourceId,
+              timeSourceId: parsed.timeSourceId,
             });
           }
           if (entry.derivedFromEntryId !== null && deletedIds.has(entry.derivedFromEntryId)) {

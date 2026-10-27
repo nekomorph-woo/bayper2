@@ -256,13 +256,23 @@ function createMemoryTemporary({
     if (!/^chat:[^:\s]+$/u.test(sourceId) || sourceId.length > limits.sourceId) {
       throw new MemoryError("INVALID_INPUT", "临时理解必须来自本轮聊天消息。");
     }
-    return { characterId, entryId, expectedVersion, body, trust, expiresAt, nowMs, sourceId };
+    const timeSourceId = input.timeSourceId === undefined || input.timeSourceId === null
+      ? null
+      : String(input.timeSourceId).trim();
+    if (timeSourceId !== null &&
+      (!/^chat:[^:\s]+$/u.test(timeSourceId) || timeSourceId.length > limits.sourceId)) {
+      throw new MemoryError("INVALID_INPUT", "今日时间授权来源无效。");
+    }
+    return {
+      characterId, entryId, expectedVersion, body, trust, expiresAt, nowMs, sourceId, timeSourceId,
+    };
   }
 
   function applyUnderstanding(rawInput = {}) {
     const input = parseInput(rawInput);
     const {
       characterId, entryId, expectedVersion, body, trust, expiresAt, nowMs, sourceId,
+      timeSourceId,
     } = input;
     const apply = () => {
       const selected = store.getEntryById(entryId);
@@ -371,6 +381,7 @@ function createMemoryTemporary({
         originLongEntryId: longAnchor.id,
         createdAt: nowMs,
         messageSourceId: sourceId,
+        timeSourceId,
       });
       const base = {
         characterId,
@@ -456,6 +467,7 @@ function createMemoryTemporary({
           holderLongEntryId: anchor?.id ?? null,
           holderLongVersion: anchor?.version ?? 0,
           messageSourceId: sourceId,
+          timeSourceId,
         });
         if (holderSource.length > limits.sourceId ||
           store.hasSourceControl(member.characterId, hashSource(holderSource))) {
@@ -532,6 +544,7 @@ function createMemoryTemporary({
           holderLongEntryId: anchor.id,
           holderLongVersion: anchor.version,
           messageSourceId: sourceId,
+          timeSourceId,
         });
         if (holderSource.length > limits.sourceId ||
           store.hasSourceControl(holder, hashSource(holderSource))) {
@@ -700,6 +713,7 @@ function createMemoryTemporary({
           holderLongEntryId: anchor?.id ?? null,
           holderLongVersion: anchor?.version ?? 0,
           messageSourceId: parsed.messageSourceId,
+          timeSourceId: parsed.timeSourceId,
         });
         if (sourceId.length > limits.sourceId) {
           throw new MemoryError("INVALID_INPUT", "临时来源ID过长。");
@@ -847,6 +861,7 @@ function createMemoryTemporary({
           holderLongEntryId: anchor.id,
           holderLongVersion: anchor.version,
           messageSourceId: parsed.messageSourceId,
+          timeSourceId: parsed.timeSourceId,
         });
         if (sourceId.length > limits.sourceId ||
           store.hasSourceControl(holder, hashSource(sourceId))) {
@@ -976,6 +991,7 @@ function createMemoryTemporary({
       holderLongEntryId: anchor?.id ?? null,
       holderLongVersion: anchor?.version ?? 0,
       messageSourceId: parsed.messageSourceId,
+      timeSourceId: parsed.timeSourceId,
     });
     if (sourceId.length > limits.sourceId) {
       throw new MemoryError("INVALID_INPUT", "临时来源ID过长。");
@@ -1022,6 +1038,7 @@ function createMemoryTemporary({
       originCharacterId: result.sourceCharacterId ?? entry.originCharacterId,
       relayFrom: result.relayFrom ?? null,
       edited: result.edited === true,
+      timeAuthorizedToday: result.timeAuthorization === "today",
     };
   }
 

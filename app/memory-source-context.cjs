@@ -7,6 +7,12 @@ const {
   locateCorrectionSegments,
 } = require("./memory-correction-evidence.cjs");
 const { parseTemporarySource } = require("./memory-temporary-source.cjs");
+/* 仅复用纯时间回答校验与本地日结束计算；不调用聊天服务，也不形成反向依赖。
+   既有 memory-correction-evidence 已传递依赖同一模块，本轮保留该方向。 */
+const {
+  endOfLocalDay,
+  isTodayAuthorizationAnswer,
+} = require("./chat-memory-operations.cjs");
 
 const LIMITS = {
   characterId: 200, entryId: 200, utterance: 3000, contextMessages: 2,
@@ -14,7 +20,8 @@ const LIMITS = {
 };
 const CHAT_SOURCE = /^chat:([^:\s]+)$/u;
 const CORRECTED_SOURCE = /^chat-correct:([^:\s]+):([1-9]\d*):(chat:[^:\s]+)$/u;
-const CURRENT_SOURCE = /^chat-current:([^:\s]+):(\d+):(chat:[^:\s]+)$/u;
+const CURRENT_SOURCE =
+  /^chat-current:([^:\s]+):(\d+):(chat:[^:\s]+)(?::(chat:[^:\s]+))?$/u;
 const PROPAGATED_SOURCE = /^corrected:([^:\s]+):([1-9]\d*)$/u;
 const CORRECTED_VIA = new Set([
   "corrected_chat",
@@ -187,6 +194,36 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
     );
   }
 
+  function localDayKey(ms) {
+    const date = new Date(ms);
+    return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+  }
+
+  /* S03p 今日时间授权：只接受“就今天”等封闭回答，且必须与正文消息同会话、
+     同角色、在后、同日，临时到期正是该回答本地日的结束。仅凭一个 chat
+     message ID 不能证明今日授权。 */
+  function timeAuthorizationOf({
+    entry, holderCharacterId, sourceCharacterId, contentMessage, timeSourceId,
+  }) {
+    if (!timeSourceId) {
+      return { ok: true, timeAuthorization: null };
+    }
+    if (sourceExcluded(holderCharacterId, timeSourceId)) {
+      return { ok: false };
+    }
+    const timeMessage = statements.getMessage.get(timeSourceId.slice("chat:".length));
+    if (!messageBelongsTo(timeMessage, sourceCharacterId, timeSourceId) ||
+      timeMessage.conversation_id !== contentMessage.conversation_id ||
+      !(timeMessage.seq > contentMessage.seq) ||
+      !isTodayAuthorizationAnswer(timeMessage.content) ||
+      entry.expires_at === null ||
+      entry.expires_at !== endOfLocalDay(timeMessage.created_at) ||
+      localDayKey(timeMessage.created_at) !== localDayKey(contentMessage.created_at)) {
+      return { ok: false };
+    }
+    return { ok: true, timeAuthorization: "today" };
+  }
+
   /* 传播副本的锚只来自同一已证明 identity 的当前 chat-correct 条目；
      正文必须一致，多个锚视为歧义，不用同文或前缀猜测。 */
   function findCorrectionAnchor(entry, nowMs) {
@@ -239,7 +276,7 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
   function correctedSnapshot({
     entry, characterId, nowMs, anchor, message, embeddedSourceId, sourceCharacterId,
     direct, via, sourceAnchorIdentityId = anchor.fact_identity_id,
-    holderLongIdentityId = undefined,
+    holderLongIdentityId = undefined, timeAuthorization = null,
   }) {
     if (sourceExcluded(characterId, entry.source_id)) {
       return unavailable("source_excluded");
@@ -283,6 +320,9 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       via,
       segments: segments.map((segment) => ({ messageId: message.id, ...segment })),
     };
+    if (timeAuthorization) {
+      snapshot.timeAuthorization = timeAuthorization;
+    }
     if (holderLongIdentityId !== undefined) {
       snapshot.holderLongIdentityId = holderLongIdentityId;
     }
@@ -341,6 +381,7 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       }
       const anchor = statements.getEntry.get(match[1]);
       const embeddedSourceId = match[3];
+      const timeSourceId = match[4] ?? null;
       const message = statements.getMessage.get(embeddedSourceId.slice("chat:".length));
       const expectedFactKey = anchor ? `${anchor.fact_key}.current.${anchor.id}` : null;
       const link = entryLinkInfo(entry);
@@ -357,6 +398,16 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       ) {
         return unavailable("source_mismatch");
       }
+      const timeAuth = timeAuthorizationOf({
+        entry,
+        holderCharacterId: characterId,
+        sourceCharacterId: characterId,
+        contentMessage: message,
+        timeSourceId,
+      });
+      if (!timeAuth.ok) {
+        return unavailable("time_authorization_invalid");
+      }
       if (link.reason) {
         return unavailable(link.reason);
       }
@@ -369,6 +420,7 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
         sourceCharacterId: characterId, direct: true, via: "current_temporary",
         sourceAnchorIdentityId: link.rootIdentityId,
         holderLongIdentityId: link.longIdentityId,
+        timeAuthorization: timeAuth.timeAuthorization,
       });
     }
 
@@ -574,6 +626,16 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
     if (!segments || segments.length === 0 || segments.length > LIMITS.segments) {
       return unavailable("segments_unavailable");
     }
+    const timeAuth = timeAuthorizationOf({
+      entry,
+      holderCharacterId: characterId,
+      sourceCharacterId,
+      contentMessage: message,
+      timeSourceId: parsed.timeSourceId,
+    });
+    if (!timeAuth.ok) {
+      return unavailable("time_authorization_invalid");
+    }
 
     const link = entryLinkInfo(entry);
     if (link.reason) {
@@ -605,7 +667,8 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
         (originCurrent.expires_at ?? null) !== entry.expires_at ||
         !originParsed || originParsed.kind !== "direct" ||
         originParsed.originLongEntryId !== parsed.originLongEntryId ||
-        originParsed.messageSourceId !== parsed.messageSourceId) {
+        originParsed.messageSourceId !== parsed.messageSourceId ||
+        originParsed.timeSourceId !== parsed.timeSourceId) {
         return unavailable("temporary_source_changed");
       }
     }
@@ -658,6 +721,9 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       holderLongIdentityId: longIdentityId,
       segments: segments.map((segment) => ({ messageId: message.id, ...segment })),
     };
+    if (timeAuth.timeAuthorization) {
+      snapshot.timeAuthorization = timeAuth.timeAuthorization;
+    }
     return { ...snapshot, digest: digestOf(snapshot) };
   }
 
@@ -683,6 +749,16 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
     }
     if (message.content.length > LIMITS.utterance) {
       return unavailable("source_too_long");
+    }
+    const timeAuth = timeAuthorizationOf({
+      entry,
+      holderCharacterId: characterId,
+      sourceCharacterId,
+      contentMessage: message,
+      timeSourceId: parsed.timeSourceId,
+    });
+    if (!timeAuth.ok) {
+      return unavailable("time_authorization_invalid");
     }
     const link = entryLinkInfo(entry);
     if (link.reason) {
@@ -715,7 +791,8 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
         !originParsed ||
         (originParsed.kind !== "direct" && originParsed.kind !== "edit") ||
         originParsed.originLongEntryId !== parsed.originLongEntryId ||
-        originParsed.messageSourceId !== parsed.messageSourceId) {
+        originParsed.messageSourceId !== parsed.messageSourceId ||
+        originParsed.timeSourceId !== parsed.timeSourceId) {
         return unavailable("temporary_source_changed");
       }
     }
@@ -785,6 +862,9 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       holderLongIdentityId: longIdentityId,
       segments: [],
     };
+    if (timeAuth.timeAuthorization) {
+      snapshot.timeAuthorization = timeAuth.timeAuthorization;
+    }
     return { ...snapshot, digest: digestOf(snapshot) };
   }
 
