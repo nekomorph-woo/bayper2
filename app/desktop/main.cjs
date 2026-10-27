@@ -5,7 +5,7 @@ const readline = require("node:readline");
 const { fileURLToPath } = require("node:url");
 const { app, BrowserWindow, ipcMain, nativeImage, screen, session } = require("electron");
 const { acceptsNotificationIpc } = require("./notification-ipc.cjs");
-const { acceptsCanvasIpc, acceptsCanvasHit } = require("./canvas-ipc.cjs");
+const { acceptsCanvasIpc, acceptsCanvasHit, normalizeRestBoundaryKind } = require("./canvas-ipc.cjs");
 const { createAlphaCache, isBodyHit, readAlpha } = require("./hit-test.cjs");
 
 const profileDir = process.env.BAYPER_DESKTOP_PROFILE;
@@ -168,6 +168,8 @@ function syncHitFrame(state) {
         ...(animations.wave?.frames ?? []),
         ...(animations.stretch?.frames ?? []),
         ...(animations.sit?.frames ?? []),
+        ...(animations.drowsy?.frames ?? []),
+        ...(animations.sleep?.frames ?? []),
       ]
     : [];
   const display = animations?.display ?? null;
@@ -274,6 +276,7 @@ function reportNotificationWindow() {
   const message = {
     type: "notification-shown",
     visible: win.isVisible(),
+    actualVisible: win.isVisible(),
     shownAt: notificationShownAt,
     bounds: win.getBounds(),
     windowId: win.id,
@@ -448,6 +451,9 @@ function applyState(state) {
     mode: state.mode,
     resting: state.resting === true,
     restToken: Number.isInteger(state.restToken) ? state.restToken : 0,
+    sleepEligible: state.sleepEligible === true,
+    restSuspended: state.restSuspended === true,
+    systemPaused: state.systemPaused === true,
     activity: state.activity ?? null,
     displayKey: state.displayKey,
     epoch: canvasEpoch,
@@ -580,6 +586,7 @@ function registerIpc() {
       activityId: typeof payload?.activityId === "string" ? payload.activityId : "",
       characterId: typeof payload?.characterId === "string" ? payload.characterId : "",
       restToken: Number.isInteger(payload?.restToken) ? payload.restToken : 0,
+      boundaryKind: normalizeRestBoundaryKind(payload?.boundaryKind),
     });
   });
   ipcMain.on("canvas:activity-progress", (event, payload) => {

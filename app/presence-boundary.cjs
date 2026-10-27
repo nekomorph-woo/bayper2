@@ -18,6 +18,9 @@ function boundaryTimeoutFor(presentation) {
     animationDuration(animations?.idle),
     animationDuration(animations?.wave),
     animationDuration(animations?.sit),
+    // 困倦/睡眠阶段用同一个有限上限等待 sleep 循环末，不永久等下一次自然节点。
+    animationDuration(animations?.drowsy),
+    animationDuration(animations?.sleep),
   );
   return Math.max(MIN_NODE_TIMEOUT_MS, longest + NODE_TIMEOUT_MARGIN_MS);
 }

@@ -27,12 +27,23 @@ test("POL-DESKTOP-007 三角色各自基础动作同尺度裁剪，Hu/Cheng 保�
   assert.equal(rin.sit.loop, false);
   assert.equal(rin.sit.candidate, false);
   assert.deepEqual(rin.sit.frameSize, { width: 256, height: 384 });
-  // 四动作并集 215×314，按 128pt 主体统一缩放，不逐动作 fit。
-  assert.deepEqual(rin.display.visibleBox, { x: 32, y: 68, width: 215, height: 314 });
+  // 睡眠运行切片：drowsy/sleep 是待视觉验收的正式运行候选，不冒充已发布。
+  assert.equal(rin.drowsy.frames.length, 8);
+  assert.match(rin.drowsy.frames[0], /drowsy-pixel-v2-canvas256\/frame-00\.png$/);
+  assert.equal(rin.drowsy.loop, false);
+  assert.equal(rin.drowsy.candidate, true);
+  assert.deepEqual(rin.drowsy.frameSize, { width: 256, height: 384 });
+  assert.equal(rin.sleep.frames.length, 8);
+  assert.match(rin.sleep.frames[0], /sleep-pixel-v2-canvas256\/frame-00\.png$/);
+  assert.equal(rin.sleep.loop, true);
+  assert.equal(rin.sleep.candidate, true);
+  assert.deepEqual(rin.sleep.frameSize, { width: 256, height: 384 });
+  // 六动作共同并集 216×314；sleep 最左 x31 使窗口宽 89、scale 仍 128/314。
+  assert.deepEqual(rin.display.visibleBox, { x: 31, y: 68, width: 216, height: 314 });
   assert.ok(Math.abs(rin.display.scale - 128 / 314) < 1e-12);
-  assert.equal(rin.display.windowWidth, 88);
+  assert.equal(rin.display.windowWidth, 89);
   assert.equal(rin.display.windowHeight, 128);
-  assert.ok(Math.abs(rin.display.footAnchor.x - 96 * (128 / 314)) < 1e-9);
+  assert.ok(Math.abs(rin.display.footAnchor.x - 97 * (128 / 314)) < 1e-9);
   // 坐姿最低像素低于地面锚，锚点因此比窗口底部高约 2.45pt；完整轮廓保留。
   assert.ok(Math.abs(rin.display.footAnchor.y - 308 * (128 / 314)) < 1e-9);
 
@@ -77,6 +88,9 @@ test("POL-DESKTOP-007 三角色各自基础动作同尺度裁剪，Hu/Cheng 保�
     assert.equal(presentation.animations.display.targetPt, 128);
     // 未接入坐姿素材的角色保持 null，不借用凛的休息表现。
     assert.equal(presentation.animations.sit, null);
+    // 睡眠素材只属于凛，其他角色不临时借图或换服装。
+    assert.equal(presentation.animations.drowsy ?? null, null);
+    assert.equal(presentation.animations.sleep ?? null, null);
   }
 
   // 三项基础候选可各自触发日常伸展，但不是完整动作库或正式发布。

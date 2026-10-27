@@ -315,6 +315,8 @@ test("POL-DESKTOP-001/004 真实画布、管理窗口输入、关闭隐藏与退
       "wave-pixel-v1",
       "stretch-pixel-v2-canvas256",
       "sit-pixel-v2-canvas256",
+      "drowsy-pixel-v2-canvas256",
+      "sleep-pixel-v2-canvas256",
     ]);
     const snapshot = await waitForSnapshot(
       page,
@@ -1106,6 +1108,8 @@ test("POL-DESKTOP-007 真实画布 DOM 按共同包围裁切，点击招呼回�
       "wave-pixel-v1",
       "stretch-pixel-v2-canvas256",
       "sit-pixel-v2-canvas256",
+      "drowsy-pixel-v2-canvas256",
+      "sleep-pixel-v2-canvas256",
     ]);
     const rinDom = await readCanvasDom(page);
     assert.equal(rinDom.windowWidth, rinPlan.windowWidth);

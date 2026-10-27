@@ -370,3 +370,10 @@ master独立完整GUI10/10、0skip、exit0，证据`evidence/master-s03p-gui-LJc
 修复经过：第一次Runner漏SELECT id是ERROR；第二次暴露真实main memoryEntryForRenderer漏effective布尔，导致后端无效状态未到renderer。Claude补1行布尔投影，并把“只显示当前有效记忆”的矛盾文案改为来源失效会标注；不暴露sourceId等内部字段。测试补ID/更新命中和失败诊断。原两次失败保留；失效来源仍为协议夹具，不冒充公开撤权入口。
 
 受托决定：此记忆修复自洽且已独立验证，可单独snap；main仅暂存effective投影一行，睡眠/通知改动不混入。后端已有有限接受保持，真实模型语义及父级待办继续。
+
+
+## S07 凛睡眠运行：有限能力受托接受（2026-10-28）
+
+master独立POL-SLEEPUI-001/002/003/004A/004B/005/005B/005C/006/007共10/10 PASS，0skip、exit0、源码前后摘要一致；证据`evidence/master-sleep-gui-DEBjNHPB/`及`s07-sleep-runtime/master-sleep-gui-DEBjNHPB/`，10项隔离资源清理成功。公开活动服务16/16、协议/素材边界9/9独立通过。具体观察与各项覆盖见[s07-sleep-master-review.md](s07-sleep-master-review.md)和[开发者报告](s07-sleep-runtime-review.md)。
+
+受托接受范围为已测运行行为：真实20s静坐后困倦/睡眠、聊天唤醒、P0不打断、有限节点换人/探索、暂停/隐藏/错误恢复和透明命中。未覆盖最终人类体验、连续动画美术正式发布及其他角色服装动作。drowsy/sleep仍candidate，S07不作整体接受。通知010历史阅读期裁切仍未归因；通知渲染生产文件本批未修改，独立调查继续，不随此睡眠快照宣称修复。

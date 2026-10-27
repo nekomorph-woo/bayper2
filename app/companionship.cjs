@@ -406,7 +406,9 @@ function createCompanionshipService({
       }
       if (
         getState("current_character_id") === characterId &&
-        !isOnScreen(characterId)
+        !isOnScreen(characterId) &&
+        // 休息中的当前角色仍在屏，可在有限睡眠/休息边界由既有换人流程出发探索。
+        currentMode() !== "resting"
       ) {
         return "NOT_ON_SCREEN";
       }

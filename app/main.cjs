@@ -49,6 +49,8 @@ const TRAY_ICON_FILE = path.join(
   "frame-00.png",
 );
 const HEARTBEAT_MS = Math.max(200, Number(process.env.BAYPER_HEARTBEAT_MS) || 60000);
+// 真实静坐 20 秒后才允许困倦；不使用心跳或测试开关缩短正式行为。
+const REST_SLEEP_QUIET_MS = 20000;
 const NOTIFICATION_TICK_MS = Math.max(50, Number(process.env.BAYPER_NOTIFICATION_TICK_MS) || 100);
 const FALLBACK_NODE_MS = 2500;
 const CONNECTOR_REGISTRY_DIR_NAME = "herdr-registry";
@@ -102,6 +104,132 @@ function restTokenFor(characterId, resting) {
     restEpisode.characterId = characterId;
   }
   return restEpisode.token;
+}
+
+/* 单一休息静默计时器：只在合法休息事实与阻塞边界变化时建立/清除，
+   心跳和重复 state 不重置；锁屏/隐藏/错误/重建统一清表。 */
+let restQuiet = {
+  token: 0,
+  characterId: null,
+  blocked: true,
+  eligible: false,
+  timer: null,
+};
+
+function clearRestQuietTimer() {
+  if (restQuiet.timer) {
+    clearTimeout(restQuiet.timer);
+    restQuiet.timer = null;
+  }
+}
+
+function resetRestQuiet() {
+  clearRestQuietTimer();
+  restQuiet = {
+    token: 0,
+    characterId: null,
+    blocked: true,
+    eligible: false,
+    timer: null,
+  };
+}
+
+function restSuspendedNow(base) {
+  return Boolean(
+    quitting
+    || systemPaused
+    || !desktopVisible
+    || !desktopReady
+    || base?.assetState !== "ready",
+  );
+}
+
+function restQuietBlockedReason(base) {
+  if (!base || base.assetState !== "ready" || !base.resting || !base.animations?.sit) {
+    return "not-resting";
+  }
+  if (quitting || systemPaused || !desktopVisible || !desktopReady) {
+    return "paused-or-hidden";
+  }
+  const status = desktopHost?.getStatus();
+  if (!status || status.state !== "running" || status.assetState !== "ready") {
+    return "canvas-not-ready";
+  }
+  if (
+    !Number.isInteger(base.restToken)
+    || base.restToken <= 0
+    || status.restSettledToken !== base.restToken
+  ) {
+    return "not-settled";
+  }
+  if (activeChat) {
+    return "chat";
+  }
+  if (rotationPending) {
+    return "rotation";
+  }
+  if (base.activity?.status === "running") {
+    return "activity";
+  }
+  return null;
+}
+
+function scheduleRestQuiet(token, characterId) {
+  clearRestQuietTimer();
+  restQuiet.timer = setTimeout(() => {
+    restQuiet.timer = null;
+    const base = desktopPresentation();
+    if (
+      !base
+      || restQuiet.token !== token
+      || restQuiet.characterId !== characterId
+      || base.restToken !== token
+      || base.character?.id !== characterId
+      || restQuietBlockedReason(base)
+    ) {
+      return;
+    }
+    restQuiet.blocked = false;
+    restQuiet.eligible = true;
+    syncDesktop();
+  }, REST_SLEEP_QUIET_MS);
+  restQuiet.timer.unref?.();
+}
+
+function refreshRestQuiet(base) {
+  if (!base || !base.resting || !base.animations?.sit) {
+    resetRestQuiet();
+    return;
+  }
+  const token = base.restToken;
+  const characterId = base.character?.id ?? null;
+  if (restQuiet.token !== token || restQuiet.characterId !== characterId) {
+    clearRestQuietTimer();
+    restQuiet = {
+      token,
+      characterId,
+      blocked: true,
+      eligible: false,
+      timer: null,
+    };
+  }
+  const reason = restQuietBlockedReason(base);
+  if (reason) {
+    if (!restQuiet.blocked || restQuiet.eligible) {
+      clearRestQuietTimer();
+      restQuiet.blocked = true;
+      restQuiet.eligible = false;
+    }
+    return;
+  }
+  if (restQuiet.blocked) {
+    clearRestQuietTimer();
+    restQuiet.blocked = false;
+    restQuiet.eligible = false;
+  }
+  if (!restQuiet.eligible && !restQuiet.timer) {
+    scheduleRestQuiet(token, characterId);
+  }
 }
 
 function readDataDir(argv) {
@@ -448,11 +576,29 @@ function desktopPresentation() {
   };
 }
 
+function currentDesktopPresentation() {
+  const base = desktopPresentation();
+  refreshRestQuiet(base);
+  if (!base) {
+    return null;
+  }
+  const sameEpisode =
+    restQuiet.token === base.restToken
+    && restQuiet.characterId === (base.character?.id ?? null);
+  return {
+    ...base,
+    // 只表达“可以开始睡眠”，不新增角色行为状态；仍由 renderer 播放真实帧。
+    sleepEligible: sameEpisode && restQuiet.eligible === true,
+    restSuspended: restSuspendedNow(base),
+    systemPaused,
+  };
+}
+
 function syncDesktop() {
   if (!desktopHost || quitting) {
     return;
   }
-  const presentation = desktopPresentation();
+  const presentation = currentDesktopPresentation();
   if (!presentation) {
     // 角色消失时通知仍可能需要可见位置；由宿主决定是否保留子进程。
     desktopHost.stopRole();
@@ -778,7 +924,7 @@ function createTray() {
         tray?.refresh();
       },
       onRestartCanvas: async () => {
-        const presentation = desktopPresentation();
+        const presentation = currentDesktopPresentation();
         if (!presentation || !desktopHost) {
           return;
         }
@@ -797,6 +943,7 @@ function handleDesktopStatusChange(status = desktopHost?.getStatus()) {
   if (quitting) {
     return;
   }
+  const wasReady = desktopReady;
   const ready = status?.state === "running" && status?.assetState === "ready";
   if (status?.state === "failed" || status?.assetState === "error") {
     desktopReady = false;
@@ -807,6 +954,17 @@ function handleDesktopStatusChange(status = desktopHost?.getStatus()) {
     activityRuntime?.handleDesktopReady();
   } else {
     desktopReady = ready;
+  }
+  if (!ready) {
+    // 素材错误/子进程退出/重建：不留旧静默计时或可被误用的睡眠资格。
+    clearRestQuietTimer();
+    restQuiet.eligible = false;
+    restQuiet.blocked = true;
+  } else if (!wasReady) {
+    // 状态回调内直接 sync 会递归回 setStatus，推迟一拍再恢复展示。
+    setImmediate(() => {
+      if (!quitting && desktopHost) syncDesktop();
+    });
   }
   tray?.refresh();
   pushSnapshot();
@@ -819,6 +977,9 @@ function handleCanvasAssetError(message) {
   }
   console.error("角色画布素材错误：", message);
   desktopReady = false;
+  clearRestQuietTimer();
+  restQuiet.eligible = false;
+  restQuiet.blocked = true;
   activityRuntime?.handleDesktopUnavailable();
   ensurePendingRotationCompletion();
   pushSnapshot();
@@ -837,12 +998,45 @@ function runStoryRuntime() {
   }
 }
 
+/* 睡眠循环不是活动自然节点；但已排队的探索必须在有限睡眠边界经既有
+   启动/换人流程离桌，不能靠“sleep 不发 idle-loop”把它永久卡住。 */
+function startScheduledExplorationAtSleepBoundary() {
+  if (quitting || systemPaused || activeChat || !companionship) {
+    return;
+  }
+  const snapshot = companionship.getSnapshot();
+  const activity = snapshot.current?.activity;
+  if (
+    !activity
+    || activity.kind !== "exploration"
+    || activity.status !== "scheduled"
+  ) {
+    return;
+  }
+  try {
+    companionship.completeNaturalNode();
+    rotationPending = companionship.getSnapshot().pendingRotation;
+    runStoryRuntime();
+    syncDesktop();
+    pushSnapshot();
+    ensurePendingRotationCompletion();
+  } catch (error) {
+    console.error(`睡眠边界探索离桌失败：${error?.message ?? error}`);
+  }
+}
+
 function handleCanvasNodeComplete(node, message = {}) {
   if (quitting) {
     return;
   }
-  // 休息坐下/起身节点只表示真实播放收束，不参与日常/轮换的自然节点结算。
+  // 休息节点只表示真实播放收束，不参与日常/轮换的自然节点结算。
+  if (node === "rest-sleep-boundary") {
+    startScheduledExplorationAtSleepBoundary();
+    return;
+  }
   if (node === "rest-settled" || node === "rest-stand") {
+    // 真实坐下完成才启动本次 20s；起身/换人后 refresh 会清掉旧计时。
+    refreshRestQuiet(desktopPresentation());
     return;
   }
   // 真实播放完成是已经发生的事实；即使此时因锁屏/聊天刚暂停，也要记录，
@@ -1010,6 +1204,11 @@ function pauseForSystem() {
     // 系统暂停保留聊天会话与互动，但取消在途请求；暂停期间的 send/retry 另行拒绝。
     cancelActiveChatRequest();
     companionship.markClosed();
+    // 立即停表停帧；恢复后重新从 20s 开始，不续播半截困倦。
+    clearRestQuietTimer();
+    restQuiet.eligible = false;
+    restQuiet.blocked = true;
+    syncDesktop();
     pushSnapshot();
   } catch (error) {
     console.error("系统暂停结算失败：", error?.message ?? error);
@@ -1064,7 +1263,7 @@ async function waitForPresentationBoundary() {
   if (systemPaused || !desktopHost) {
     return;
   }
-  const presentation = desktopPresentation();
+  const presentation = currentDesktopPresentation();
   if (!presentation || presentation.assetState !== "ready") {
     return;
   }
@@ -1073,7 +1272,22 @@ async function waitForPresentationBoundary() {
   // rest-settled。
   if (presentation.resting && presentation.animations?.sit) {
     const restToken = presentation.restToken;
-    if (desktopHost.getStatus().restSettledToken === restToken) {
+    const status = desktopHost.getStatus();
+    // 困倦/睡眠/唤醒帧不能靠同 token 的旧 restSettled 立即放行；必须等当前
+    // 一次性段或 sleep 循环末的真实有限边界。旧 settled 只用于静坐态。
+    const sleepFrames = [
+      ...(presentation.animations.drowsy?.frames ?? []),
+      ...(presentation.animations.sleep?.frames ?? []),
+    ];
+    if (presentation.sleepEligible || sleepFrames.includes(status.displayedFrame)) {
+      const sleepResult = await desktopHost.waitForNodeBoundary(
+        boundaryTimeoutFor(presentation),
+        { node: "rest-sleep-boundary", restToken },
+      );
+      assertBoundaryCompleted(sleepResult);
+      return;
+    }
+    if (status.restSettledToken === restToken) {
       return;
     }
     const restResult = await desktopHost.waitForNodeBoundary(
@@ -1821,6 +2035,7 @@ function handleBeforeQuit(event) {
 }
 
 async function cleanup() {
+  clearRestQuietTimer();
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;

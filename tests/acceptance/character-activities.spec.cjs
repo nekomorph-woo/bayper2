@@ -1237,3 +1237,80 @@ test("POL-ACTIVITY-002 旧活动表缺动作列可原位迁移", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("POL-SLEEPUI-004B-ACTIVITY 休息中探索仍走公开服务且原门禁不被绕过", (t) => {
+  // 到达公开 requestActivity/completeNaturalNode 的真实服务；SQLite 持久事实。
+  const h = makeHarness(t, { ids: ["a", "b"] });
+  h.snapshot();
+  h.service.rest();
+  const requested = h.service.requestActivity({
+    activityId: "rest-explore-ok",
+    characterId: "a",
+    kind: "exploration",
+  });
+  assert.equal(requested.requested, true, JSON.stringify(requested));
+  assert.equal(h.activity("rest-explore-ok").status, "scheduled");
+  const energyBefore = h.stats("a").energy;
+  h.service.completeNaturalNode();
+  assert.equal(h.activity("rest-explore-ok").status, "running");
+  assert.equal(h.runtime("a").exploring, true);
+  assert.equal(h.snapshot().current.characterId, "b", "探索出发应有接替者");
+  near(h.stats("a").energy, energyBefore - 8);
+
+  const tired = makeHarness(t, { ids: ["a", "b"], energy: { a: 50 } });
+  tired.snapshot();
+  tired.service.rest();
+  const lowEnergy = tired.service.requestActivity({
+    activityId: "rest-explore-tired",
+    characterId: "a",
+    kind: "exploration",
+  });
+  assert.equal(lowEnergy.requested, false);
+  assert.equal(lowEnergy.reason, "LOW_ENERGY", "低精力仍须阻止探索");
+
+  const chatting = makeHarness(t, { ids: ["a", "b"] });
+  chatting.snapshot();
+  chatting.service.rest();
+  chatting.service.startInteraction("a");
+  const interaction = chatting.service.requestActivity({
+    activityId: "rest-explore-chat",
+    characterId: "a",
+    kind: "exploration",
+  });
+  assert.equal(interaction.requested, false);
+  assert.equal(interaction.reason, "INTERACTION", "交互中仍须阻止探索");
+
+  const solo = makeHarness(t, { ids: ["a"] });
+  solo.snapshot();
+  solo.service.rest();
+  const soloEnergy = solo.stats("a").energy;
+  solo.service.requestActivity({
+    activityId: "rest-explore-solo",
+    characterId: "a",
+    kind: "exploration",
+  });
+  solo.service.completeNaturalNode();
+  assert.equal(solo.activity("rest-explore-solo").status, "cancelled", "无接替者不得出发");
+  assert.equal(solo.runtime("a").exploring, false);
+  assert.equal(solo.snapshot().current.characterId, "a");
+  near(solo.stats("a").energy, soloEnergy, 0.01);
+
+  const quota = makeHarness(t, { ids: ["a", "b"] });
+  quota.exec(`
+    INSERT INTO character_activities
+      (activity_id, character_id, kind, status, duration_ms, active_elapsed_ms,
+       started_at, completed_at, created_at, updated_at)
+    VALUES
+      ('prior-exploration', 'b', 'exploration', 'completed', 900000, 900000,
+       ${START - 1000}, ${START}, ${START - 2000}, ${START})
+  `);
+  quota.snapshot();
+  quota.service.rest();
+  const limited = quota.service.requestActivity({
+    activityId: "rest-explore-quota",
+    characterId: "a",
+    kind: "exploration",
+  });
+  assert.equal(limited.requested, false);
+  assert.equal(limited.reason, "EXPLORATION_4H_LIMIT", "活动额度仍须阻止探索");
+});

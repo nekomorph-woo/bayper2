@@ -94,6 +94,8 @@ const ANIMATION_SETS = Object.freeze({
     wave: "wave-pixel-v1",
     stretch: "stretch-pixel-v2-canvas256",
     sit: "sit-pixel-v2-canvas256",
+    drowsy: "drowsy-pixel-v2-canvas256",
+    sleep: "sleep-pixel-v2-canvas256",
     candidate: false,
   },
   hu: {
@@ -126,14 +128,20 @@ function getAnimations(characterId) {
     const wave = loadAnimation(characterId, names.wave);
     const stretch = loadAnimation(characterId, names.stretch);
     const sit = names.sit ? loadAnimation(characterId, names.sit) : null;
+    const drowsy = names.drowsy ? loadAnimation(characterId, names.drowsy) : null;
+    const sleep = names.sleep ? loadAnimation(characterId, names.sleep) : null;
     animationCache.set(characterId, {
       idle: publicAnimation(idle, names.candidate),
       wave: publicAnimation(wave, names.candidate),
       stretch: publicAnimation(stretch, names.candidate),
       sit: sit ? publicAnimation(sit, names.candidate) : null,
-      // 四动作共用包围和尺度，避免坐下时逐动作 fit 造成呼吸式缩放。
+      // 睡眠运行候选仍待 master 视觉验收，不因接入运行就标为已发布。
+      drowsy: drowsy ? publicAnimation(drowsy, true) : null,
+      sleep: sleep ? publicAnimation(sleep, true) : null,
+      // 六动作共用包围和尺度，避免坐下/困倦/睡眠时逐动作 fit 造成呼吸式缩放。
       display: buildDisplayPlan(
-        [idle, wave, stretch, ...(sit ? [sit] : [])],
+        [idle, wave, stretch, ...(sit ? [sit] : []), ...(drowsy ? [drowsy] : []),
+          ...(sleep ? [sleep] : [])],
         idle.public.frameSize,
       ),
     });
@@ -182,7 +190,7 @@ function buildDesktopPresentation(characterId, displayName) {
       assetState: "ready",
       assetNote:
         characterId === "rin"
-          ? "凛 idle-pixel-v2；wave-pixel-v1 与 stretch-pixel-v2-canvas256 已通过播放验收"
+          ? "凛 idle-pixel-v2；wave/stretch/sit 已通过播放验收；drowsy/sleep 睡眠运行候选待视觉验收"
           : `${displayName} idle/wave/stretch 基础动作候选已接入，尚未完成视觉发布`,
       assetLabel:
         characterId === "rin"

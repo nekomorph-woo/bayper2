@@ -16,4 +16,11 @@ function acceptsCanvasHit({ sender, window, payload, epoch, displayKey }) {
   return true;
 }
 
-module.exports = { acceptsCanvasIpc, acceptsCanvasHit };
+/* 睡眠有限边界的种类白名单：只允许真实收束点，renderer 不能自造阶段名。 */
+const REST_BOUNDARY_KINDS = new Set(["drowsy-end", "sleep-end", "wake-end"]);
+
+function normalizeRestBoundaryKind(value) {
+  return typeof value === "string" && REST_BOUNDARY_KINDS.has(value) ? value : "";
+}
+
+module.exports = { acceptsCanvasIpc, acceptsCanvasHit, normalizeRestBoundaryKind };

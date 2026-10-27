@@ -106,3 +106,8 @@ S08 最终验收入口的 Part B 已在该 Contract 文件内按 setup/driver/ob
 - Runner：`node --test tests/acceptance/chat-memory-operations.spec.cjs`；`node --test --test-concurrency=1 --test-timeout=90000 tests/acceptance/memory-semantic-operations.spec.cjs`；`node --test --test-concurrency=1 tests/acceptance/chat-verification-ui.spec.cjs`。
 - 边界：真实 chat.sendMessage/store/SQLite；chat 与关系 HTTP 为构造；GUI 为真实 Electron + 构造 HTTP，不是真实模型/人类体验。C02/C03/C07 原 Expected 不改。
 - **master 有限接受**：独立后端 `evidence/master-s03o-b-core-HAu7KrCs` 313/313、独立 GUI `evidence/master-s03o-b-gui-M3KWYxVe` 9/9，均 0 skip/exit 0/before-after 一致；master 实际查看截图 `evidence/s03m-lifecycle/gui-shots/2026-10-27T16-01-26-121Z-30808`。接受仅限本批已测删除目标澄清，不是完整 S03；未覆盖真实模型/自然泛化、临时跨持有者/回答前到期独立 Case、GUI 多候选/同 identity/临时/self、correct 时间、完整 S03。规模 561 生产/1219 测试经 master 审查允许作为本片成果；未提前报告为执行偏差。
+
+
+## S07 睡眠运行验收入口
+
+方案与Case：[s07-sleep-runtime-plan.md](s07-sleep-runtime-plan.md)。运行 `node --test --test-concurrency=1 --test-timeout=180000 tests/acceptance/desktop-sleep.spec.cjs`；使用真实Electron/SQLite与隔离构造数据，不请求真实模型。master独立10项结果、清理及视觉边界见[s07-sleep-master-review.md](s07-sleep-master-review.md)。相关unit 9项、公开活动16项及rest/activity/desktop邻近回归各有独立或开发者证据，不混淆操作者。

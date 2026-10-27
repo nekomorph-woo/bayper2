@@ -70,6 +70,37 @@ function validRestStand(message, presentation, displayedGeneration) {
   );
 }
 
+/* 睡眠边界只证明当前困倦/睡眠/唤醒的真实收束点；必须同时匹配 boundaryKind、
+   对应末帧、本次休息 token、展示身份和显示代次，不能冒充 rest-settled。 */
+function validRestSleepBoundary(
+  message,
+  presentation,
+  displayedGeneration,
+  displayedKey,
+  displayedFrame,
+) {
+  const drowsyFrames = presentation?.animations?.drowsy?.frames ?? [];
+  const sleepFrames = presentation?.animations?.sleep?.frames ?? [];
+  const expectedFrames = {
+    "drowsy-end": drowsyFrames[drowsyFrames.length - 1],
+    "sleep-end": sleepFrames[sleepFrames.length - 1],
+    "wake-end": drowsyFrames[0],
+  };
+  const boundaryKind = message?.boundaryKind;
+  return Boolean(
+    Number.isInteger(presentation?.restToken)
+    && presentation.restToken > 0
+    && Number.isInteger(message?.restToken)
+    && message.restToken === presentation.restToken
+    && nodeMatchesPresentation(message.displayKey, presentation)
+    && Number.isInteger(message.generation)
+    && message.generation === displayedGeneration
+    && displayedKey === presentationAssetKey(presentation)
+    && expectedFrames[boundaryKind]
+    && displayedFrame === expectedFrames[boundaryKind],
+  );
+}
+
 function notificationPresentation(view, presentationId) {
   return view?.presentations.find((item) => item.presentationId === presentationId) ?? null;
 }
@@ -128,6 +159,8 @@ function createDesktopHost({
   const boundaryWaiters = new Set();
   // 只记录当前展示身份与休息代次下真实完成的坐下；换 token/身份/子进程即清空。
   let restSettled = { token: 0, displayKey: "", generation: null, at: null };
+  // 睡眠有限边界是另一类完成事实，绝不写入 restSettled。
+  let restSleepBoundary = { token: 0, displayKey: "", generation: null, at: null };
 
   /* 通知只走同一条子进程通道。父进程保存最近一次视图与 token；
      renderer 的回执必须同时匹配 token、generation 和当前呈现内容。 */
@@ -289,6 +322,7 @@ function createDesktopHost({
       rendererAssetError = false;
       assetErrorMessage = null;
       restSettled = { token: 0, displayKey: "", generation: null, at: null };
+      restSleepBoundary = { token: 0, displayKey: "", generation: null, at: null };
       status = {
         ...status,
         lastNode: null,
@@ -302,6 +336,7 @@ function createDesktopHost({
     lastPresentation = presentation;
     if (previous?.restToken !== presentation.restToken) {
       restSettled = { token: 0, displayKey: "", generation: null, at: null };
+      restSleepBoundary = { token: 0, displayKey: "", generation: null, at: null };
     }
   }
 
@@ -316,6 +351,7 @@ function createDesktopHost({
     channelReady = false;
     lastDisplayGeneration = null;
     restSettled = { token: 0, displayKey: "", generation: null, at: null };
+    restSleepBoundary = { token: 0, displayKey: "", generation: null, at: null };
 
     const env = {
       PATH: process.env.PATH || "/usr/bin:/bin:/usr/sbin:/sbin",
@@ -453,6 +489,23 @@ function createDesktopHost({
           generation: message.generation,
           at: Date.now(),
         };
+      } else if (node === "rest-sleep-boundary") {
+        if (!validRestSleepBoundary(
+          message,
+          lastPresentation,
+          lastDisplayGeneration,
+          status.displayedKey,
+          status.displayedFrame,
+        )) {
+          return;
+        }
+        // 只记睡眠有限边界；该事实不参与 restSettled，也不能放行坐下过渡。
+        restSleepBoundary = {
+          token: restToken,
+          displayKey: message.displayKey,
+          generation: message.generation,
+          at: Date.now(),
+        };
       } else if (node === "rest-stand" && !validRestStand(
         message,
         lastPresentation,
@@ -535,6 +588,8 @@ function createDesktopHost({
       const intendedVisible = notificationView?.visible !== false;
       setNotificationWindowFact({
         visible: message.visible === true && intendedVisible,
+        // 未经 intendedVisible 钳制的真实 BrowserWindow.isVisible，供验收核对。
+        actualVisible: message.actualVisible === true,
         shownAt: Number.isFinite(message.shownAt) ? message.shownAt : null,
         bounds: message.bounds ?? null,
         windowId: Number.isInteger(message.windowId) ? message.windowId : null,
@@ -607,6 +662,7 @@ function createDesktopHost({
     channelReady = false;
     lastDisplayGeneration = null;
     restSettled = { token: 0, displayKey: "", generation: null, at: null };
+    restSleepBoundary = { token: 0, displayKey: "", generation: null, at: null };
     notificationPanels.clear();
     setNotificationWindowFact({});
     clearReadyTimer();
@@ -736,12 +792,13 @@ function createDesktopHost({
     ) {
       return Promise.resolve({ ok: true, reason: "no-canvas-node" });
     }
-    // 休息坐下只接受本次 token 的 rest-settled；其他节点不得提前解除等待。
+    // 期望节点只接受当前节点的有限收束；困倦/睡眠边界同样不得冒充 rest-settled。
     const expectedNode = typeof options.node === "string" ? options.node : "";
     const expectedRestToken = Number.isInteger(options.restToken) ? options.restToken : 0;
-    const accepts = expectedNode === "rest-settled" && expectedRestToken > 0
+    const accepts = expectedNode
       ? (result) => !result?.ok
-        || (result.node === "rest-settled" && result.restToken === expectedRestToken)
+        || (result.node === expectedNode
+          && (!expectedRestToken || result.restToken === expectedRestToken))
       : null;
     return new Promise((resolve) => {
       const waiter = { resolve, timer: null, accepts };
@@ -884,6 +941,8 @@ function createDesktopHost({
       restToken: lastPresentation?.restToken ?? 0,
       restSettledToken: restSettled.token,
       restSettledAt: restSettled.at,
+      restSleepBoundaryToken: restSleepBoundary.token,
+      restSleepBoundaryAt: restSleepBoundary.at,
       notifications: notificationStatus(),
     };
   }
@@ -913,6 +972,7 @@ module.exports = {
   validActivitySource,
   validRestSettled,
   validRestStand,
+  validRestSleepBoundary,
   validateNotificationAck,
   validateNotificationClose,
 };

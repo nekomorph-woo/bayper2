@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld(
     onCancelDrag: (callback) => {
       ipcRenderer.on("canvas:cancel-drag", () => callback());
     },
-    nodeComplete: (node, displayKey, generation, activityId, characterId, restToken) =>
+    nodeComplete: (node, displayKey, generation, activityId, characterId, restToken, boundaryKind) =>
       ipcRenderer.send("canvas:node-complete", {
         node,
         displayKey,
@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld(
         activityId,
         characterId,
         restToken,
+        boundaryKind,
       }),
     activityProgress: (activityId, characterId, progress, displayKey, generation) =>
       ipcRenderer.send("canvas:activity-progress", {

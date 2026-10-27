@@ -60,12 +60,28 @@ function createAppTray({
 
   refresh();
 
-  return {
+  /* 验收专用：执行真实菜单项的既有 click 回调，不是改 DB 或模拟原生鼠标。
+     仅在显式调试端口环境下暴露，正式启动不创建全局句柄。 */
+  function trigger(label) {
+    const item = buildMenu().items.find((entry) => entry.label === label);
+    if (!item || typeof item.click !== "function") {
+      return false;
+    }
+    item.click(item);
+    return true;
+  }
+
+  const api = {
     refresh,
+    trigger,
     destroy() {
       tray.destroy();
     },
   };
+  if (process.env.BAYPER_DESKTOP_DEBUG_PORT) {
+    globalThis.__bayperTray = api;
+  }
+  return api;
 }
 
 module.exports = { createAppTray };

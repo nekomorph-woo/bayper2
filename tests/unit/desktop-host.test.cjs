@@ -6,6 +6,7 @@ const {
   validActivitySource,
   validRestSettled,
   validRestStand,
+  validRestSleepBoundary,
 } = require("../../app/desktop-host.cjs");
 
 test("POL-DESKTOP-005 迟到节点必须匹配当前展示身份", () => {
@@ -92,4 +93,87 @@ test("S07 休息完成必须匹配本次 token、展示身份、末帧与显示�
   // 起身短节点只校验当前身份/代次，不证明坐下完成。
   assert.equal(validRestStand({ ...base, node: "rest-stand" }, presentation, 9), true);
   assert.equal(validRestStand({ ...base, generation: 8 }, presentation, 9), false);
+});
+
+test("S07 睡眠边界只接受本次 token/身份/代次下的真实收束帧与种类", () => {
+  const frames = (name) => Array.from({ length: 8 }, (_, index) =>
+    `file://rin-${name}-0${index}.png`);
+  const presentation = {
+    character: { id: "rin" },
+    assetState: "ready",
+    animations: {
+      idle: { frames: ["file://rin-idle-00.png"] },
+      drowsy: { frames: frames("drowsy") },
+      sleep: { frames: frames("sleep") },
+    },
+    resting: true,
+    restToken: 5,
+  };
+  const shownKey = presentationAssetKey(presentation);
+  const base = {
+    node: "rest-sleep-boundary",
+    restToken: 5,
+    displayKey: shownKey,
+    generation: 11,
+    boundaryKind: "drowsy-end",
+  };
+  assert.equal(
+    validRestSleepBoundary(base, presentation, 11, shownKey, frames("drowsy")[7]),
+    true,
+  );
+  assert.equal(
+    validRestSleepBoundary(
+      { ...base, boundaryKind: "sleep-end" },
+      presentation,
+      11,
+      shownKey,
+      frames("sleep")[7],
+    ),
+    true,
+  );
+  assert.equal(
+    validRestSleepBoundary(
+      { ...base, boundaryKind: "wake-end" },
+      presentation,
+      11,
+      shownKey,
+      frames("drowsy")[0],
+    ),
+    true,
+  );
+  // 中间帧、错种类、旧 token/代次/身份、缺种类与旧 settled 都不得放行。
+  assert.equal(
+    validRestSleepBoundary(base, presentation, 11, shownKey, frames("drowsy")[3]),
+    false,
+  );
+  assert.equal(
+    validRestSleepBoundary(
+      { ...base, boundaryKind: "sleep-end" },
+      presentation,
+      11,
+      shownKey,
+      frames("drowsy")[7],
+    ),
+    false,
+  );
+  assert.equal(
+    validRestSleepBoundary({ ...base, boundaryKind: "" }, presentation, 11, shownKey, frames("drowsy")[7]),
+    false,
+  );
+  assert.equal(
+    validRestSleepBoundary({ ...base, restToken: 4 }, presentation, 11, shownKey, frames("drowsy")[7]),
+    false,
+  );
+  assert.equal(
+    validRestSleepBoundary(base, presentation, 10, shownKey, frames("drowsy")[7]),
+    false,
+  );
+  assert.equal(
+    validRestSleepBoundary(base, presentation, 11, "old-key", frames("drowsy")[7]),
+    false,
+  );
+  assert.equal(
+    validRestSleepBoundary(base, { ...presentation, restToken: 6 }, 11, shownKey, frames("drowsy")[7]),
+    false,
+  );
 });
