@@ -26,3 +26,13 @@
 主入口正式chat/memory/SQLite全部真实；dry-run只用本地HTTP构造做工具自检，不代表上述live通过。Case语义由master读真实请求、原始响应、DB与回复联合判定，不只关键词打分；例如307也可能因猜测出现，必须核实上下文。模型不同factKey造成重复属于待修业务FAIL，不能删除样例或强制固定key。工具只报告，不自动改prompt、参数或生产。
 
 首个实测以小批原始结果定位缺口；若要修生产，由master按实际证据更新既有计划、派Claude最小修复，再回归，不先搭新体系。
+
+## Part C：基线缺陷最小修复（master受托批准）
+
+依据aa2d09f与master基线，修复002终止句号差异和004宽候选主语不对称。允许app/memory.cjs、app/memory-explicit-remember.cjs及tests/acceptance/memory-explicit-remember.spec.cjs；不改全局sameBody/normalizeFactBody/strictFactFingerprint/normalizeGrounding，不改五个live Expected。
+
+提升兼容必须仅在explicitRemember为true、同角色同键且原有metadata/来源/删除/有效期门禁满足时启用；仅容忍句末中文句号“。”，不泛化删除ASCII句点或内部标点。既有正文/身份/来源/时间不变，真实提升只importance与version/contextVersion递增，重复调用不重复增。普通提炼幂等/冲突语义保持。
+
+授权比较使用同一局部规范，两侧一致，保留主体差别、否定、内部数字与标点；不得将“我们/角色/她/他”直接等同“我”。不得继续让部分数字前缀如30匹配307，或把1.2等同12。正向授权候选必须覆盖完整定位事实；必要的窄候选语义另行研究，不为保留宽松contains产生错误提升。混合宽候选应拦截并诚实澄清，独立事实仍正常处理。
+
+先以真实chat/SQLite构造重现原两项失败，再覆盖句号双向/幂等、不同数值与否定、主体变化、内部标点、带主语宽候选、窄+宽+独立事实、礼貌拒绝保存；保留业务断言与旧失败。仅新增当前必要子场景，代码预期小helper与局部条件，不扩NLP框架/新模型调用。master独立回归后再重跑固定live批次；原一般语义/异factKey能力仍待后续验收。
