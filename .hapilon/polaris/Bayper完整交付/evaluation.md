@@ -412,3 +412,8 @@ master独立最新4文件158/158（新Runner29项）、exit0/0skip/SHA一致，�
 | POL-REMEMBER-005 | PASS | 本轮来源控制、到期临时、删除、管理操作优先与事务故障/重试均通过 |
 
 本表限定计划的直接事实与同键同正文，不能推断真实模型、跨键语义、一般指代、自动整理或GUI通过。其他来源失效/并发组合沿父级既有Case继续验证，不把分支数量当完整产品接受。审查记录[s03r-master-review.md](s03r-master-review.md)。
+
+
+## S03s 真实模型明确记忆：NOT_COVERED
+
+POL-REMEMBER-LIVE-001～005尚未执行；S03r构造模型结果不得填入此表。见[s03s-live-remember-plan.md](s03s-live-remember-plan.md)。
