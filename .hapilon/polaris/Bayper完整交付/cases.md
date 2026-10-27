@@ -114,7 +114,7 @@ POL-COMPANION-004/006同时验证事务失败不留下精力已改但结算时�
 | S03 来源上下文 | POL-SOURCECTX-001～006（v1） | [s03l-source-context-plan.md](s03l-source-context-plan.md) | REQ-18/51/61 | 真实 store/chat/source | Codex 受托 v1 2026-10-27 |
 | S03 来源关系协议 | POL-SOURCE-REL-001～004（v1） | [s03l-source-grounding-plan.md](s03l-source-grounding-plan.md) | REQ-18/51 | 构造模型响应 | Codex 受托 v1 2026-10-27 |
 | S03 真实来源对照 | POL-SOURCE-LIVE-001（子项 01～12，v1） | [s03l-source-live-plan.md](s03l-source-live-plan.md) | REQ-18/51 | 正式聊天/真实模型 | Codex 受托 v1 2026-10-27 |
-| S03 显式纠正/忘记语义核验 | POL-SEMOP-001～008（v1，含 001a～d、004a～d、008a～c 等子项） | [s03m-semantic-operations-plan.md](s03m-semantic-operations-plan.md) | REQ-18/51/60/61 | 真实 SQLite/chat；构造 HTTP；L1/L2 真实模型与专属 GUI | master 受托 v1 2026-10-27（不是用户亲自确认）；尚未实现，执行结果 NOT_COVERED |
+| S03 显式纠正/忘记语义核验 | POL-SEMOP-001～008（v1，含 001a～d、004a～d、008a～c 等子项） | [s03m-semantic-operations-plan.md](s03m-semantic-operations-plan.md) | REQ-18/51/60/61 | 真实 SQLite/chat；构造 HTTP；L1/L2 真实模型与专属 GUI | master 受托 v1 2026-10-27（不是用户亲自确认）；008 已测有限能力经 master 19 套件 185/185 受托接受，但 008 聚合仍 NOT_COVERED（部分已验）；001～007 NOT_COVERED |
 | S03 来源身份 | POL-SOURCE-ID-001～004（v1） | [s03l-source-identity-plan.md](s03l-source-identity-plan.md) | REQ-09/18/51/60/61 | 真实 store/chat；模型 HTTP 构造；master 17 套件批次独立验收（有限能力） | 计划 Codex 受托确认 2026-10-27；实现 master 受托接受 2026-10-27；存量误合组迁移 v1 已另有限接受；UI/真实模型未验 |
 | S03 存量误合组迁移 | POL-MIG-001～006（v1） | [s03l-identity-migration-plan.md](s03l-identity-migration-plan.md) | REQ-09/18/51/60/61 | 真实 SQLite/构造旧库；master 独立 18 套件 170/170 验收为有限能力（2026-10-27） | master 已受托接受 v1 有限能力，不是用户亲自确认；无 GUI/API/真实模型；缺失历史边/孤儿旧键等边界保留 |
 | S04 来源权限基础 | POL-SOURCE-001～006（v1） | [s04a-plan.md](s04a-plan.md) | REQ-13 | 真实 SQLite/临时目录 | Codex 受托 v1（plan 首段） |

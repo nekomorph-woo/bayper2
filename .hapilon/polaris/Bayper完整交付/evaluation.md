@@ -5,7 +5,7 @@
 本文件是当前唯一逐 Case 结果入口。各 review 保留原始判断、失败过程和长证据说明，本文只登记可定位的结果，不复制全文。状态仅用 execution.md 的五种：PASS、FAIL、ERROR、INCONCLUSIVE、NOT_COVERED；不使用 PARTIAL，也不把多个 Case 压成平均分或“最差状态”。
 
 - 分组：仅当版本、状态、证据和执行边界相同时，一个精确 ID 范围可共用一行；任一 Case 或必需子项有差异即拆行。`001～003` 只表示这些 ID 满足本行，不覆盖范围外或未执行项。
-- 版本：历史行以对应 review/evidence 的验收基线与源摘要定位，未记录 commit 的不补猜。已提交快照为 `fff954f`（VERSION `0.1.186`）；本批准备 VERSION `0.1.187` 待 master snap。工作区未提交 memory 源码/测试的当前 SHA 见各 attempt 的 `code-sha256.txt`；[process-freeze.json](evidence/process-freeze.json) 仅保留流程补齐时点，不再作为当前实现基线。
+- 版本：历史行以对应 review/evidence 的验收基线与源摘要定位，未记录 commit 的不补猜。已提交快照为 `c2b3e95`（VERSION `0.1.187`）；本批准备 VERSION `0.1.188` 待 master snap。工作区未提交 memory 源码/测试的当前 SHA 见各 attempt 的 `code-sha256.txt`；[process-freeze.json](evidence/process-freeze.json) 仅保留流程补齐时点，不再作为当前实现基线。
 - master 已受托验收 7 个最终 Contract v1/Part A-B，GAP-14 流程补齐通过；GAP-01～14 流程处置完成（GAP-06 仅流程记录、产品修复未完成；GAP-08 原证据未找回限制保留）。master 另于 2026-10-27 受托接受**来源身份 v2 有限能力**与 **POL-MIG-001～006 v1 迁移有限能力**，均为 master 受托决定、不是用户亲自确认，且非 S03/Goal 完成；产品未交付。
 - 历史 PASS 只证明该验收基线，不证明当前未提交工作区。2026-10-27 master 最终 18 套件 **170/170 PASS、0 skipped、exit 0**（迁移 7 + 来源身份/关联/记忆等 17 套件），证据 [master-migration-YKY21Zj2](evidence/master-migration-YKY21Zj2/stdout.log)，前后代码 SHA 一致；未在该批执行的 UI、真实模型、holdout/source-live/pro 组保持历史状态与各自未覆盖边界，不写成当前通过。没有重跑就不写当前 PASS；当前工作区未验收也不能推断历史产品从未通过。
 - Runner 退出码、编译成功、开发报告全绿或 review 中的切片受托接受，均不自动升级为父级或整 Case 通过。体验记录已标明实际操作者、方法与局限；Codex 受托体验不是人类亲自体验，已有授权不要求真人重新批准。
@@ -91,7 +91,8 @@
 | POL-MIG-004（v1） | PASS | 同上 | 同上 | 同上 | 新显式关联、三角色 scope:self、防回流；同身份确认先过核验资格 |
 | POL-MIG-005（v1） | PASS | 同上 | 同上 | 同上 | 跨 identity 证实/非卷入/两类 trigger 回滚/关闭重开幂等/孤儿保留 |
 | POL-MIG-006（v1） | PASS | 同上 | 同上 | 同上 | 有向派生环边剔除后 union；单一已证明组件不递增 |
-| POL-SEMOP-001～008（v1） | NOT_COVERED | 2026-10-27 master 受托确认 v1/Part A-B；尚未实现 | 计划：`memory-semantic-operations.spec.cjs`、`chat-verification-ui.spec.cjs`、`operation-probe.cjs` | 无执行证据 | 两阶段/单消息/来源追溯/临时纠正/范围与真实模型尚未实现；不得预填 PASS |
+| POL-SEMOP-001～007（v1） | NOT_COVERED | 2026-10-27 master 受托确认 v1/Part A-B；首批未实现 | 计划：`memory-semantic-operations.spec.cjs`、`chat-verification-ui.spec.cjs`、`operation-probe.cjs` | 无执行证据 | 阶段 1/2、request 状态、临时跨角色传播、真实模型/GUI 未实现；不得预填 PASS |
+| POL-SEMOP-008（v1，聚合） | NOT_COVERED（部分已验） | 2026-10-27 master 独立 19 套件 **185/185 PASS、0 skipped、exit 0**，before/after SHA 一致；已测有限能力受托接受，不是用户亲自确认 | `tests/acceptance/memory-corrected-source.spec.cjs` 15/15 及本批 19 套件回归 | [master-corrected-source-TxA5THg1](evidence/master-corrected-source-TxA5THg1/stdout.log)、[本批摘要](evidence/s03m-corrected-source/summary.md) | 已验：008a 连续/多分句、C++/C 逐字、重复歧义；008b 真实 relay 传播副本、锚版本/删除/正文/歧义/权限、revision 历史/未来/溢出；segments/digest 篡改、消息变动、旧 direct、跨片段引用；008c 当日到期与伪造跨角色 current。未覆盖：同角色派生实际路径、真实 association 后刷新（现仅 SQL 增 version 兼容）、真实模型 L1/L2、跨角色临时传播、GUI；15 项全绿不等于 008 全部承诺通过 |
 
 POL-MIG-001～006 的 master 证据为 18 套件 **170/170 PASS、0 skipped、exit 0**，before/after SHA 一致；真实依赖为真实 SQLite + 构造旧库/旧 schema，无 GUI、API、真实模型或人工体验。迁移身份相关的 DDL/控制/alias 等在同一保存点内回滚已经由 POL-MIG-005 两类 trigger 验证。
 

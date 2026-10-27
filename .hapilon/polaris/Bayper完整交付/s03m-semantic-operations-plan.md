@@ -1,6 +1,6 @@
 # S03m 显式纠正/忘记的语义核验最小纵向切片（v1）
 
-2026-10-27，master 受托确认 POL-SEMOP-001～008 v1 及 Part A/B（不是用户亲自确认）。两阶段：阶段 1 本地已完成；阶段 2 系统核验独立候选，合格关联/操作在第二事务原子。阶段 2 失败不回滚阶段 1；只更新同一条 assistant 消息，不追加第二条。自动整理/定向共享/完整召回仍后续承接。本文件已并入 r3 审查的三处接口修正：关联后事务内版本重读、correct temporary 路径、corrected_v2 来源归属与 isCurrent。
+2026-10-27，master 受托确认 POL-SEMOP-001～008 v1 及 Part A/B（不是用户亲自确认）。两阶段：阶段 1 本地已完成；阶段 2 系统核验独立候选，合格关联/操作在第二事务原子。阶段 2 失败不回滚阶段 1；只更新同一条 assistant 消息，不追加第二条。自动整理/定向共享/完整召回仍后续承接。本文件已并入 r3 审查的三处接口修正：关联后事务内版本重读、correct temporary 路径、corrected_v2 来源归属与 isCurrent。首批已按 §8 收口：master 19 套件 185/185 受托接受已测有限能力，008 聚合仍 NOT_COVERED（部分已验），下一批第 2 批两阶段。
 
 ## 1. 实际契约与调查事实
 
@@ -35,7 +35,7 @@
 ### 2.3 来源追溯（008 必需）
 
 - 保留 `chat-correct:` 前缀与旧测试；解析内嵌 `chat:<messageId>`，核对角色、会话、消息 source_id、role=user、来源版本与正文证据。**不改 correct 既有正文/分句行为**。
-- 纠正正文可能由规范化分句拼接，不要求连续子串；来源证据用有限 `segments/offsets`（复用现有纠正提取逻辑重算），每段必须是原话实际片段，规范化拼接与 `memory.body` 相符。不得假称拼接内容是连续原话，也不额外持久化正文；segments 只是内存证据，含原话。
+- 纠正正文可能由规范化分句拼接，不要求连续子串；来源证据用有限 `segments/offsets`（复用现有纠正提取逻辑重算），每段必须是原话实际片段，按生产 join("，") 逐字重建 `memory.body`（不删除 C++/C、小数、负号等词内符号）。不得假称拼接内容是连续原话，也不额外持久化正文；segments 只是内存证据，含原话。
 - `corrected_v2` 明确区分：`sourceAnchorEntryId`/`sourceAnchorVersion`/`sourceAnchorIdentityId`（来源锚）、`sourceCharacterId`（说出原话的角色）、`holderCharacterId`（持有条目的角色）、`entryId`（被核验条目）。`isCurrent` 必须以 `holderCharacterId + entryId` 定位并重解析，不能用来源角色去读持有者条目；digest 覆盖锚 identity/版本/segments/消息内容/持有者/条目版本。
 - 传播副本沿 identity/关系**实际核验**到当前 `chat-correct:` 锚；可由 derivation 或 relation edge/同一已证明 identity 证明，不能仅凭 sourceCharacterId≠holderCharacterId 推断派生。`direct=false`、`via="identity_correction"`；来源角色与持有角色相同也可为派生，需按关系判断，不冒充直接告知。
 - `chat-current:` 是本片临时纠正所需的真实带时效来源格式：解析内嵌 chat 消息、当前事实条目/版本、`expiresAt` 与 segments；到期后 unavailable，长期条目不受影响。外部来源仍 unsupported 边界。
@@ -96,7 +96,7 @@
 - **Oracle**：entries/FTS/controls/aliases/derivations、重扫返回值、显式同意路径。
 
 ### POL-SEMOP-008 纠正来源追溯（P0）
-- **008a 直接纠正**：解析 `chat-correct:` 内嵌消息与 segments；直接连续原话与规范化多片段两种形态都验；每段原文存在，规范化拼接匹配 body；不要求连续子串、不改 correct 正文。
+- **008a 直接纠正**：解析 `chat-correct:` 内嵌消息与 segments；直接连续原话与多分句两种形态都验；每段原文存在，按生产 join 逐字重建 body；不要求连续子串、不改 correct 正文。
 - **008b 传播副本**：沿 identity/关系实际核验到当前锚，`direct=false`/`via=identity_correction`；来源角色≠持有角色合法，来源角色=持有者也可能是派生；旧 `chat-correct:` 断言不变。
 - **008c 失效**：旧来源删除/权限/消息变更/锚版本变化 → isCurrent=false；`chat-current` 临时来源真实可核验且到期失效；外部 unsupported 仅边界。
 - **Oracle**：snapshot 的 `sourceAnchorEntryId/Version/IdentityId`、`sourceCharacterId`、`holderCharacterId`、segments/offsets、message/entry/version、isCurrent、关系 pair 输入。
@@ -117,16 +117,17 @@
 - **direct_v1（旧形状不变）**：`status, characterId, holderCharacterId, speaker, entryId, entryVersion, sourceId, sourceVersion, contextVersion, sourceCreatedAt, excerpt, sourceMessage, messages, contextIncomplete, digest`；`characterId===holderCharacterId`。
 - **corrected_v2（新增）**：上述字段 + `format:"corrected_v2"`、`sourceAnchorEntryId`、`sourceAnchorVersion`、`sourceAnchorIdentityId`、`sourceCharacterId`、`holderCharacterId`、`direct`、`via`、`segments:[{messageId,start,end,text}]`。直接纠正：`direct=true`、`via="corrected_chat"`、source/holder 可相同。传播副本：`direct=false`、`via="identity_correction"`，source/holder 可不同也可相同，但必须由 derivation/relation edge/同一已证明 identity 支撑，不能只凭角色不同推断。
 - `isCurrent(snapshot)` 先用 snapshot 自身字段重算 digest，再以 `holderCharacterId + entryId` 调用 `resolve`；比较 `sourceAnchorEntryId/Version/IdentityId`、segments、source 消息内容、entry/context 版本与来源控制；任一变化 false。不得用 `sourceCharacterId` 读持有者条目。
-- segments 由复用现有纠正提取逻辑的纯函数重算（如 `locateCorrectionSegments({userText, body})`），不额外持久化正文；无法唯一重算 → unavailable。
+- segments 由复用现有纠正提取逻辑的纯函数重算（如 `locateCorrectionSegments({userText, body})`），不额外持久化正文；只接受与生产 `correctionBody` 的 `join("，")` 逐字一致的重建，不删词内标点（C++/C、C#/C、小数、负号）。同一 body 有多个匹配位置或重复命题时视为歧义 → unavailable，不取第一个。
+- 解析 `chat-correct:`/`corrected:` 内嵌 revision 时必须为安全正整数且不超过当前 entry.version；未来或溢出拒绝。association 递增版本后，较早的历史 revision 仍可解析。
 - 传播副本通过 `factIdentityId` 找唯一当前 `chat-correct:` 锚，并核验 derivation/relation edge 或同一 identity；多个/缺失/关系不成立 → unavailable。`chat-current:` 支持带 `expiresAt` 的临时来源，到期 unavailable；外部来源仍 unsupported。
 
 ### 4.3 关系协议兼容
 
 - 不增导出、不改 `POLICY_VERSION`。`normalizeSourceContext` 分支：
   - 无 `format`：旧 direct 校验完全不变。
-  - `corrected_v2`：要求 `sourceAnchorEntryId/Version/IdentityId`、`sourceCharacterId`、`holderCharacterId`、`direct` 布尔、`via` 枚举、`segments` 非空有界；每段为 sourceMessage 的实际 slice、messageId 匹配；规范化拼接等于 normalized excerpt；`direct=false` 时要求 `via=identity_correction`，并由调用方/快照提供 derivation/relation/identity 证明，不要求来源角色≠持有角色；`holder===holderCharacterId`。
-- `quoteSourcesOf`：direct 保持 text/utterance/context；corrected 只用 text + segment.text，不把完整 utterance 当引用来源，避免跨片段拼接。
-- `incompleteReasons`：corrected 的自足判断只看 segments/text；prompt 增“segments 是分离原话片段，不得拼接；direct=false 表示经 identity 传播，不是接收者被直接告知；来源角色/持有角色/direct/via 是 metadata，不是主体”。
+  - `corrected_v2`：要求 `sourceAnchorEntryId/Version/IdentityId`、`sourceCharacterId`、`holderCharacterId`、`direct` 布尔、`via` 枚举、`segments` 非空有界；每段为 sourceMessage 的实际 slice、messageId 匹配；按生产 join("，") 逐字重建 excerpt；不删除词内标点；`direct=false` 时要求 `via=identity_correction`，并由调用方/快照提供 derivation/relation/identity 证明，不要求来源角色≠持有角色；`holder===holderCharacterId`。
+- `quoteSourcesOf`：direct 保持 text/utterance/context；corrected 只能取单个实际 segment 或单条实际保留前文，不把 canonical `text`（拼接正文）或完整 utterance 当作连续原话；跨片段拼接的引用必须拒绝。
+- `incompleteReasons`：corrected 的自足判断只看 segments；prompt 增“segments 是分离原话片段，不得拼接；direct=false 表示经 identity 传播，不是接收者被直接告知；来源角色/持有角色/direct/via 是 metadata，不是主体”。
 - 旧 direct 快照与旧协议测试不变；新增分支测试。
 
 ### 4.4 记忆内部窄接口
@@ -160,7 +161,7 @@
 
 ## 5. Part B：验收计划
 
-- **B1 确定性**：真实 `createStore`/`chat.sendMessage`/SQLite + 本机 HTTP；覆盖 001～008 全部子项，含 001d 临时到期/隔日、004d 多候选连合、008 连续原话与规范化多片段；003 走最小 renderer/IPC + 专属 GUI（阶段 1 先显示、阶段 2 原位刷新、取消/关闭/重启）。所有 request/proof/status/消息/逐表断言独立。
+- **B1 确定性**：真实 `createStore`/`chat.sendMessage`/SQLite + 本机 HTTP；覆盖 001～008 全部子项，含 001d 临时到期/隔日、004d 多候选连合、008 连续原话与多分句；003 走最小 renderer/IPC + 专属 GUI（阶段 1 先显示、阶段 2 原位刷新、取消/关闭/重启）。所有 request/proof/status/消息/逐表断言独立。
 - **B2 L1**：构造聊天 envelope，关系真实 DeepSeek；**B2 L2**：真实 chat + 真实 DeepSeek 全链。两者都执行，凭据已有授权，master 安排；1 次/操作、无重试、15s。负例含 A/B 同一句“我”、旧 06/11、同主体不同时间、否定、参与者不完整；正例含不同 factKey 同义。Expected 不发送、不修改。
 - L2 falseMerge 必须 0；未匹配正例如实 FAIL。最多两轮有依据调整（候选/证据/门），无收益保留失败并换方案，不无限调 prompt。构造数据全绿也不称语义完成；候选召回提升另列后续。
 
@@ -175,3 +176,10 @@
 - 回归：`chat-memory-operations`、`chat-exclusive`、`chat.spec`、`memory-source-context`、`memory-relation-protocol`、`memory-association`、`memory.spec`、`memory-sharing/exclusive/relay`、现有 18 套件及 GUI 聊天套件。旧 Expected/前缀/直接快照不变；新增字段与 `ALTER TABLE` 需旧库验证。
 - 阻塞：无正文 `operation_proof` 的 forget 控制哈希需在实现时定具体列；阶段 2 后台 promise 的 renderer 刷新需最小事件接线，尚无现有聊天轮询；`chat-current` 与 corrected_v2 需同时兼容旧 direct；关系协议 corrected 分支需避免旧 direct 行为变化。
 - 已受托解决：阶段 2 any failure 整笔回滚、不保留关联；self/all 范围；临时纠正路径；多候选连合版本重读；最小澄清用具体事实。剩余仅实现细节与 L2 两轮停止条件，不再改业务 Expected。
+
+## 8. 首批收口与下一批（2026-10-27）
+
+- master 独立运行 **19 套件 185/185 PASS、0 skipped、exit 0**，before/after SHA 一致，证据 `evidence/master-corrected-source-TxA5THg1/`；受托接受首批来源追溯与协议的**已测有限能力**，不是用户亲自确认，不代表 S03m/S03 完成。
+- **008 聚合仍 NOT_COVERED（部分已验）**：已验 008a 连续/多分句、C++/C 逐字、重复歧义；008b 真实 relay 传播副本、锚版本/删除/正文/歧义/权限、revision 历史/未来/溢出；segments/digest 篡改、消息变动、旧 direct、跨片段引用；008c 当日到期与伪造跨角色 current。
+- 未覆盖：同角色派生实际路径、真实 association 后刷新（当前仅 SQL 增 version 兼容）、真实模型 L1/L2、跨角色临时传播、GUI。15 项全绿不等于 008 全部承诺通过。
+- 下一批按第 2 批推进真正两阶段接口（阶段 1/2、request 状态、取消/重启、最小 UI/IPC）；不继续无边界来源探针。本批只做文档与版本收口，VERSION `0.1.188` 待 master snap。
