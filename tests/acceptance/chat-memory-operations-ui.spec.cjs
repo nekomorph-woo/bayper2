@@ -162,7 +162,7 @@ function readMemoryRows(dataDir, characterId) {
 }
 function readShareCount(dataDir) {
   const db = openDb(dataDir, true);
-  try { return db.prepare("SELECT COUNT(*) AS count FROM memory_share_controls").get().count; }
+  try { return db.prepare("SELECT COUNT(*) AS count FROM memory_share_identity_controls").get().count; }
   finally { db.close(); }
 }
 function withStore(dataDir, fn) {

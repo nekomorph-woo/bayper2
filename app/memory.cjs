@@ -10,6 +10,12 @@
 const crypto = require("node:crypto");
 const { createMemoryStore } = require("./memory-store.cjs");
 const {
+  factKeyHash,
+  identityFingerprint,
+  normalizeFactBody,
+  strictFactFingerprint,
+} = require("./memory-fact-identity.cjs");
+const {
   RETRIEVAL_CONFIG,
   RETRIEVAL_STRATEGIES,
   buildSearchQuery,
@@ -182,7 +188,12 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
      版本核验放在事务内，避免列表与提交之间被新理解覆盖。 */
   function factForSelectedChange(input, characterId) {
     if (input.entryId === undefined) {
-      return { factKey: cleanText(input.factKey, "事实键", LIMITS.factKey), entryId: null };
+      const factKey = cleanText(input.factKey, "事实键", LIMITS.factKey);
+      return {
+        factKey,
+        entryId: null,
+        entry: store.getEntryByFact(characterId, factKey),
+      };
     }
     const entryId = cleanText(input.entryId, "记忆ID", 200);
     const selected = store.getEntryById(entryId);
@@ -197,7 +208,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     } else {
       throw new MemoryError("INVALID_INPUT", "记忆版本不能为空。");
     }
-    return { factKey: selected.factKey, entryId };
+    return { factKey: selected.factKey, entryId, entry: selected };
   }
 
   function limitOf(value, fallback, max) {
@@ -210,16 +221,144 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     return Math.min(value, max);
   }
 
-  function factKeyHash(factKey) {
-    return crypto.createHash("sha256").update(factKey, "utf8").digest("hex");
-  }
-
   function sourceIdHash(sourceId) {
     return crypto.createHash("sha256").update(sourceId, "utf8").digest("hex");
   }
 
   function newEntryId() {
     return crypto.randomUUID();
+  }
+
+  /* 事实身份：factKey 只定位当前角色条目，传播范围由不透明身份决定。
+     新用户事实仅在严格同文条件满足时复用身份；分享/转告等真实派生直接
+     继承来源身份。旧条目若无身份，先在本次事务内补齐再按身份展开。 */
+  function reusableIdentityOf(fact) {
+    const fingerprint = identityFingerprint(fact);
+    if (!fingerprint) {
+      return { fingerprint: null, identityId: null };
+    }
+    return { fingerprint, identityId: store.getAliasIdentity(fingerprint) };
+  }
+
+  function createIdentity(fact, fingerprint) {
+    const identityId = newEntryId();
+    store.insertFactIdentity(identityId, fact.createdAt);
+    if (fingerprint) {
+      store.registerAlias(fingerprint, identityId, fact.createdAt);
+    }
+    return identityId;
+  }
+
+  function identityOfEntry(entry, at) {
+    if (entry.factIdentityId) {
+      return entry.factIdentityId;
+    }
+    const reusable = reusableIdentityOf(entry);
+    const identityId =
+      reusable.identityId ?? createIdentity({ ...entry, createdAt: at }, reusable.fingerprint);
+    store.setEntryIdentity(entry.id, identityId);
+    entry.factIdentityId = identityId;
+    return identityId;
+  }
+
+  /* 与当前正文指纹相关的全部身份。歧义指纹不挑首项，控制检查覆盖整组，
+     避免靠新分配身份绕过 forget/share 限制。 */
+  function relatedIdentityIds(entry) {
+    const identityIds = new Set();
+    if (entry.factIdentityId) {
+      identityIds.add(entry.factIdentityId);
+    }
+    const fingerprint = identityFingerprint(entry);
+    if (fingerprint) {
+      for (const identityId of store.listAliasIdentityIds(fingerprint)) {
+        identityIds.add(identityId);
+      }
+    }
+    return [...identityIds].sort();
+  }
+
+  /* 禁分享按身份判范围；无法定位身份的历史控制仅在仍是孤儿时按旧键兼容。 */
+  function isShareRestricted(entry) {
+    if (
+      relatedIdentityIds(entry).some((identityId) =>
+        store.hasShareIdentityControl(identityId),
+      )
+    ) {
+      return true;
+    }
+    const legacy = store.getShareControl(factKeyHash(entry.factKey));
+    return Boolean(legacy && legacy.identity_id === null);
+  }
+
+  /* 写入时的忘记保护：身份组内任一控制、本角色已删除原文的严格指纹，
+     或无法定位身份的孤儿旧控制，都阻止无明确许可的重学。显式新许可仍按
+     既有规则，且来源控制始终优先。 */
+  function insertForgetBlocked(characterId, relatedIds, deletedFingerprint, factKey) {
+    if (
+      relatedIds.some((identityId) =>
+        store.hasForgetIdentityControl(characterId, identityId),
+      )
+    ) {
+      return true;
+    }
+    if (
+      deletedFingerprint &&
+      store.hasDeletedFactFingerprint(characterId, deletedFingerprint)
+    ) {
+      return true;
+    }
+    // 无现存条目可恢复身份的旧控制，只能按旧键保留兼容保护。
+    const legacy = store.getForgetControl(characterId, factKeyHash(factKey));
+    return Boolean(legacy && legacy.identity_id === null);
+  }
+
+  function deletedFingerprintOf(entry) {
+    return strictFactFingerprint(entry);
+  }
+
+  function sameFactMetadata(left, right) {
+    return (
+      left.kind === right.kind &&
+      left.trust === right.trust &&
+      (left.sourceKind ?? "user") === (right.sourceKind ?? "user") &&
+      (left.expiresAt ?? null) === (right.expiresAt ?? null)
+    );
+  }
+
+  /* 分享/转告接收者：逐身份检查相关控制，并核对接收者已删除原文的
+     本角色指纹；孤儿旧行按旧键兼容。删除指纹只阻止该角色学回同文，
+     不合并双方身份。 */
+  function recipientForgetBlocked(
+    characterId,
+    relatedIds,
+    deletedFingerprint,
+    factKey,
+  ) {
+    if (
+      relatedIds.some((identityId) =>
+        store.hasForgetIdentityControl(characterId, identityId),
+      )
+    ) {
+      return true;
+    }
+    if (
+      deletedFingerprint &&
+      store.hasDeletedFactFingerprint(characterId, deletedFingerprint)
+    ) {
+      return true;
+    }
+    const legacy = store.getForgetControl(characterId, factKeyHash(factKey));
+    return Boolean(legacy && legacy.identity_id === null);
+  }
+
+  function holdersOfIdentity(identityId) {
+    return [
+      ...new Set(store.listEntriesByIdentity(identityId).map((entry) => entry.characterId)),
+    ].sort();
+  }
+
+  function sameBody(left, right) {
+    return normalizeFactBody(left) === normalizeFactBody(right);
   }
 
   /* 同一来源可以产生多个 factKey。单条 remember 以 (角色, factKey) 幂等；
@@ -250,24 +389,64 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     };
   }
 
-  /* 在已有事务内写入一条事实；调用方负责提交/回滚与上下文版本递增。 */
+  /* 在已有事务内写入一条事实；调用方负责提交/回滚与上下文版本递增。
+     同角色同键但正文不同不再静默当作已持有：保留旧条目并返回明确冲突，
+     不覆盖；相同身份的新事实复用身份，使后续纠正、删除与禁分享按同一个
+     事实传播。 */
   function insertFactIfAllowed(fact) {
     // 旧来源重扫永远不是新许可；即使显式同意也不能用被控制过的旧来源回填。
     if (store.hasSourceControl(fact.characterId, sourceIdHash(fact.sourceId))) {
       return { created: false, blocked: "source", entry: null };
     }
-    if (!fact.explicitConsent && store.hasForgetControl(fact.characterId, factKeyHash(fact.factKey))) {
-      return { created: false, blocked: "forget", entry: null };
-    }
     const existing = store.getEntryByFact(fact.characterId, fact.factKey);
     if (existing) {
+      if (!sameBody(existing.body, fact.body)) {
+        return {
+          created: false,
+          blocked: null,
+          conflict: "fact_key_body",
+          entry: existing,
+        };
+      }
+      if (!sameFactMetadata(existing, fact)) {
+        return {
+          created: false,
+          blocked: null,
+          conflict: "fact_key_metadata",
+          entry: existing,
+        };
+      }
       return { created: false, blocked: null, entry: existing };
     }
+
+    const reusable = reusableIdentityOf(fact);
+    // 同一角色已在另一个键下持有同一身份：复用该条目，不制造跨键副本。
+    if (reusable.identityId) {
+      const heldSameIdentity = store.getEntryByCharacterIdentity(
+        fact.characterId,
+        reusable.identityId,
+      );
+      if (heldSameIdentity) {
+        return { created: false, blocked: null, entry: heldSameIdentity };
+      }
+    }
+    const deletedFingerprint = deletedFingerprintOf(fact);
+    if (!fact.explicitConsent && insertForgetBlocked(
+      fact.characterId,
+      reusable.fingerprint ? store.listAliasIdentityIds(reusable.fingerprint) : [],
+      deletedFingerprint,
+      fact.factKey,
+    )) {
+      return { created: false, blocked: "forget", entry: null };
+    }
+    const identityId =
+      reusable.identityId ?? createIdentity(fact, reusable.fingerprint);
 
     const entry = {
       id: newEntryId(),
       characterId: fact.characterId,
       factKey: fact.factKey,
+      factIdentityId: identityId,
       originCharacterId: fact.originCharacterId,
       derivedFromEntryId: null,
       kind: fact.kind,
@@ -389,7 +568,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     return {
       entries: rows.slice(0, pageSize).map((entry) => ({
         ...entry,
-        sharingRestricted: store.hasShareControl(factKeyHash(entry.factKey)),
+        sharingRestricted: isShareRestricted(entry),
       })),
       page,
       pageSize,
@@ -505,9 +684,10 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     return executeSearch(characterId, input.query, strategy, nowMs, limit, strategy);
   }
 
-  /* 只按显式 factKey 定位纠正；调用方没有事实键时不会凭相似度猜测。
-     r2：任何当前已知持有者（含共享派生持有者）都可以发起纠正；同步更新同事实
-     的原始与派生持有者，不给未知角色新增。派生身份用于来源可追溯，不限制管理。 */
+  /* 只按显式 factKey 或稳定条目定位纠正；调用方没有事实键时不会凭相似度猜测。
+     任何当前已知持有者（含派生持有者）都可发起纠正；传播范围是条目的实际
+     事实身份，而不是模型 factKey。身份在纠正后不变，新正文指纹也登记到同一
+     身份，供之后的控制与重学判断使用。 */
   function correct(input = {}) {
     const characterId = characterIdOf(input.characterId);
     const body = bodyOf(input.body);
@@ -522,12 +702,12 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     const sourceVersion = input.sourceVersion === undefined ? null : sourceVersionOf(input.sourceVersion);
 
     const applyCorrection = () => {
-      const { factKey } = factForSelectedChange(input, characterId);
-      const held = store.getEntryByFact(characterId, factKey);
+      const { entry: held } = factForSelectedChange(input, characterId);
       if (!held) {
         throw new MemoryError("FACT_NOT_HELD", "当前角色没有该事实，不能发起纠正。");
       }
-      const entries = store.listEntriesByFact(factKey);
+      const identityId = identityOfEntry(held, nowMs);
+      const entries = store.listEntriesByIdentity(identityId);
       if (sourceId !== null) {
         for (const entry of entries) {
           if (entry.sourceId === sourceId) {
@@ -576,6 +756,18 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
         }
       }
 
+      // 新正文指纹仍指向同一身份；旧指纹不删除，旧正文重学也只能回到这里。
+      const correctedFingerprint = identityFingerprint({
+        kind: held.kind,
+        trust: trustProvided ? trust : held.trust,
+        sourceKind: "user",
+        expiresAt: expiresProvided ? expiresAt : held.expiresAt,
+        body,
+      });
+      if (correctedFingerprint) {
+        store.registerAlias(correctedFingerprint, identityId, nowMs);
+      }
+
       const contextVersions = {};
       for (const holder of affected) {
         contextVersions[holder] = store.bumpContextVersion(holder, nowMs);
@@ -594,9 +786,9 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       : store.transaction(applyCorrection);
   }
 
-  /* scope='self' 只让当前角色忘记；默认 'all' 清除该事实键的已知持有者。
+  /* scope='self' 只让当前角色忘记；默认 'all' 清除该事实身份的全部已知持有者。
      任何当前已知持有者（含共享派生持有者）都可发起默认删除；未知角色不新增。
-     控制表只保存事实键摘要与来源引用哈希，不保存被删正文。
+     控制表只保存身份标识、事实键摘要与来源引用哈希，不保存被删正文。
      sourceIdsToExclude 用于聊天删除命令：保留聊天原文，但该来源不再进入
      后续记忆上下文或旧提炼重试。 */
   function forget(input = {}) {
@@ -615,20 +807,24 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     );
 
     const applyForget = () => {
-      const { factKey } = factForSelectedChange(input, characterId);
-      const hash = factKeyHash(factKey);
-      const held = store.getEntryByFact(characterId, factKey);
+      const { entry: held } = factForSelectedChange(input, characterId);
       if (!held) {
         throw new MemoryError("FACT_NOT_HELD", "当前角色没有该事实，不能执行删除。");
       }
+      const identityId = identityOfEntry(held, nowMs);
 
-      const entries = store.listEntriesByFact(factKey);
+      const entries = store.listEntriesByIdentity(identityId);
       const targets = scope === "all" ? entries : entries.filter((entry) => entry.characterId === characterId);
       const affected = new Set();
       for (const entry of targets) {
         store.deleteEntry(entry.id);
         store.addSourceControl(entry.characterId, sourceIdHash(entry.sourceId), nowMs);
-        store.addForgetControl(entry.characterId, hash, nowMs);
+        store.addForgetIdentityControl(entry.characterId, identityId, nowMs);
+        store.addDeletedFactFingerprint(
+          entry.characterId,
+          deletedFingerprintOf(entry),
+          nowMs,
+        );
         affected.add(entry.characterId);
       }
       for (const sourceId of excludedSources) {
@@ -649,7 +845,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
   }
 
   /* 用户明确“这件事只让你记得”：保留选中角色当前持有内容，清除其他持有者
-     同一事实键的正文与索引，并以无正文控制阻止旧来源重学、历史转告与再次分享。
+     同一事实身份的正文与索引，并以无正文控制阻止旧来源重学、历史转告与再次分享。
      保留者只递增版本使在途操作失效，不改动来源与讲述链；因此原本只是听说的
      记忆在原始持有者被清除后，仍能说明最初来源和直接讲述者。 */
   function keepExclusive(input = {}) {
@@ -659,18 +855,18 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       if (input.entryId === undefined) {
         throw new MemoryError("INVALID_INPUT", "必须指定选中的记忆。");
       }
-      const { factKey } = factForSelectedChange(input, characterId);
-      const held = store.getEntryByFact(characterId, factKey);
+      const { entry: held } = factForSelectedChange(input, characterId);
       if (!held) {
         throw new MemoryError("FACT_NOT_HELD", "当前角色没有该事实。");
       }
-      const hash = factKeyHash(factKey);
+      const identityId = identityOfEntry(held, nowMs);
+      const hash = factKeyHash(held.factKey);
       const others = store
-        .listEntriesByFact(factKey)
+        .listEntriesByIdentity(identityId)
         .filter((entry) => entry.characterId !== characterId);
 
       // 已只剩保留者且禁分享已生效：重复确认幂等，不制造新版本或新控制。
-      if (others.length === 0 && store.hasShareControl(hash)) {
+      if (others.length === 0 && isShareRestricted(held)) {
         return {
           factKeyHash: hash,
           retainedEntryId: held.id,
@@ -687,11 +883,16 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       for (const entry of others) {
         store.deleteEntry(entry.id);
         store.addSourceControl(entry.characterId, sourceIdHash(entry.sourceId), nowMs);
-        store.addForgetControl(entry.characterId, hash, nowMs);
+        store.addForgetIdentityControl(entry.characterId, identityId, nowMs);
+        store.addDeletedFactFingerprint(
+          entry.characterId,
+          deletedFingerprintOf(entry),
+          nowMs,
+        );
       }
       const retained = { ...held, version: held.version + 1, updatedAt: nowMs };
       store.updateEntry(retained, tokenizeForIndex(retained.body));
-      store.addShareControl(hash, nowMs);
+      store.addShareIdentityControl(identityId, nowMs);
 
       const affected = new Set([characterId, ...others.map((entry) => entry.characterId)]);
       const contextVersions = {};
@@ -770,28 +971,44 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
         if (entry.expiresAt !== null && entry.expiresAt <= nowMs) {
           throw new MemoryError("SHARE_NOT_ALLOWED", "已到期的记忆不能分享。");
         }
-        const hash = factKeyHash(entry.factKey);
-        if (store.hasShareControl(hash)) {
+        const identityId = identityOfEntry(entry, nowMs);
+        if (isShareRestricted(entry)) {
           throw new MemoryError("SHARE_BLOCKED", "用户已禁止分享该事实。");
         }
-        if (store.hasForgetControl(toCharacterId, hash)) {
+        if (
+          recipientForgetBlocked(
+            toCharacterId,
+            relatedIdentityIds(entry),
+            deletedFingerprintOf(entry),
+            entry.factKey,
+          )
+        ) {
           throw new MemoryError("SHARE_BLOCKED", "接收者已明确忘记该事实。");
         }
-        return entry;
+        return { entry, identityId };
       });
 
       const shared = [];
       let created = 0;
-      for (const original of originals) {
-        const existing = store.getEntryByFact(toCharacterId, original.factKey);
-        if (existing) {
-          shared.push({ sourceEntryId: original.id, entryId: existing.id, alreadyHeld: true });
+      for (const { entry: original, identityId } of originals) {
+        const held = recipientHeldEntry(toCharacterId, original.factKey, identityId);
+        if (held) {
+          // 同键不同身份不能冒充已持有；同身份但内容不一致也不静默覆盖。
+          if (
+            !held.sameIdentity ||
+            (held.entry.expiresAt !== null && held.entry.expiresAt <= nowMs) ||
+            !sameBody(held.entry.body, original.body)
+          ) {
+            throw new MemoryError("SHARE_CONFLICT", "接收者已有同一事实的不同内容，未覆盖。");
+          }
+          shared.push({ sourceEntryId: original.id, entryId: held.entry.id, alreadyHeld: true });
           continue;
         }
         const entry = {
           id: newEntryId(),
           characterId: toCharacterId,
           factKey: original.factKey,
+          factIdentityId: identityId,
           originCharacterId: original.originCharacterId,
           derivedFromEntryId: original.id,
           narratorCharacterId: fromCharacterId,
@@ -818,8 +1035,18 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     return input.inTransaction === true ? applyShare() : store.transaction(applyShare);
   }
 
-  function currentHolders(factKey) {
-    return [...new Set(store.listEntriesByFact(factKey).map((entry) => entry.characterId))].sort();
+  /* 接收者是否已持有该事实身份：同键优先用于识别冲突，再看跨键的同一
+     身份副本，避免重复写入。 */
+  function recipientHeldEntry(toCharacterId, factKey, identityId) {
+    const sameKey = store.getEntryByFact(toCharacterId, factKey);
+    if (sameKey) {
+      return {
+        entry: sameKey,
+        sameIdentity: sameKey.factIdentityId === identityId,
+      };
+    }
+    const sameIdentity = store.getEntryByCharacterIdentity(toCharacterId, identityId);
+    return sameIdentity ? { entry: sameIdentity, sameIdentity: true } : null;
   }
 
   /* 用户明确转告：调用方逐条给出当前持有条目、版本和单一已结识接收者。
@@ -864,35 +1091,46 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
         if (entry.expiresAt !== null && entry.expiresAt <= nowMs) {
           throw new MemoryError("SHARE_NOT_ALLOWED", "已到期的记忆不能转告。");
         }
-        const hash = factKeyHash(entry.factKey);
-        if (store.hasShareControl(hash)) {
+        const identityId = identityOfEntry(entry, nowMs);
+        if (isShareRestricted(entry)) {
           throw new MemoryError("SHARE_BLOCKED", "用户已禁止分享该事实。");
         }
-        if (store.hasForgetControl(toCharacterId, hash)) {
+        if (
+          recipientForgetBlocked(
+            toCharacterId,
+            relatedIdentityIds(entry),
+            deletedFingerprintOf(entry),
+            entry.factKey,
+          )
+        ) {
           throw new MemoryError("SHARE_BLOCKED", "接收者已明确忘记该事实。");
         }
-        return entry;
+        return { entry, identityId };
       });
 
       const shared = [];
       let created = 0;
-      for (const original of originals) {
-        const existing = store.getEntryByFact(toCharacterId, original.factKey);
-        if (existing) {
-          const expired = existing.expiresAt !== null && existing.expiresAt <= nowMs;
+      for (const { entry: original, identityId } of originals) {
+        const held = recipientHeldEntry(toCharacterId, original.factKey, identityId);
+        if (held) {
+          if (!held.sameIdentity) {
+            throw new MemoryError("SHARE_CONFLICT", "接收者已有同事实的不同内容，未覆盖。");
+          }
+          const expired = held.entry.expiresAt !== null && held.entry.expiresAt <= nowMs;
           if (expired) {
             throw new MemoryError("SHARE_CONFLICT", "接收者已有同事实的失效记忆，未覆盖。");
           }
-          if (existing.body !== original.body) {
+          if (!sameBody(held.entry.body, original.body)) {
             throw new MemoryError("SHARE_CONFLICT", "接收者已有不同的同事实内容，未覆盖。");
           }
-          shared.push({ sourceEntryId: original.id, entryId: existing.id, alreadyHeld: true });
+          shared.push({ sourceEntryId: original.id, entryId: held.entry.id, alreadyHeld: true });
           continue;
         }
         const entry = {
           id: newEntryId(),
           characterId: toCharacterId,
           factKey: original.factKey,
+          factIdentityId: identityId,
           originCharacterId: original.originCharacterId,
           derivedFromEntryId: original.id,
           narratorCharacterId: fromCharacterId,
@@ -922,27 +1160,29 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
 
   /* 新增或解除事实禁分享都要求明确选中当前持有条目并核对版本；只有独立调用
      allowSharing 才能解除，纠正、删除和普通转告都不会顺手清除限制。
-     限制按事实键摘要跨持有者生效，结果只返回已有持有者，不透露正文。 */
-  function selectedHeldFact(input, characterId) {
+     限制按事实身份跨持有者生效；旧 factKey 摘要行只用于兼容与定位，
+     结果只返回已有持有者，不透露正文。 */
+  function selectedHeldEntry(input, characterId) {
     if (input.entryId === undefined) {
       throw new MemoryError("INVALID_INPUT", "必须指定选中的记忆。");
     }
-    const { factKey } = factForSelectedChange(input, characterId);
-    if (!store.getEntryByFact(characterId, factKey)) {
+    const { entry } = factForSelectedChange(input, characterId);
+    if (!entry) {
       throw new MemoryError("FACT_NOT_HELD", "当前角色没有该事实。");
     }
-    return factKey;
+    return entry;
   }
 
   function restrictSharing(input = {}) {
     const characterId = characterIdOf(input.characterId);
     const nowMs = resolveNow(input.nowMs);
     const applyRestriction = () => {
-      const factKey = selectedHeldFact(input, characterId);
-      const hash = factKeyHash(factKey);
-      const alreadyRestricted = store.hasShareControl(hash);
-      store.addShareControl(hash, nowMs);
-      return { factKeyHash: hash, alreadyRestricted, holders: currentHolders(factKey) };
+      const held = selectedHeldEntry(input, characterId);
+      const identityId = identityOfEntry(held, nowMs);
+      const hash = factKeyHash(held.factKey);
+      const alreadyRestricted = isShareRestricted(held);
+      store.addShareIdentityControl(identityId, nowMs);
+      return { factKeyHash: hash, alreadyRestricted, holders: holdersOfIdentity(identityId) };
     };
     return input.inTransaction === true
       ? applyRestriction()
@@ -951,11 +1191,24 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
 
   function allowSharing(input = {}) {
     const characterId = characterIdOf(input.characterId);
+    const nowMs = resolveNow(input.nowMs);
     return store.transaction(() => {
-      const factKey = selectedHeldFact(input, characterId);
-      const hash = factKeyHash(factKey);
-      const lifted = store.removeShareControl(hash);
-      return { factKeyHash: hash, lifted, holders: currentHolders(factKey) };
+      const held = selectedHeldEntry(input, characterId);
+      const identityId = identityOfEntry(held, nowMs);
+      const hash = factKeyHash(held.factKey);
+      // 歧义指纹关联多个受限身份时不能挑一个解除；保守保持原限制。
+      const relatedRestricted = relatedIdentityIds(held).filter((id) =>
+        store.hasShareIdentityControl(id),
+      );
+      if (relatedRestricted.length > 1) {
+        return { factKeyHash: hash, lifted: false, holders: holdersOfIdentity(identityId) };
+      }
+      const lifted = store.removeShareIdentityControl(identityId);
+      return {
+        factKeyHash: hash,
+        lifted,
+        holders: holdersOfIdentity(identityId),
+      };
     });
   }
 

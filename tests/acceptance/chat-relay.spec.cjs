@@ -703,7 +703,7 @@ test("POL-CHATRELAY-004 禁分享、接收者自忘、冲突与过期均拒绝�
   assert.equal(blocked.status, "completed");
   assert.match(blocked.reply, /没有转告/u);
   assert.equal(entryOf(restricted.store, "hu", "pref.drink"), null);
-  assert.equal(countRows(restricted.store.dbPath, "memory_share_controls"), 1);
+  assert.equal(countRows(restricted.store.dbPath, "memory_share_identity_controls"), 1);
 
   // 接收者已经明确忘记
   const forgotten = await setupContext(t, "POL-CHATRELAY-004-forgotten", [
@@ -737,7 +737,8 @@ test("POL-CHATRELAY-004 禁分享、接收者自忘、冲突与过期均拒绝�
   });
   assert.match(blockedByForget.reply, /没有转告/u);
   assert.equal(entryOf(forgotten.store, "hu", "pref.drink"), null);
-  assert.equal(countRows(forgotten.store.dbPath, "memory_forget_controls"), 1);
+  assert.equal(countRows(forgotten.store.dbPath, "memory_forget_identity_controls"), 1);
+  assert.equal(countRows(forgotten.store.dbPath, "memory_deleted_fact_fingerprints"), 1);
 
   // 接收者已有不同内容的同事实，不覆盖
   const conflict = await setupContext(t, "POL-CHATRELAY-004-conflict", [

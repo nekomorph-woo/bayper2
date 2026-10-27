@@ -1628,9 +1628,16 @@ select:focus {
 }
 
 .memory-dialog {
-  display: flex;
-  flex-direction: column;
-  width: min(560px, 100%);
+  display: grid;
+  grid-template-columns: minmax(260px, 0.85fr) minmax(0, 1.15fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "head head"
+    "target target"
+    "notice notice"
+    "list editor"
+    "pager editor";
+  width: min(860px, calc(100vw - 32px));
   max-height: calc(100vh - 32px);
   overflow: hidden;
   border: 1px solid var(--border-strong);
@@ -1641,6 +1648,7 @@ select:focus {
 .memory-head {
   display: flex;
   flex: none;
+  grid-area: head;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
@@ -1661,6 +1669,7 @@ select:focus {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   flex: none;
+  grid-area: target;
   align-items: center;
   gap: 8px;
   padding: 8px 15px;
@@ -1678,6 +1687,7 @@ select:focus {
 }
 
 #memory-notice {
+  grid-area: notice;
   flex: none;
   margin: 7px 15px 0;
 }
@@ -1688,10 +1698,11 @@ select:focus {
 
 .memory-list {
   display: flex;
+  grid-area: list;
   flex: 1;
   flex-direction: column;
   gap: 7px;
-  min-height: 100px;
+  min-height: 0;
   padding: 9px 15px;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1733,6 +1744,7 @@ select:focus {
 }
 
 .memory-empty {
+  grid-area: list;
   flex: 1;
   margin: 0;
   padding: 16px;
@@ -1742,6 +1754,7 @@ select:focus {
 
 .memory-pager {
   display: flex;
+  grid-area: pager;
   flex: none;
   align-items: center;
   justify-content: space-between;
@@ -1752,6 +1765,7 @@ select:focus {
 
 .memory-editor {
   display: flex;
+  grid-area: editor;
   flex: none;
   flex-direction: column;
   gap: 7px;

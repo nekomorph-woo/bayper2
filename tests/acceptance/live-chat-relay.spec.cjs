@@ -266,7 +266,9 @@ function snapshotDb(store) {
   return {
     memories,
     relationships: store.db.prepare("SELECT character_id, accepted_at FROM relationships ORDER BY character_id").all(),
-    shareControls: count("memory_share_controls"), forgetControls: count("memory_forget_controls"),
+    shareControls: count("memory_share_identity_controls"),
+    forgetControls: count("memory_forget_identity_controls"),
+    deletedFingerprints: count("memory_deleted_fact_fingerprints"),
   };
 }
 

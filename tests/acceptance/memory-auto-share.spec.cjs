@@ -141,7 +141,7 @@ test("POL-AUTOSHARE-CONTROL-002 关闭后share明确拒绝，重开恢复原路�
   assert.equal(ctx.service.listMemories("b").length, 0);
   assert.equal(ctx.count("memory_fts"), ftsBefore);
   assert.equal(ctx.service.getContextVersion("b"), contextBefore);
-  assert.equal(ctx.count("memory_share_controls"), 0);
+  assert.equal(ctx.count("memory_share_identity_controls"), 0);
   assert.equal(ctx.service.isAutoShareEnabled(), false);
 
   // 重新开启后仍走原 share 路径，不要求调用方换接口。

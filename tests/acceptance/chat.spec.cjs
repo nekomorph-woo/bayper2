@@ -362,7 +362,8 @@ test("POL-CHAT-002 用户明确事实写一次，助手建议与模型授权不�
   assert.equal(memories[0].factKey, "pref.coffee");
   assert.equal(memories[0].sourceId, userSource);
   assert.equal(memories[0].trust, "stated");
-  assert.equal(countRows(store.dbPath, "memory_forget_controls"), 0);
+  assert.equal(countRows(store.dbPath, "memory_forget_identity_controls"), 0);
+  assert.equal(countRows(store.dbPath, "memory_deleted_fact_fingerprints"), 0);
   assert.equal(countRows(store.dbPath, "memory_derivations"), 0);
   assert.equal(countRows(store.dbPath, "memory_extraction_batches"), 1);
 

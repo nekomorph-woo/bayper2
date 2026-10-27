@@ -1,0 +1,40 @@
+Bayper 语义关联真实服务基线（构造数据，不是修复验收）
+源 SHA: ec8b84d4fa4e2a51dbd3ed66c9ea63074f0b78c8  版本: 0.1.169
+SEM-001 FAIL  检查 6/10  不同键同义偏好：A 纠正后 A/B 同步，C 未知
+  FAIL B 当前偏好严格同步为新理解：期望 "用户现在只喝纯黑咖啡"，实际 "用户喜欢加糖的咖啡"
+  FAIL B 版本随同步递增：期望 2，实际 1
+  FAIL B FTS 索引新正文：期望 true，实际 false
+  FAIL B FTS 不残留旧正文：期望 false，实际 true
+SEM-002 FAIL  检查 7/11  不同键同义偏好：A 默认删除后 A/B 正文与 FTS 消失，重启保持
+  FAIL 删除后 B 同义条目消失：期望 0，实际 1
+  FAIL 删除后 B FTS 行为空：期望 0，实际 1
+  FAIL 重启后 B 仍无条目：期望 0，实际 1
+  FAIL 重启后 B FTS 行为空：期望 0，实际 1
+SEM-003 PASS  检查 7/7  同键不同主体：A 纠正只改 A，B 的姐姐偏好不变
+SEM-004 PASS  检查 9/9  同键不同性质：A 当前偏好纠正不改 B 的历史经历
+SEM-005 FAIL  检查 0/3  不同键同义：A 禁分享后 B 明确转告 C 仍必须拒绝
+  FAIL B 明确转告被业务规则拒绝：期望 true，实际 false
+  FAIL C 无新增条目：期望 0，实际 1
+  FAIL C 无 FTS 记录：期望 0，实际 1
+SEM-006 FAIL  检查 2/9  不同键同义：A 要求只让 A 记得，B 删除且旧来源新键不能学回
+  FAIL B 正文条目被清除：期望 0，实际 1
+  FAIL B 全部 FTS 被清除：期望 0，实际 1
+  FAIL B 原条目 FTS 行被清除：期望 0，实际 1
+  FAIL B 旧来源新键重学被业务规则拒绝：期望 true，实际 false
+  FAIL B 最终未恢复旧理解：期望 0，实际 1
+  FAIL B 最终全部 FTS 为空：期望 0，实际 1
+  FAIL B 最终原条目无 FTS 残留：期望 0，实际 1
+SEM-007 FAIL  检查 2/9  不同键同义：A 默认删除后，B 用旧来源新键重提炼不能恢复
+  FAIL B 同义条目被清除：期望 0，实际 1
+  FAIL B 删除后全部 FTS 为空：期望 0，实际 1
+  FAIL B 原条目 FTS 行被清除：期望 0，实际 1
+  FAIL B 旧来源新键重提炼被业务规则拒绝：期望 true，实际 false
+  FAIL B 重提炼后未恢复旧理解：期望 0，实际 1
+  FAIL B 重提炼后全部 FTS 为空：期望 0，实际 1
+  FAIL B 重提炼后原条目无 FTS 残留：期望 0，实际 1
+SEM-008 PASS  检查 17/17  同键真实派生正控制：纠正同步、删除防回流、C 未知
+
+汇总：场景 PASS 3 FAIL 5 ERROR 0；检查 PASS 50 FAIL 25
+结果已写入：/Volumes/Under_M2/morphiiouo/bayper/tools/memory-tuning/results/semantic-baseline-codex-identity-r4.json
+(node:76097) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)

@@ -117,3 +117,5 @@ S05b传输模块：POL-TRANSPORT-001～004由tests/acceptance/herdr-transport.sp
 
 - POL-SHARESETTING-001～005：唯一Contract在[s03k-plan.md](s03k-plan.md)，Runner为tests/acceptance/chat-sharing-setting.spec.cjs和chat-sharing-setting-ui.spec.cjs；版本、独立结果及边界见[s03k-review.md](s03k-review.md)，已按其范围受托接受。
 - SEM-001～008：唯一Contract在[s03l-plan.md](s03l-plan.md)，此批为存量记忆事实范围的补建基线，全部P0/必需，2026-10-27 v1由Codex依用户master授权确认。来源为PRD引用memory-and-sharing.md“同步纠正”“怎样同步生效”“删除边界”；真实SQLite+正式memory业务服务，构造数据、无模型/无GUI。Runner tools/memory-tuning/semantic-baseline.cjs，入口node tools/memory-tuning/semantic-baseline.cjs --out <结果路径>；业务Expected由计划定义，工具只评分，不能把当前行为当正确答案。Codex已独立执行v1：SEM-001～007 FAIL、SEM-008 PASS，0ERROR；实际结果与后续修复顺序见s03l-review.md。补建工具已接受，产品关联能力未通过。
+
+POL-FACTID-001～006：唯一业务与技术Contract见[s03l-identity-plan.md](s03l-identity-plan.md)，2026-10-27 v1由Codex受托确认，P0必需；正式memory管理服务及真实SQLite/迁移/派生/控制/回滚，Runner tests/acceptance/memory-fact-identity.spec.cjs。本片PASS，独立16身份场景、合计119领域tests、19unit与10GUI tests通过；逐Case观察、证据及边界见[s03l-identity-review.md](s03l-identity-review.md)。SEM-003/004/008原Expected复验PASS；不同措辞SEM-001/002/005/006/007仍FAIL并保留为下一语义关联必需范围，不将本片视为完整S03l。

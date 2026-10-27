@@ -2,7 +2,6 @@
    不启动 GUI、不调用模型。覆盖 POL-EXCLUSIVE-001～005；聊天入口、面板确认、
    单次确认与真实用户输入不在本切片，不能据本文件宣称这些边界已通过。 */
 const assert = require("node:assert/strict");
-const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -69,10 +68,6 @@ function countFactRows(db, table, characterId, factKey) {
   return db
     .prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE character_id = ? AND fact_key = ?`)
     .get(characterId, factKey).count;
-}
-
-function sha256(value) {
-  return crypto.createHash("sha256").update(value, "utf8").digest("hex");
 }
 
 function hasCode(code) {
@@ -144,8 +139,13 @@ test("POL-EXCLUSIVE-001 A 保留独属，清除 B 正文与检索，C 无新增�
   assert.equal(countRows(ctx.db, "memory_entries"), 1);
   assert.equal(countRows(ctx.db, "memory_fts"), 1);
   assert.equal(
-    ctx.db.prepare("SELECT COUNT(*) AS count FROM memory_share_controls WHERE fact_key_hash = ?")
-      .get(sha256("pref.drink")).count,
+    ctx.db.prepare(`
+      SELECT COUNT(*) AS count FROM memory_share_identity_controls
+      WHERE identity_id = (
+        SELECT fact_identity_id FROM memory_entries
+        WHERE character_id = 'a' AND fact_key = 'pref.drink'
+      )
+    `).get().count,
     1,
   );
   assert.deepEqual(businessSnapshot(ctx.db), businessBefore);
@@ -230,8 +230,9 @@ test("POL-EXCLUSIVE-003 过期版本、未知条目、非持有者明确拒绝�
     sourceId: "a-tea-new",
   });
   const entryCountBefore = countRows(ctx.db, "memory_entries");
-  const shareCountBefore = countRows(ctx.db, "memory_share_controls");
-  const forgetCountBefore = countRows(ctx.db, "memory_forget_controls");
+  const shareCountBefore = countRows(ctx.db, "memory_share_identity_controls");
+  const forgetCountBefore = countRows(ctx.db, "memory_forget_identity_controls");
+  const deletedCountBefore = countRows(ctx.db, "memory_deleted_fact_fingerprints");
   const sourceCountBefore = countRows(ctx.db, "memory_source_controls");
   const ftsCountBefore = countRows(ctx.db, "memory_fts");
   const aVersionBefore = ctx.service.getContextVersion("a");
@@ -249,8 +250,9 @@ test("POL-EXCLUSIVE-003 过期版本、未知条目、非持有者明确拒绝�
   );
   assert.equal(entryOf(ctx.service, "b", "pref.tea").body, "用户喜欢乌龙茶");
   assert.equal(countRows(ctx.db, "memory_entries"), entryCountBefore);
-  assert.equal(countRows(ctx.db, "memory_share_controls"), shareCountBefore);
-  assert.equal(countRows(ctx.db, "memory_forget_controls"), forgetCountBefore);
+  assert.equal(countRows(ctx.db, "memory_share_identity_controls"), shareCountBefore);
+  assert.equal(countRows(ctx.db, "memory_forget_identity_controls"), forgetCountBefore);
+  assert.equal(countRows(ctx.db, "memory_deleted_fact_fingerprints"), deletedCountBefore);
   assert.equal(countRows(ctx.db, "memory_source_controls"), sourceCountBefore);
   assert.equal(countRows(ctx.db, "memory_fts"), ftsCountBefore);
   assert.equal(ctx.service.getContextVersion("a"), aVersionBefore);
@@ -290,8 +292,9 @@ test("POL-EXCLUSIVE-003 过期版本、未知条目、非持有者明确拒绝�
   // 用新版本重复确认：幂等返回，不再递增版本或新增控制。
   const stable = {
     entries: countRows(ctx.db, "memory_entries"),
-    share: countRows(ctx.db, "memory_share_controls"),
-    forget: countRows(ctx.db, "memory_forget_controls"),
+    share: countRows(ctx.db, "memory_share_identity_controls"),
+    forget: countRows(ctx.db, "memory_forget_identity_controls"),
+    deleted: countRows(ctx.db, "memory_deleted_fact_fingerprints"),
     source: countRows(ctx.db, "memory_source_controls"),
     fts: countRows(ctx.db, "memory_fts"),
     a: ctx.service.getContextVersion("a"),
@@ -308,8 +311,9 @@ test("POL-EXCLUSIVE-003 过期版本、未知条目、非持有者明确拒绝�
   assert.deepEqual(repeated.contextVersions, {});
   assert.equal(entryOf(ctx.service, "a", "pref.tea").version, 3);
   assert.equal(countRows(ctx.db, "memory_entries"), stable.entries);
-  assert.equal(countRows(ctx.db, "memory_share_controls"), stable.share);
-  assert.equal(countRows(ctx.db, "memory_forget_controls"), stable.forget);
+  assert.equal(countRows(ctx.db, "memory_share_identity_controls"), stable.share);
+  assert.equal(countRows(ctx.db, "memory_forget_identity_controls"), stable.forget);
+  assert.equal(countRows(ctx.db, "memory_deleted_fact_fingerprints"), stable.deleted);
   assert.equal(countRows(ctx.db, "memory_source_controls"), stable.source);
   assert.equal(countRows(ctx.db, "memory_fts"), stable.fts);
   assert.equal(ctx.service.getContextVersion("a"), stable.a);
@@ -336,7 +340,10 @@ test("POL-EXCLUSIVE-004 删除中途与最后版本写失败都全事务回滚�
   const ftsBefore = countRows(ctx.db, "memory_fts");
   const aContextBefore = ctx.service.getContextVersion("a");
   const bContextBefore = ctx.service.getContextVersion("b");
-  const hash = sha256("detail.secret");
+  const identitySelector = `
+    SELECT fact_identity_id FROM memory_entries
+    WHERE character_id = 'a' AND fact_key = 'detail.secret'
+  `;
 
   function assertUntouched() {
     const aNow = entryOf(ctx.service, "a", "detail.secret");
@@ -349,15 +356,14 @@ test("POL-EXCLUSIVE-004 删除中途与最后版本写失败都全事务回滚�
     assert.equal(countRows(ctx.db, "memory_entries"), 2);
     assert.equal(countRows(ctx.db, "memory_fts"), ftsBefore);
     assert.equal(
-      ctx.db.prepare("SELECT COUNT(*) AS count FROM memory_share_controls WHERE fact_key_hash = ?")
-        .get(hash).count,
+      ctx.db.prepare(`
+        SELECT COUNT(*) AS count FROM memory_share_identity_controls
+        WHERE identity_id = (${identitySelector})
+      `).get().count,
       0,
     );
-    assert.equal(
-      ctx.db.prepare("SELECT COUNT(*) AS count FROM memory_forget_controls WHERE fact_key_hash = ?")
-        .get(hash).count,
-      0,
-    );
+    assert.equal(countRows(ctx.db, "memory_forget_identity_controls"), 0);
+    assert.equal(countRows(ctx.db, "memory_deleted_fact_fingerprints"), 0);
     assert.equal(countRows(ctx.db, "memory_source_controls"), 0);
     assert.equal(countRows(ctx.db, "memory_derivations"), 1);
     assert.equal(ctx.service.getContextVersion("a"), aContextBefore);
@@ -415,8 +421,24 @@ test("POL-EXCLUSIVE-004 删除中途与最后版本写失败都全事务回滚�
   assert.equal(countRows(ctx.db, "memory_fts"), 1);
   assert.equal(countRows(ctx.db, "memory_derivations"), 0);
   assert.equal(
-    ctx.db.prepare("SELECT COUNT(*) AS count FROM memory_share_controls WHERE fact_key_hash = ?")
-      .get(hash).count,
+    ctx.db.prepare(`
+      SELECT COUNT(*) AS count FROM memory_share_identity_controls
+      WHERE identity_id = (${identitySelector})
+    `).get().count,
+    1,
+  );
+  assert.equal(
+    ctx.db.prepare(`
+      SELECT COUNT(*) AS count FROM memory_forget_identity_controls
+      WHERE character_id = 'b'
+    `).get().count,
+    1,
+  );
+  assert.equal(
+    ctx.db.prepare(`
+      SELECT COUNT(*) AS count FROM memory_deleted_fact_fingerprints
+      WHERE character_id = 'b'
+    `).get().count,
     1,
   );
   assert.ok(ctx.service.getContextVersion("a") > aContextBefore);
@@ -437,7 +459,6 @@ test("POL-EXCLUSIVE-005 旧来源与历史派生不能回流，无关事实和�
     entryId: teaA.entry.id,
     expectedVersion: 1,
   });
-  const teaShareHash = sha256("pref.tea");
 
   const result = ctx.service.keepExclusive({
     characterId: "a",
@@ -453,11 +474,16 @@ test("POL-EXCLUSIVE-005 旧来源与历史派生不能回流，无关事实和�
   assert.equal(ctx.service.searchMemories({ characterId: "b", query: "茉莉花茶" }).length, 1);
   assert.equal(ctx.service.searchMemories({ characterId: "a", query: "团子" }).length, 1);
   assert.equal(
-    ctx.db.prepare("SELECT COUNT(*) AS count FROM memory_share_controls WHERE fact_key_hash = ?")
-      .get(teaShareHash).count,
+    ctx.db.prepare(`
+      SELECT COUNT(*) AS count FROM memory_share_identity_controls
+      WHERE identity_id = (
+        SELECT fact_identity_id FROM memory_entries
+        WHERE character_id = 'a' AND fact_key = 'pref.tea'
+      )
+    `).get().count,
     1,
   );
-  assert.equal(countRows(ctx.db, "memory_share_controls"), 2);
+  assert.equal(countRows(ctx.db, "memory_share_identity_controls"), 2);
   assert.equal(countRows(ctx.db, "memory_entries"), 3);
   assert.equal(countRows(ctx.db, "memory_fts"), 3);
 

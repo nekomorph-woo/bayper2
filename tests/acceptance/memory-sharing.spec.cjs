@@ -356,7 +356,7 @@ test("POL-SHARING-003 事实禁分享跨持有者持久生效，独立解除且�
   assert.equal(restriction.alreadyRestricted, false);
   assert.deepEqual(restriction.holders, ["a", "b"]);
   assert.equal(restriction.factKeyHash, sha256("detail.secret"));
-  assert.equal(countRows(ctx.db, "memory_share_controls"), 1);
+  assert.equal(countRows(ctx.db, "memory_share_identity_controls"), 1);
 
   ctx.reopen();
   const entriesBefore = countRows(ctx.db, "memory_entries");
@@ -382,7 +382,7 @@ test("POL-SHARING-003 事实禁分享跨持有者持久生效，独立解除且�
   assert.equal(countRows(ctx.db, "memory_entries"), entriesBefore);
   assert.equal(entryOf(ctx.service, "a", "detail.secret").body, "用户的秘密是银钥匙");
   assert.equal(entryOf(ctx.service, "b", "detail.secret").body, "用户的秘密是银钥匙");
-  assert.equal(ctx.db.prepare("SELECT COUNT(*) AS count FROM memory_share_controls").get().count, 1);
+  assert.equal(ctx.db.prepare("SELECT COUNT(*) AS count FROM memory_share_identity_controls").get().count, 1);
 
   // 纠正同步持有者内容，但不会解除事实禁分享，也不通知未知角色。
   ctx.service.correct({
@@ -391,7 +391,7 @@ test("POL-SHARING-003 事实禁分享跨持有者持久生效，独立解除且�
     body: "用户的秘密已更换",
     sourceId: "a-secret-new",
   });
-  assert.equal(countRows(ctx.db, "memory_share_controls"), 1);
+  assert.equal(countRows(ctx.db, "memory_share_identity_controls"), 1);
   assert.equal(entryOf(ctx.service, "a", "detail.secret").body, "用户的秘密已更换");
   assert.equal(entryOf(ctx.service, "b", "detail.secret").body, "用户的秘密已更换");
   assert.deepEqual(ctx.service.listMemories("c"), []);
@@ -407,10 +407,15 @@ test("POL-SHARING-003 事实禁分享跨持有者持久生效，独立解除且�
     kind: "detail",
     sourceId: "a-fail-control",
   });
-  const failingHash = sha256("detail.restrict-fail");
+  const failingIdentity = ctx.db
+    .prepare(`
+      SELECT fact_identity_id FROM memory_entries
+      WHERE character_id = 'a' AND fact_key = 'detail.restrict-fail'
+    `)
+    .get().fact_identity_id;
   ctx.db.exec(`
-    CREATE TRIGGER fail_share_control BEFORE INSERT ON memory_share_controls
-    WHEN NEW.fact_key_hash = '${failingHash}'
+    CREATE TRIGGER fail_share_control BEFORE INSERT ON memory_share_identity_controls
+    WHEN NEW.identity_id = '${failingIdentity}'
     BEGIN SELECT RAISE(ABORT, 'injected share control failure'); END;
   `);
   assert.throws(
@@ -425,8 +430,8 @@ test("POL-SHARING-003 事实禁分享跨持有者持久生效，独立解除且�
   ctx.db.exec("DROP TRIGGER fail_share_control");
   assert.equal(
     ctx.db
-      .prepare("SELECT COUNT(*) AS count FROM memory_share_controls WHERE fact_key_hash = ?")
-      .get(failingHash).count,
+      .prepare("SELECT COUNT(*) AS count FROM memory_share_identity_controls WHERE identity_id = ?")
+      .get(failingIdentity).count,
     0,
   );
   assert.equal(entryOf(ctx.service, "a", "detail.restrict-fail").body, "用于验证失败回滚的记忆");
@@ -440,7 +445,7 @@ test("POL-SHARING-003 事实禁分享跨持有者持久生效，独立解除且�
   });
   assert.equal(lifted.lifted, true);
   assert.deepEqual(lifted.holders, ["a", "b"]);
-  assert.equal(countRows(ctx.db, "memory_share_controls"), 0);
+  assert.equal(countRows(ctx.db, "memory_share_identity_controls"), 0);
   relayOne(ctx.service, "a", "c", original.entry.id, 2);
   assert.equal(entryOf(ctx.service, "c", "detail.secret").originCharacterId, "a");
   assert.equal(entryOf(ctx.service, "c", "detail.secret").body, "用户的秘密已更换");
@@ -468,7 +473,13 @@ test("POL-SHARING-004 自己忘记后禁止回流，全局删除后只留无正�
   assert.deepEqual(ctx.service.listMemories("b"), []);
   assert.equal(
     ctx.db
-      .prepare("SELECT COUNT(*) AS count FROM memory_forget_controls WHERE character_id = 'b'")
+      .prepare("SELECT COUNT(*) AS count FROM memory_forget_identity_controls WHERE character_id = 'b'")
+      .get().count,
+    1,
+  );
+  assert.equal(
+    ctx.db
+      .prepare("SELECT COUNT(*) AS count FROM memory_deleted_fact_fingerprints WHERE character_id = 'b'")
       .get().count,
     1,
   );
@@ -493,7 +504,14 @@ test("POL-SHARING-004 自己忘记后禁止回流，全局删除后只留无正�
   });
   assert.deepEqual(deleted.affectedCharacters, ["a", "c"]);
   assert.equal(countRows(ctx.db, "memory_entries"), 0);
-  for (const table of ["memory_forget_controls", "memory_source_controls", "memory_share_controls"]) {
+  for (const table of [
+    "memory_forget_controls",
+    "memory_forget_identity_controls",
+    "memory_share_controls",
+    "memory_share_identity_controls",
+    "memory_deleted_fact_fingerprints",
+    "memory_source_controls",
+  ]) {
     const columns = ctx.db.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name);
     assert.equal(columns.includes("body"), false);
   }
@@ -540,17 +558,20 @@ test("POL-SHARING-005 旧版本与已删除条目拒绝，接收者较新内容�
   assert.equal(ctx.service.getContextVersion("c"), 0);
 
   // 接收者已持有更新的同事实内容：如实冲突，不覆盖、不增加版本或上下文。
+  // 使用与前面咖啡事实无关的正文，避免复用旧/新纠正指纹造成幂等复用。
   const conflictA = remember(ctx.service, {
     factKey: "pref.conflict",
-    body: "用户喜欢甜咖啡",
+    body: "用户喜欢柠檬汽水",
     sourceId: "a-conflict",
   });
   const conflictB = remember(ctx.service, {
     characterId: "b",
     factKey: "pref.conflict",
-    body: "用户喜欢无糖咖啡",
+    body: "用户喜欢原味汽水",
     sourceId: "b-conflict",
   });
+  assert.equal(conflictA.created, true);
+  assert.equal(conflictB.created, true);
   ctx.db
     .prepare("UPDATE memory_entries SET version = 2, updated_at = ? WHERE id = ?")
     .run(ctx.nowMs() + 1000, conflictB.entry.id);
@@ -560,7 +581,7 @@ test("POL-SHARING-005 旧版本与已删除条目拒绝，接收者较新内容�
     hasCode("SHARE_CONFLICT"),
   );
   const bConflictAfter = entryOf(ctx.service, "b", "pref.conflict");
-  assert.equal(bConflictAfter.body, "用户喜欢无糖咖啡");
+  assert.equal(bConflictAfter.body, "用户喜欢原味汽水");
   assert.equal(bConflictAfter.version, 2);
   assert.equal(ctx.service.getContextVersion("b"), bConflictContext);
   assert.equal(countRows(ctx.db, "memory_entries"), 5);

@@ -320,9 +320,9 @@ test("POL-EXCLUSIVECHAT-001 A 聊天保留独属，B 清除，C 无新增且业�
   assert.equal(store.memory.searchMemories({ characterId: "b", query: "冰美式" }).length, 0);
   assert.equal(entryOf(store, "c", "pref.drink"), null);
   assert.equal(countWhere(ctx.store.dbPath, "memory_entries", "character_id = ?", "c"), 0);
-  assert.equal(countRows(ctx.store.dbPath, "memory_share_controls"), 1);
+  assert.equal(countRows(ctx.store.dbPath, "memory_share_identity_controls"), 1);
   assert.equal(
-    countWhere(ctx.store.dbPath, "memory_forget_controls", "character_id = ?", "b"),
+    countWhere(ctx.store.dbPath, "memory_forget_identity_controls", "character_id = ?", "b"),
     1,
   );
   assert.equal(
@@ -330,7 +330,7 @@ test("POL-EXCLUSIVECHAT-001 A 聊天保留独属，B 清除，C 无新增且业�
     1,
   );
   assert.equal(
-    countWhere(ctx.store.dbPath, "memory_forget_controls", "character_id = ?", "c"),
+    countWhere(ctx.store.dbPath, "memory_forget_identity_controls", "character_id = ?", "c"),
     0,
   );
   assertBusinessRowsUnchanged(store, businessBefore);
@@ -347,7 +347,7 @@ test("POL-EXCLUSIVECHAT-001 A 聊天保留独属，B 清除，C 无新增且业�
   ctx.reopen();
   assert.equal(entryOf(ctx.store, "a", "pref.drink").version, aEntry.version + 1);
   assert.equal(entryOf(ctx.store, "b", "pref.drink"), null);
-  assert.equal(countRows(ctx.store.dbPath, "memory_share_controls"), 1);
+  assert.equal(countRows(ctx.store.dbPath, "memory_share_identity_controls"), 1);
 });
 
 test("POL-EXCLUSIVECHAT-002 多候选不猜，唯一近期实际话题才可指代", async (t) => {
@@ -387,7 +387,7 @@ test("POL-EXCLUSIVECHAT-002 多候选不猜，唯一近期实际话题才可指�
     assert.equal(entryOf(store, "a", "pref.iced").body, "用户的饮品偏好是冰美式");
     assert.equal(entryOf(store, "a", "pref.tea").body, "用户的饮品偏好是热茶");
     assert.equal(entryOf(store, "b", "pref.iced").body, "用户的饮品偏好是冰美式");
-    assert.equal(countRows(store.dbPath, "memory_share_controls"), 0);
+    assert.equal(countRows(store.dbPath, "memory_share_identity_controls"), 0);
   }
 
   // 数据库里只有一条候选，但本轮原话和近期对话都没有实际话题依据：不得按唯一候选兜底。
@@ -419,7 +419,7 @@ test("POL-EXCLUSIVECHAT-002 多候选不猜，唯一近期实际话题才可指�
     assert.equal(result.reply, "我这次没有改动任何记忆。");
     assert.equal(entryOf(store, "a", "pref.drink").version, 1);
     assert.equal(entryOf(store, "b", "pref.drink").body, "用户的饮品偏好是冰美式");
-    assert.equal(countRows(store.dbPath, "memory_share_controls"), 0);
+    assert.equal(countRows(store.dbPath, "memory_share_identity_controls"), 0);
   }
 
   // 近期对话唯一提到该事实时，“这件事”可以指代并执行。
@@ -514,7 +514,7 @@ test("POL-EXCLUSIVECHAT-002 多候选不猜，唯一近期实际话题才可指�
     assert.match(result.reply, /只留在我这里记得/u);
     assert.equal(entryOf(store, "a", "pref.drink").version, 2);
     assert.equal(entryOf(store, "b", "pref.drink"), null);
-    assert.equal(countRows(store.dbPath, "memory_share_controls"), 1);
+    assert.equal(countRows(store.dbPath, "memory_share_identity_controls"), 1);
     assert.equal(server.requests.length, 1);
   }
 });
@@ -534,9 +534,10 @@ test("POL-EXCLUSIVECHAT-002 引用、假设、否定、功能询问与伪造目�
     .listMemories("a")
     .map((entry) => [entry.factKey, entry.version]);
   const controlsBefore = {
-    forget: countRows(store.dbPath, "memory_forget_controls"),
+    forget: countRows(store.dbPath, "memory_forget_identity_controls"),
     source: countRows(store.dbPath, "memory_source_controls"),
-    share: countRows(store.dbPath, "memory_share_controls"),
+    share: countRows(store.dbPath, "memory_share_identity_controls"),
+    deleted: countRows(store.dbPath, "memory_deleted_fact_fingerprints"),
   };
 
   async function rejectedTurn({ text, requestId, operationFor, reply = "已经只留给你记得。" }) {
@@ -566,9 +567,10 @@ test("POL-EXCLUSIVECHAT-002 引用、假设、否定、功能询问与伪造目�
     assert.equal(entryOf(store, "b", "pref.iced").body, "用户的饮品偏好是冰美式");
     assert.deepEqual(
       {
-        forget: countRows(store.dbPath, "memory_forget_controls"),
+        forget: countRows(store.dbPath, "memory_forget_identity_controls"),
         source: countRows(store.dbPath, "memory_source_controls"),
-        share: countRows(store.dbPath, "memory_share_controls"),
+        share: countRows(store.dbPath, "memory_share_identity_controls"),
+        deleted: countRows(store.dbPath, "memory_deleted_fact_fingerprints"),
       },
       controlsBefore,
     );
@@ -663,7 +665,7 @@ test("POL-EXCLUSIVECHAT-002 引用、假设、否定、功能询问与伪造目�
       assert.equal(result.memoryApplied, 0);
       assert.equal(entryOf(store, "a", "pref.drink").version, 1);
       assert.equal(entryOf(store, "b", "pref.drink").body, "用户的饮品偏好是冰美式");
-      assert.equal(countRows(store.dbPath, "memory_share_controls"), 0);
+      assert.equal(countRows(store.dbPath, "memory_share_identity_controls"), 0);
     }
 
     await rejectedStatement({
@@ -737,7 +739,7 @@ test("POL-EXCLUSIVECHAT-003 旧版本、取消、迟到与回复写失败均无�
     assert.equal(result.reply, null);
     assert.equal(entryOf(store, "a", "pref.drink").body, "用户喜欢无糖汽水");
     assert.ok(entryOf(store, "b", "pref.drink"), "纠正来源后 B 的持有关系仍在，独属保留未执行");
-    assert.equal(countRows(store.dbPath, "memory_share_controls"), 0);
+    assert.equal(countRows(store.dbPath, "memory_share_identity_controls"), 0);
   }
 
   const cancelCtx = await setupContext(t, "POL-EXCLUSIVECHAT-003-cancel");
@@ -770,7 +772,7 @@ test("POL-EXCLUSIVECHAT-003 旧版本、取消、迟到与回复写失败均无�
     assert.equal(result.status, "cancelled");
     assert.equal(result.reply, null);
     assert.equal(entryOf(store, "b", "pref.drink").body, "用户的饮品偏好是冰美式");
-    assert.equal(countRows(store.dbPath, "memory_share_controls"), 0);
+    assert.equal(countRows(store.dbPath, "memory_share_identity_controls"), 0);
   }
 
   const rollbackCtx = await setupContext(t, "POL-EXCLUSIVECHAT-003-rollback");
@@ -807,8 +809,8 @@ test("POL-EXCLUSIVECHAT-003 旧版本、取消、迟到与回复写失败均无�
     assert.equal(entryOf(store, "a", "pref.drink").version, aEntry.version);
     assert.equal(entryOf(store, "b", "pref.drink").body, "用户的饮品偏好是冰美式");
     assert.equal(store.memory.getContextVersion("b"), bContextBefore);
-    assert.equal(countRows(store.dbPath, "memory_share_controls"), 0);
-    assert.equal(countRows(store.dbPath, "memory_forget_controls"), 0);
+    assert.equal(countRows(store.dbPath, "memory_share_identity_controls"), 0);
+    assert.equal(countRows(store.dbPath, "memory_forget_identity_controls"), 0);
     assert.equal(countRows(store.dbPath, "memory_source_controls"), 0);
     assert.equal(
       countWhere(store.dbPath, "chat_messages", "role = 'assistant'"),
@@ -836,7 +838,7 @@ test("POL-EXCLUSIVECHAT-003 旧版本、取消、迟到与回复写失败均无�
     assert.match(retried.reply, /只留在我这里记得/u);
     assert.equal(entryOf(store, "a", "pref.drink").version, 2);
     assert.equal(entryOf(store, "b", "pref.drink"), null);
-    assert.equal(countRows(store.dbPath, "memory_share_controls"), 1);
+    assert.equal(countRows(store.dbPath, "memory_share_identity_controls"), 1);
 
     const replay = await store.chat.sendMessage({
       characterId: "a",
@@ -1006,7 +1008,7 @@ test("POL-EXCLUSIVECHAT-005 三动作范围不混淆，派生保留不改成亲�
     assert.match(result.reply, /只在自己这里忘记/u);
     assert.equal(entryOf(store, "a", "pref.drink"), null);
     assert.equal(entryOf(store, "b", "pref.drink").body, "用户的饮品偏好是冰美式");
-    assert.equal(countRows(store.dbPath, "memory_share_controls"), 0);
+    assert.equal(countRows(store.dbPath, "memory_share_identity_controls"), 0);
   }
 
   const restrictCtx = await setupContext(t, "POL-EXCLUSIVECHAT-005-restrict");
@@ -1035,7 +1037,7 @@ test("POL-EXCLUSIVECHAT-005 三动作范围不混淆，派生保留不改成亲�
     assert.match(result.reply, /之后我不会再把这件事分享或转告/u);
     assert.equal(entryOf(store, "a", "pref.drink").body, "用户的饮品偏好是冰美式");
     assert.equal(entryOf(store, "b", "pref.drink").body, "用户的饮品偏好是冰美式");
-    assert.equal(countRows(store.dbPath, "memory_share_controls"), 1);
+    assert.equal(countRows(store.dbPath, "memory_share_identity_controls"), 1);
   }
 
   const derivedCtx = await setupContext(t, "POL-EXCLUSIVECHAT-005-derived", [
@@ -1102,6 +1104,6 @@ test("POL-EXCLUSIVECHAT-005 三动作范围不混淆，派生保留不改成亲�
       (error) => error.code === "SHARE_BLOCKED",
     );
     assert.equal(entryOf(store, "c", "pref.drink"), null);
-    assert.equal(countRows(store.dbPath, "memory_share_controls"), 1);
+    assert.equal(countRows(store.dbPath, "memory_share_identity_controls"), 1);
   }
 });

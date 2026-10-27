@@ -73,7 +73,9 @@ function makeContext(t) {
           .prepare("SELECT id, character_id, fact_key, body, version FROM memory_entries ORDER BY id")
           .all(),
         fts: ctx.count("memory_fts"),
-        shareControls: ctx.count("memory_share_controls"),
+        shareControls: ctx.count("memory_share_identity_controls"),
+        forgetControls: ctx.count("memory_forget_identity_controls"),
+        deletedFingerprints: ctx.count("memory_deleted_fact_fingerprints"),
         stats: store.db
           .prepare("SELECT character_id, intimacy, energy, mood FROM character_stats ORDER BY character_id")
           .all(),
@@ -253,8 +255,9 @@ test("POL-SHARESETTING-002 恢复只重开自动分享，逐事实限制与既�
   });
   const memoriesBefore = store.memory.listMemories("rin");
   const controlsBefore = {
-    share: ctx.count("memory_share_controls"),
-    forget: ctx.count("memory_forget_controls"),
+    share: ctx.count("memory_share_identity_controls"),
+    forget: ctx.count("memory_forget_identity_controls"),
+    deleted: ctx.count("memory_deleted_fact_fingerprints"),
     source: ctx.count("memory_source_controls"),
   };
 
@@ -276,8 +279,9 @@ test("POL-SHARESETTING-002 恢复只重开自动分享，逐事实限制与既�
   assert.deepEqual(store.memory.listMemories("rin"), memoriesBefore);
   assert.deepEqual(
     {
-      share: ctx.count("memory_share_controls"),
-      forget: ctx.count("memory_forget_controls"),
+      share: ctx.count("memory_share_identity_controls"),
+      forget: ctx.count("memory_forget_identity_controls"),
+      deleted: ctx.count("memory_deleted_fact_fingerprints"),
       source: ctx.count("memory_source_controls"),
     },
     controlsBefore,
@@ -287,12 +291,24 @@ test("POL-SHARESETTING-002 恢复只重开自动分享，逐事实限制与既�
   const relearn = store.memory.remember({
     characterId: "rin",
     factKey: "detail.old",
-    body: "旧来源之外的新说法",
+    body: removable.entry.body,
     kind: "detail",
     sourceId: "src-detail-relearn",
   });
   assert.equal(relearn.created, false);
   assert.equal(relearn.blocked, "forget");
+  // 同键但不同正文是另一件新事，旧遗忘不能按 key 连带封锁。
+  const unrelated = remember(store, {
+    factKey: "detail.old",
+    body: "用户后来提起了另一件小事",
+    kind: "detail",
+    sourceId: "src-detail-unrelated",
+  });
+  assert.equal(unrelated.created, true);
+  assert.equal(
+    store.memory.listMemories("rin").find((entry) => entry.factKey === "detail.old").body,
+    "用户后来提起了另一件小事",
+  );
 
   // 逐事实禁分享仍然拒绝 share 与 relay。
   assert.throws(

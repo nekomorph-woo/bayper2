@@ -229,6 +229,10 @@ test("POL-MEMORY-004 默认删除正文、重建索引、旧来源不能回填",
 
   const controlRows = [
     ...ctx.db.prepare("SELECT * FROM memory_forget_controls").all(),
+    ...ctx.db.prepare("SELECT * FROM memory_forget_identity_controls").all(),
+    ...ctx.db.prepare("SELECT * FROM memory_share_controls").all(),
+    ...ctx.db.prepare("SELECT * FROM memory_share_identity_controls").all(),
+    ...ctx.db.prepare("SELECT * FROM memory_deleted_fact_fingerprints").all(),
     ...ctx.db.prepare("SELECT * FROM memory_source_controls").all(),
   ];
   const controlText = JSON.stringify(controlRows);
@@ -550,7 +554,8 @@ test("记忆正文中的指令不被执行，错误不泄漏其他角色正文",
   assert.equal(ctx.service.listMemories("a").length, 1);
   assert.deepEqual(ctx.service.listMemories("b"), []);
   assert.deepEqual(ctx.service.listMemories("c"), []);
-  assert.equal(countRows(ctx.db, "memory_forget_controls"), 0);
+  assert.equal(countRows(ctx.db, "memory_forget_identity_controls"), 0);
+  assert.equal(countRows(ctx.db, "memory_deleted_fact_fingerprints"), 0);
   assert.equal(
     ctx.db.prepare("SELECT COUNT(*) AS count FROM memory_entries WHERE derived_from_entry_id IS NOT NULL")
       .get().count,

@@ -107,7 +107,7 @@ async function runRestrictCase() {
       const conversation = openConversation(store);
       await perform(rec, store, conversation, rec.userText);
       const hot = store.memory.listMemories(CHARACTER_ID).find((entry) => entry.factKey === "pref.hot-tea");
-      const controls = store.db.prepare("SELECT COUNT(*) AS count FROM memory_share_controls").get().count;
+      const controls = store.db.prepare("SELECT COUNT(*) AS count FROM memory_share_identity_controls").get().count;
       check(rec, "禁分享控制已落库", controls >= 1);
       check(rec, "已有热茶内容保留", Boolean(hot && hot.body.includes("热茶")));
       let blocked = false;
@@ -134,8 +134,9 @@ async function runNarrationCase() {
       await perform(rec, store, conversation, rec.userText);
       const active = store.memory.listMemories(CHARACTER_ID);
       check(rec, "钥匙事实未被删除", active.some((entry) => entry.factKey === "detail.key"));
-      const forgetControls = store.db.prepare("SELECT COUNT(*) AS count FROM memory_forget_controls").get().count;
-      check(rec, "没有产生删除控制", forgetControls === 0);
+      const forgetControls = store.db.prepare("SELECT COUNT(*) AS count FROM memory_forget_identity_controls").get().count;
+      const deletedFingerprints = store.db.prepare("SELECT COUNT(*) AS count FROM memory_deleted_fact_fingerprints").get().count;
+      check(rec, "没有产生删除控制", forgetControls === 0 && deletedFingerprints === 0);
     });
   } catch (error) {
     markExecutionError(rec, error);
@@ -243,7 +244,9 @@ function snapshotDb(store) {
   const count = (table) => store.db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count;
   return {
     memories: store.memory.listMemories(CHARACTER_ID).map(({ factKey, body, kind, trust, expiresAt }) => ({ factKey, body, kind, trust, expiresAt })),
-    shareControls: count("memory_share_controls"), forgetControls: count("memory_forget_controls"),
+    shareControls: count("memory_share_identity_controls"),
+    forgetControls: count("memory_forget_identity_controls"),
+    deletedFingerprints: count("memory_deleted_fact_fingerprints"),
   };
 }
 async function fetchImpl(url, init) {

@@ -90,7 +90,9 @@ async function runExclusiveCase() {
       check(rec, "分享控制与琥珀防回流控制已落库",
         rec.dbAfter.controls.share === 1 && rec.dbAfter.controls.forget === 1 &&
           rec.dbAfter.controls.source === 1 &&
-          store.db.prepare("SELECT COUNT(*) AS count FROM memory_forget_controls WHERE character_id = ?")
+          store.db.prepare("SELECT COUNT(*) AS count FROM memory_forget_identity_controls WHERE character_id = ?")
+            .get("cheng").count === 0 &&
+          store.db.prepare("SELECT COUNT(*) AS count FROM memory_deleted_fact_fingerprints WHERE character_id = ?")
             .get("cheng").count === 0);
       check(rec, "凛与琥珀上下文版本失效，澄不变",
         rec.dbAfter.contextVersions.rin === rec.dbBefore.contextVersions.rin + 1 &&
@@ -312,8 +314,12 @@ function snapshotDb(store) {
   }
   return {
     memories,
-    controls: { share: count("memory_share_controls"), forget: count("memory_forget_controls"),
-      source: count("memory_source_controls") },
+    controls: {
+      share: count("memory_share_identity_controls"),
+      forget: count("memory_forget_identity_controls"),
+      deleted: count("memory_deleted_fact_fingerprints"),
+      source: count("memory_source_controls"),
+    },
     contextVersions: { rin: store.memory.getContextVersion(CHARACTER_ID),
       hu: store.memory.getContextVersion("hu"), cheng: store.memory.getContextVersion("cheng") },
     business: {

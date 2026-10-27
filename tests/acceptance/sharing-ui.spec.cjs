@@ -2,7 +2,6 @@
    真实 Electron/main/SQLite/renderer；本机 HTTP 只用于观察模型上下文与在途回复，
    不读取 .env、不调用真实模型。覆盖 POL-SHAREUI-001～006。 */
 const assert = require("node:assert/strict");
-const crypto = require("node:crypto");
 const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
@@ -341,17 +340,13 @@ function openDb(dataDir, readOnly = false) {
   return db;
 }
 
-function sha256(value) {
-  return crypto.createHash("sha256").update(value, "utf8").digest("hex");
-}
-
 function readMemoryRows(dataDir, characterId) {
   const db = openDb(dataDir, true);
   try {
     const rows = db
       .prepare(
         `SELECT e.id, e.character_id, e.fact_key, e.body, e.version,
-                e.origin_character_id, e.trust,
+                e.origin_character_id, e.trust, e.fact_identity_id,
                 d.parent_entry_id, d.narrator_character_id
          FROM memory_entries e
          LEFT JOIN memory_derivations d ON d.entry_id = e.id
@@ -362,15 +357,15 @@ function readMemoryRows(dataDir, characterId) {
       .all(characterId, Date.now());
     const controls = new Set(
       db
-        .prepare("SELECT fact_key_hash FROM memory_share_controls")
+        .prepare("SELECT identity_id FROM memory_share_identity_controls")
         .all()
-        .map((row) => row.fact_key_hash),
+        .map((row) => row.identity_id),
     );
     return rows.map((row) => ({
       ...row,
       derived:
         row.parent_entry_id !== null || row.origin_character_id !== row.character_id,
-      sharingRestricted: controls.has(sha256(row.fact_key)),
+      sharingRestricted: controls.has(row.fact_identity_id),
     }));
   } finally {
     db.close();
@@ -1532,8 +1527,13 @@ test("POL-SHAREUI-006 GUI 两尺寸、长内容与仅一位角色可达且列表
       [960, 680, "sharing-layout-960x680.png"],
     ]) {
       await setWindowSize(app, width, height);
-      assertPanelGeometry(await panelGeometry(page));
+      const geometry = await panelGeometry(page);
+      fs.writeFileSync(
+        path.join(EVIDENCE_DIR, `${name.replace(/\.png$/u, "")}-geometry.json`),
+        `${JSON.stringify({ width, height, geometry }, null, 2)}\n`,
+      );
       await capture(page, name);
+      assertPanelGeometry(geometry);
     }
 
     await page.locator("#memory-sharing-toggle").focus();
@@ -1542,8 +1542,13 @@ test("POL-SHAREUI-006 GUI 两尺寸、长内容与仅一位角色可达且列表
     state = await panelState(page);
     assert.equal(state.toggle, "允许分享");
     assert.match(state.sharingNote, /已有角色保留原副本/u);
-    assertPanelGeometry(await panelGeometry(page));
+    const keyboardGeometry = await panelGeometry(page);
+    fs.writeFileSync(
+      path.join(EVIDENCE_DIR, "sharing-keyboard-960x680-geometry.json"),
+      `${JSON.stringify({ width: 960, height: 680, geometry: keyboardGeometry }, null, 2)}\n`,
+    );
     await capture(page, "sharing-keyboard-960x680.png");
+    assertPanelGeometry(keyboardGeometry);
     assert.equal(
       readMemoryRows(dataDir, "rin").find((row) => row.body === longBody).sharingRestricted,
       true,

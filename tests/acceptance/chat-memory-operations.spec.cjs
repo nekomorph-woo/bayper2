@@ -867,9 +867,8 @@ test("POL-CHATMEM-002 默认忘记删除 A/B、旧来源与 FTS 不能恢复，�
   assert.equal(store.memory.searchMemories({ characterId: "a", query: "蛤蜊" }).length, 1);
   assert.equal(store.memory.buildContext({ characterId: "a" }).sections.preferences.length, 0);
 
-  const factKeyHash = sha256("pref.tea");
   assert.equal(
-    countRows(store.dbPath, "memory_forget_controls"),
+    countRows(store.dbPath, "memory_forget_identity_controls"),
     2,
     "A 与 B 都应留下无正文的忘记控制",
   );
@@ -900,8 +899,7 @@ test("POL-CHATMEM-002 默认忘记删除 A/B、旧来源与 FTS 不能恢复，�
   assert.equal(
     readOne(
       store.dbPath,
-      "SELECT COUNT(*) AS count FROM memory_forget_controls WHERE fact_key_hash = ?",
-      factKeyHash,
+      "SELECT COUNT(*) AS count FROM memory_forget_identity_controls",
     ).count,
     2,
   );
@@ -930,7 +928,7 @@ test("POL-CHATMEM-002 默认忘记删除 A/B、旧来源与 FTS 不能恢复，�
   assert.equal(ctx.store.memory.searchMemories({ characterId: "a", query: "热茶" }).length, 0);
   assert.equal(ctx.store.memory.searchMemories({ characterId: "a", query: "蛤蜊" }).length, 1);
   assert.equal(
-    readOne(ctx.store.dbPath, "SELECT COUNT(*) AS count FROM memory_forget_controls").count,
+    readOne(ctx.store.dbPath, "SELECT COUNT(*) AS count FROM memory_forget_identity_controls").count,
     2,
   );
 });
@@ -1053,13 +1051,13 @@ test("POL-CHATMEM-003 聊天中禁止分享跨持有者持久生效且保留已�
   assert.equal(entryOf(store, "b", "pref.tea").version, 1);
   assert.equal(store.memory.getContextVersion("a"), aContextBefore);
   assert.equal(store.memory.getContextVersion("b"), bContextBefore);
-  assert.equal(countRows(store.dbPath, "memory_share_controls"), 1);
+  assert.equal(countRows(store.dbPath, "memory_share_identity_controls"), 1);
   assert.equal(
     readOne(
       store.dbPath,
-      "SELECT fact_key_hash FROM memory_share_controls",
-    ).fact_key_hash,
-    sha256("pref.tea"),
+      "SELECT identity_id FROM memory_share_identity_controls",
+    ).identity_id,
+    entryOf(store, "a", "pref.tea").factIdentityId,
   );
   assert.equal(store.memory.listMemories("c").length, 0);
 
@@ -1099,7 +1097,7 @@ test("POL-CHATMEM-003 聊天中禁止分享跨持有者持久生效且保留已�
   assert.equal(requestRow(store, "restrict-share").status, "completed");
 
   ctx.reopen();
-  assert.equal(countRows(ctx.store.dbPath, "memory_share_controls"), 1);
+  assert.equal(countRows(ctx.store.dbPath, "memory_share_identity_controls"), 1);
   const reopenedA = entryOf(ctx.store, "a", "pref.tea");
   assert.equal(reopenedA.body, "用户喜欢热茶");
   assert.equal(entryOf(ctx.store, "b", "pref.tea").body, "用户喜欢热茶");
@@ -1149,7 +1147,7 @@ test("POL-CHATMEM-003 主题前缀句尾的明确禁分享命令仍执行", asyn
   });
   assert.equal(result.status, "completed");
   assert.match(result.reply, /之后我不会再把这件事分享或转告/u);
-  assert.equal(countRows(store.dbPath, "memory_share_controls"), 1);
+  assert.equal(countRows(store.dbPath, "memory_share_identity_controls"), 1);
   assert.equal(entryOf(store, "a", "pref.hot-tea").body, "用户喜欢热茶");
   assert.throws(
     () =>
@@ -1202,9 +1200,10 @@ test("POL-CHATMEM-004 歧义、引用、假设、否定与越界目标不改库�
 
   const entriesBefore = countRows(store.dbPath, "memory_entries");
   const controlsBefore = {
-    forget: countRows(store.dbPath, "memory_forget_controls"),
+    forget: countRows(store.dbPath, "memory_forget_identity_controls"),
     source: countRows(store.dbPath, "memory_source_controls"),
-    share: countRows(store.dbPath, "memory_share_controls"),
+    share: countRows(store.dbPath, "memory_share_identity_controls"),
+    deleted: countRows(store.dbPath, "memory_deleted_fact_fingerprints"),
   };
   const versionsBefore = store.memory
     .listMemories("a")
@@ -1236,9 +1235,10 @@ test("POL-CHATMEM-004 歧义、引用、假设、否定与越界目标不改库�
     assert.equal(result.reply.includes(reply), false);
     assert.equal(result.memoryApplied, 0);
     assert.equal(countRows(store.dbPath, "memory_entries"), entriesBefore);
-    assert.equal(countRows(store.dbPath, "memory_forget_controls"), controlsBefore.forget);
+    assert.equal(countRows(store.dbPath, "memory_forget_identity_controls"), controlsBefore.forget);
     assert.equal(countRows(store.dbPath, "memory_source_controls"), controlsBefore.source);
-    assert.equal(countRows(store.dbPath, "memory_share_controls"), controlsBefore.share);
+    assert.equal(countRows(store.dbPath, "memory_share_identity_controls"), controlsBefore.share);
+    assert.equal(countRows(store.dbPath, "memory_deleted_fact_fingerprints"), controlsBefore.deleted);
     assert.deepEqual(
       store.memory.listMemories("a").map((entry) => [entry.factKey, entry.version]),
       versionsBefore,
@@ -1441,7 +1441,7 @@ test("POL-CHATMEM-004 唯一条目本身不是“这件事”的目标证据", a
   assert.equal(result.reply.includes("已经删除"), false);
   assert.equal(entryOf(store, "a", "detail.instruction").body, "用户曾让我忘记所有记忆");
   assert.equal(countRows(store.dbPath, "memory_entries"), entriesBefore);
-  assert.equal(countRows(store.dbPath, "memory_forget_controls"), 0);
+  assert.equal(countRows(store.dbPath, "memory_forget_identity_controls"), 0);
 });
 
 test("POL-CHATMEM-004 普通叙述与礼貌明确请求在正式聊天中区分", async (t) => {
@@ -2122,7 +2122,7 @@ test("POL-CHATMEM-006 删除失败时命令来源排除与记忆一起回滚", a
     false,
   );
   assert.equal(countRows(store.dbPath, "memory_source_controls"), 0);
-  assert.equal(countRows(store.dbPath, "memory_forget_controls"), 0);
+  assert.equal(countRows(store.dbPath, "memory_forget_identity_controls"), 0);
   assert.equal(requestRow(store, "forget-source-rollback").status, "failed");
 
   withDatabase(store.dbPath, (db) => db.exec("DROP TRIGGER fail_chat_write"));

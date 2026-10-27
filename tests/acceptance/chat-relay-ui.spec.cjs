@@ -340,8 +340,9 @@ function readDbSummary(dataDir) {
       },
       chatRequests: db.prepare("SELECT id, status, error_code, memory_applied FROM chat_requests ORDER BY created_at, id").all(),
       controls: {
-        share: db.prepare("SELECT COUNT(*) AS count FROM memory_share_controls").get().count,
-        forget: db.prepare("SELECT COUNT(*) AS count FROM memory_forget_controls").get().count,
+        share: db.prepare("SELECT COUNT(*) AS count FROM memory_share_identity_controls").get().count,
+        forget: db.prepare("SELECT COUNT(*) AS count FROM memory_forget_identity_controls").get().count,
+        deleted: db.prepare("SELECT COUNT(*) AS count FROM memory_deleted_fact_fingerprints").get().count,
         source: db.prepare("SELECT COUNT(*) AS count FROM memory_source_controls").get().count,
       },
       counts: {
