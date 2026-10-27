@@ -228,3 +228,8 @@ POL-REMEMBER-LIVE-001～005 v1受托批准，实际模型/SQLite/chat边界与�
 ### POL-REMEMBER-008：明确记住的异键唯一定位
 
 父级S03/REQ-09；master受托批准的契约见s03s-live-remember-plan.md Part D。Given同角色直接用户来源的唯一第一人称detail/preference/identity事实；When通过正式chat再次明确记住、模型换key；Expected保留原条目/身份/来源/时间，仅实际提升importance和版本，不产生重复，不额外调用模型；多条或metadata/来源冲突澄清且不回退新建，删除不可回流、角色隔离不变。Oracle为SQLite前后快照、版本与最终回复；Runner tests/acceptance/memory-explicit-remember.spec.cjs，正式chat/SQLite真实，模型使用本地HTTP构造。受托验收与真实模型边界见s03s-master-review.md Part D。
+
+
+### POL-HISTORY-001～003：可见范围与历史表达
+
+父级S03，Contract v1由master受托批准，见s03s-live-remember-plan.md Part E。Runner拟使用tests/acceptance/chat.spec.cjs，真实chat/SQLite与本地模型HTTP；实际接线结果和真实模型语义分开判定。未运行不得标PASS。
