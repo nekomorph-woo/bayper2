@@ -40,3 +40,9 @@ SQLite为唯一事实来源，FTS5为可重建索引。以稳定角色ID确定�
 本项目实际缺口位于 `app/chat.cjs` 的systemPrompt、parseAssistantContent、runModelRequest：当前协议只有reply和memoryCandidates，明确禁用聊天中的纠正/删除/分享；本地面板完成不等于自然语言完成。记忆服务已有选中ID/版本校验和事实控制，应继续复用。另核对到memory-store与chat-store各自开启SQLite事务，后续组合操作必须明确事务所有权，不能在聊天事务里直接嵌套BEGIN，也不能先提交记忆再单独记录成功回复。
 
 下一切片设计约束：只从本轮真实用户输入识别明确操作；模型提出的目标必须落在当前角色可见候选及有效版本内，引用/假设/否定不授予执行权。可定位则本地先生效再确认，歧义只澄清最小范围。成功回复、请求幂等和记忆变化要同一事务；取消、迟到结果、版本变化、落库失败不得产生半完成或假成功。不同factKey的语义同一性仍需独立方案与对照，不能在这一入口修复后宣称全局语义纠正完成。
+
+## 2026-10-27：独立factKey语义关联前的源码核对
+
+Codex只读复核[Graphiti锁定commit的edge_operations.py](https://github.com/getzep/graphiti/blob/5c27edfa8d3e0f49b2571bcebb4261bcc89ee037/graphiti_core/utils/maintenance/edge_operations.py)，未安装或测试完整产品。实际读`_dedupe_extracted_edge` 866–998与`_apply_temporal_invalidation`/`resolve_edge_contradictions` 654–716：先比较端点和规范化事实原文；非精确匹配时以有界候选索引分别提出重复与矛盾，校验索引范围，再按有效时间处理冲突。不能据此把相似检索结果直接当成同一事实，或把历史经历当作当前偏好删除。
+
+Bayper后续适配判断（尚未实现）：在既有一次对话提炼内建议有限的事实关联，服务端核对角色可见范围、来源、候选版本与适用时间；跨角色只处理已持有相关理解的角色，不能借关联向未知者泄漏。歧义不强合并；验证需包含同义不同键、同名不同主体、过去经历与当前偏好、纠正/删除防回流。沿用SQLite及现有预算，不增加图数据库或通用多轮Agent框架。

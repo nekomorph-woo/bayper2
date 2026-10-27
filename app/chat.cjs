@@ -1,6 +1,8 @@
 /* S03b 聊天服务。只负责一次用户回合的本地持久化、上下文组装、受控模型请求、
    在途失效与结果核验；不接 UI、陪伴互动生命周期或模型自动授权。
-   同一 SQLite 连接由 createStore 注入，记忆服务是唯一的事实/权限来源。 */
+   S03k 起，明确的全局自动分享开关指令在本地事务完成，不组装模型上下文、
+   不读取凭据、不发网络请求；同一 SQLite 连接由 createStore 注入，
+   记忆服务是唯一的事实/权限来源。 */
 const crypto = require("node:crypto");
 const { AppError } = require("./errors.cjs");
 const { createChatStore } = require("./chat-store.cjs");
@@ -16,6 +18,7 @@ const {
   relayFailureReply,
   RELAY_FAILURE_CODES,
 } = require("./chat-memory-operations.cjs");
+const { detectSharingSetting } = require("./chat-sharing-setting.cjs");
 
 const MAX_MESSAGE_CHARS = 2000;
 const MAX_REQUEST_ID_CHARS = 200;
@@ -35,12 +38,16 @@ const MEMORY_BOUNDARY_NOTE = [
   "没有相关记录时，自然表示现在不确定或想不起来，不要作“你没说过”“从没提过”等历史断言。",
 ].join("\n");
 const NEGATION_CHARS = new Set(["不", "没", "无", "别", "未", "非", "勿"]);
+/* S03k 本地设置写入/确认失败的稳定业务码；只标记该分支可重试，
+   不把其他未知 SQLite 错误统一放开。 */
+const LOCAL_SHARING_SETTING_ERROR = "LOCAL_SHARING_SETTING_FAILED";
 const RETRYABLE_ERRORS = new Set([
   "TIMEOUT",
   "NETWORK_ERROR",
   "SERVER_ERROR",
   "INVALID_RESPONSE",
   "INTERRUPTED",
+  LOCAL_SHARING_SETTING_ERROR,
 ]);
 /* 操作目标在模型响应期间被本地修改或删除时，整笔请求转为 stale，
    不展示迟到回复，也不执行旧目标。 */
@@ -556,6 +563,75 @@ function createChatService({
     );
   }
 
+  /* 用户消息与 pending 请求同事务写入；本地设置指令和普通模型回合共用，
+     避免请求已存在但没有对应原话，或原话落库但无法幂等重放。 */
+  function recordUserTurn({ characterId, conversationId, userText, requestId, at, contextVersion }) {
+    const userMessageId = crypto.randomUUID();
+    const sourceId = `chat:${userMessageId}`;
+    store.transaction(() => {
+      store.insertMessage({
+        id: userMessageId,
+        conversationId,
+        characterId,
+        role: "user",
+        content: userText,
+        sourceId,
+        createdAt: at,
+      });
+      store.insertRequest({
+        id: requestId,
+        conversationId,
+        characterId,
+        userMessageId,
+        status: "pending",
+        contextVersion,
+        createdAt: at,
+      });
+    });
+    return userMessageId;
+  }
+
+  /* S03k 本地完成：开关写入、确认消息和请求完成共用一个事务。保存失败时
+     整笔回滚，不保留假确认；用户消息与失败请求仍可用于显式重试。 */
+  function completeLocalSettingRequest({ request, setting }) {
+    const current = store.getRequest(request.id);
+    if (!current || current.status !== "pending") {
+      return requestResult(current);
+    }
+    const userMessage = store.getMessage(current.userMessageId);
+    const completedAt = currentMs();
+    const assistantId = crypto.randomUUID();
+    try {
+      store.transaction(() => {
+        if (setting.kind === "execute") {
+          memory.setAutoShareEnabled({ enabled: setting.enabled });
+        }
+        store.insertMessage({
+          id: assistantId,
+          conversationId: current.conversationId,
+          characterId: current.characterId,
+          role: "assistant",
+          content: setting.reply,
+          sourceId: userMessage?.sourceId ?? `chat-local:${current.id}`,
+          createdAt: completedAt,
+        });
+        store.updateRequest(current.id, {
+          status: "completed",
+          completedAt,
+          assistantMessageId: assistantId,
+          memoryApplied: 0,
+        });
+      });
+      return requestResult(store.getRequest(current.id));
+    } catch {
+      const after = store.getRequest(current.id);
+      if (after?.status === "cancelled") {
+        return requestResult(after);
+      }
+      return failRequest(current.id, LOCAL_SHARING_SETTING_ERROR);
+    }
+  }
+
   function applyMemoryCandidates({ characterId, sourceId, candidates, nowMs, inTransaction }) {
     if (candidates.length === 0) {
       return { applied: false, count: 0, reason: null };
@@ -790,33 +866,34 @@ function createChatService({
       return requestResult(existing);
     }
 
+    /* 无条件全局设置指令只在本轮原话中识别；命中后不组装模型上下文，
+       也不读取凭据。无授权或混合任务的输入只做本地未更改说明。 */
+    const setting = detectSharingSetting(userText);
+    if (setting.kind !== "none") {
+      recordUserTurn({
+        characterId,
+        conversationId: conversation.id,
+        userText,
+        requestId: id,
+        at,
+        contextVersion: memory.getContextVersion(characterId),
+      });
+      return completeLocalSettingRequest({ request: store.getRequest(id), setting });
+    }
+
     const { messages, contextVersion, operationContext } = buildMessages({
       characterId,
       conversationId: conversation.id,
       userText,
       nowMs: at,
     });
-    const userMessageId = crypto.randomUUID();
-    const sourceId = `chat:${userMessageId}`;
-    store.transaction(() => {
-      store.insertMessage({
-        id: userMessageId,
-        conversationId: conversation.id,
-        characterId,
-        role: "user",
-        content: userText,
-        sourceId,
-        createdAt: at,
-      });
-      store.insertRequest({
-        id,
-        conversationId: conversation.id,
-        characterId,
-        userMessageId,
-        status: "pending",
-        contextVersion,
-        createdAt: at,
-      });
+    recordUserTurn({
+      characterId,
+      conversationId: conversation.id,
+      userText,
+      requestId: id,
+      at,
+      contextVersion,
     });
     return trackRequest(
       runModelRequest({
@@ -851,6 +928,12 @@ function createChatService({
       new Set(memory.listExcludedSources(characterId)).has(sourceHash(userMessage.sourceId))
     ) {
       return staleRequest(request.id, "SOURCE_EXCLUDED");
+    }
+    // 显式重试沿用同一本地分支，不再发模型请求，也不重复写入用户消息。
+    const setting = detectSharingSetting(userMessage.content);
+    if (setting.kind !== "none") {
+      const pending = store.prepareRetry(request.id, memory.getContextVersion(characterId));
+      return completeLocalSettingRequest({ request: pending, setting });
     }
     const at = currentMs(nowMs);
     const { messages, contextVersion, operationContext } = buildMessages({
@@ -945,4 +1028,8 @@ function createChatService({
   };
 }
 
-module.exports = { createChatService, DEFAULT_CHARACTERS };
+module.exports = {
+  createChatService,
+  DEFAULT_CHARACTERS,
+  LOCAL_SHARING_SETTING_ERROR,
+};
