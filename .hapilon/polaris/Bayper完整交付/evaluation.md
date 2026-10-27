@@ -1,5 +1,147 @@
 # 交付验收记录
 
+## 当前统一口径（2026-10-27）
+
+本文件是当前唯一逐 Case 结果入口。各 review 保留原始判断、失败过程和长证据说明，本文只登记可定位的结果，不复制全文。状态仅用 execution.md 的五种：PASS、FAIL、ERROR、INCONCLUSIVE、NOT_COVERED；不使用 PARTIAL，也不把多个 Case 压成平均分或“最差状态”。
+
+- 分组：仅当版本、状态、证据和执行边界相同时，一个精确 ID 范围可共用一行；任一 Case 或必需子项有差异即拆行。`001～003` 只表示这些 ID 满足本行，不覆盖范围外或未执行项。
+- 版本：历史行以对应 review/evidence 的验收基线与源摘要定位，未记录 commit 的不补猜。已提交基线为 `a880937`；本批拟提交 VERSION `0.1.181`，尚未产生新提交，不写假 hash。工作区另有 5 个未提交 memory 源码/测试文件，SHA 见 [process-freeze.json](evidence/process-freeze.json)。
+- master 已独立核对冻结 5 SHA、部分原始日志、Expected 与 r2 差异；GAP-05/07/08/12 接受整改记录（不等于产品验收），GAP-03/13 以本轮细修后待最终复验，GAP-14 仍下批，产品保持冻结。
+- 历史 PASS 只证明该验收基线，不证明当前未提交工作区。受 memory/chat 身份链改动影响的组在“当前适用”列标“待回归”；没有重跑就不写当前 PASS。反之，当前工作区未验收也不能推断所有历史产品从未通过。
+- Runner 退出码、编译成功、开发报告全绿或 review 中的切片受托接受，均不自动升级为父级或整 Case 通过。体验记录已标明实际操作者、方法与局限；Codex 受托体验不是人类亲自体验，已有授权不要求真人重新批准。
+
+- Runner 入口统一相对仓库根；本表不逐行重复参数。领域默认 `node --test tests/acceptance/<file>.spec.cjs`；GUI/隔离串行默认 `node --test --test-concurrency=1 tests/acceptance/<file>.spec.cjs`；工具 `node <tools能力入口> --out <新文件>` 或 `python3 <工具脚本>`；真实服务/隔离 Herdr/环境变量按 [acceptance-plan.md](acceptance-plan.md) 对应父级行。历史未记录逐字参数的不补造。
+- 多 Runner/多文件的组在证据列引用含逐 Case 映射的 review（如 s03e/s03j/s05j/s06j），不复制全文。
+
+## 统一验收矩阵
+
+### S01～S02
+
+| Case（版本） | 结果 | 验收基线 / 当前适用 | Runner 入口 / 命令（模板见上） | 原始证据 | 未覆盖边界 |
+| --- | --- | --- | --- | --- | --- |
+| POL-ONBOARD-001～005（v1） | PASS | 2026-10-25 s01-review；当前未重跑，不涉本轮 memory 文件 | `tests/acceptance/onboarding.spec.cjs`；`npm run test:acceptance` | [s01-codex-acceptance.log](evidence/s01-codex-acceptance.log) 6/6 | 受控 HTTP/单机 Electron；不证明真实模型语义 |
+| POL-ONBOARD-006（v1） | PASS | 同上真实服务单批 | `tests/acceptance/live-onboarding.spec.cjs`；`npm run test:live` | [s01-codex-live.log](evidence/s01-codex-live.log) 1/1 | 仅 DeepSeek 官方固定短请求；其他服务/模型未验 |
+| POL-COMPANION-001～006（v1） | PASS | 2026-10-25 s02-review r3；当前未重跑 | `companionship.spec.cjs`、`companionship-ui.spec.cjs`；见 [acceptance-plan.md](acceptance-plan.md) | [s02-codex-r3-acceptance.log](evidence/s02-codex-r3-acceptance.log) 服务18/18＋GUI9/9 | 可控时钟；未做长期真实运行/进程崩溃注入 |
+| POL-DESKTOP-001（v1） | PASS | 2026-10-26 s02b-review；当前未重跑 | `tests/acceptance/desktop.spec.cjs`；`node --test` | [s02b-codex-r2-gui.log](evidence/s02b-codex-r2-gui.log) 16/16 | 不证明 OS 屏幕合成与真实焦点 |
+| POL-DESKTOP-002（v1） | PASS | 本批无 `desktop.spec` Runner；后续 S07c 原生输入切片覆盖点击/穿透/焦点 | `tests/acceptance/s07c-transparent-input.spec.cjs`（GUI 串行模板） | [s07c-codex-r1-native.log](evidence/s07c-codex-r1-native.log) tests 1/pass 1，单测试覆盖 HIT-001/002/003；桌面 11/11 见 [s07c-codex-r1-desktop.log](evidence/s07c-codex-r1-desktop.log) | scaleFactor=1；Retina、物理多屏未验；计划入口下轮统一 |
+| POL-DESKTOP-003（v1） | NOT_COVERED | 无自动化 Runner；须真实 Spaces/全屏切换与可见证据 | 无 | 无 | 真实 Spaces/全屏；后续 HIT 通过不能代替此项 |
+| POL-DESKTOP-004（关闭/重开/重复启动/崩溃退出） | PASS | 2026-10-26 s02b-review 与 2026-10-27 s08a-review；当前未重跑 | `desktop.spec.cjs` 001/004 相关测试 | [s02b-codex-r2-gui.log](evidence/s02b-codex-r2-gui.log)、[s08a-codex-repair.log](evidence/s08a-codex-repair.log) | 托盘原生点击未单列覆盖；崩溃注入不等于用户真实退出 |
+| POL-DESKTOP-004（原生托盘逐项点击） | NOT_COVERED | 测试内注明“托盘点击由 Codex 后验”，未找到独立原生点击结果 | 无（`desktop.spec.cjs` 只验证 `activate` 重显） | 同左 | 须真实托盘菜单点击与逐项行为 |
+| POL-DESKTOP-005（v1） | PASS | 2026-10-26 s02b-review r3；当前未重跑 | `desktop.spec.cjs` 005 相关测试 | [s02b-codex-r2-gui.log](evidence/s02b-codex-r2-gui.log)、[s02b-codex-r3-related.log](evidence/s02b-codex-r3-related.log) | 原生连续动画视觉、全部动作与服装未覆盖 |
+| POL-DESKTOP-006（受控系统事件路径） | PASS | 2026-10-26 s02b-review；当前未重跑 | 非独立 006 Runner：`desktop.spec.cjs` 测试“POL-DESKTOP-001/004 真实画布、管理窗口输入、关闭隐藏与退出清理”中的 `powerMonitor.emit` 子断言（约第368行） | [s02b-codex-r2-gui.log](evidence/s02b-codex-r2-gui.log) | 仅该子断言与时间结算，不是物理锁屏/睡眠 |
+| POL-DESKTOP-006（真实锁屏/休眠/恢复） | NOT_COVERED | 无真实系统事件证据 | 无 | 无 | 用户机器真实锁屏/睡眠；不得用受控事件或截图冒充 |
+| POL-DESKTOP-007（v1） | PASS | 2026-10-26 desktop-pixel-review；当前未重跑 | `desktop.spec.cjs`、`desktop-assets.test.cjs` | [codex-pixel-r2.log](evidence/codex-pixel-r2.log) 11/11 | 原生命中、Spaces/全屏、长期自然度、其他角色新版素材 |
+| POL-RELATION-001～004（v1） | PASS | 2026-10-26 s02c-review；当前未重跑 | `relationship-effects.spec.cjs`、`companionship.spec.cjs` | [s02c-codex-first.log](evidence/s02c-codex-first.log) 23/23 | 有效互动精力、共同故事、日常/探索成本未接线 |
+
+### S03
+
+| Case（版本） | 结果 | 验收基线 / 当前适用 | Runner 入口 / 命令（模板见上） | 原始证据 | 未覆盖边界 |
+| --- | --- | --- | --- | --- | --- |
+| POL-MEMORY-001（核心归属） | PASS | 2026-10-26 s03a r4；当前待回归 | `memory.spec.cjs` | [s03a-codex-r4.log](evidence/s03a-codex-r4.log) 15/15 | 角色隔离/重复来源/昵称/重开通过；真实模型不在本 Case |
+| POL-MEMORY-001（服装/身份保持） | PASS | 2026-10-26/27 S06g/S06j 衣装路径；非本 Case 记忆 Runner | `authored-content.spec.cjs`、`story-window-ui.spec.cjs` | [s06g-codex-final.log](evidence/s06g-codex-final.log)、[s06j-codex-gui-r2.log](evidence/s06j-codex-gui-r2.log) | 仅证明衣装不改变凛身份/名单/当前位，未直接断言记忆条目归属 |
+| POL-MEMORY-001（服装切换后记忆归属） | NOT_COVERED | 现有已查来源无记忆与服装切换联动测试 | 无 | 无 | 不得用身份保持或服装故事替代 memory_entries 归属断言 |
+| POL-MEMORY-002（v1） | PASS | s03a r4 构造集；当前未重跑 | `memory.spec.cjs`、`tools/memory-tuning` | [s03a-codex-r4.log](evidence/s03a-codex-r4.log)、[codex-r4.json](tools/memory-tuning/results/codex-r4.json) | 非盲测、有限词表；零字面同义仍可能漏；真实聊天另验 |
+| POL-MEMORY-003（v1） | PASS | s03a 模块＋S03b/S03f 自然语言与在途；当前待回归 | `memory.spec.cjs`、`chat-memory-operations.spec.cjs` | [s03a-codex-r4.log](evidence/s03a-codex-r4.log)、[s03f-codex-r4-domain.log](evidence/s03f-codex-r4-domain.log) | 自然语言中文变体有限；真实模型语义不写为通用保证 |
+| POL-MEMORY-004（v1） | PASS | s03a 模块＋S03b/S03c/S03f 实际接入；当前待回归 | `memory.spec.cjs`、`chat.spec.cjs`、`memory-ui.spec.cjs` | [s03a-codex-r4.log](evidence/s03a-codex-r4.log)、[s03b-codex-r2.log](evidence/s03b-codex-r2.log)、[s03c-codex-r3.log](evidence/s03c-codex-r3.log) | 原聊天原文保留、索引/展示清除、旧源不回流分层覆盖 |
+| POL-MEMORY-005（v1） | PASS | s03a 模块＋S03f/S03h 用户语义入口；当前待回归 | `memory.spec.cjs`、`chat-memory-operations.spec.cjs`、`chat-exclusive.spec.cjs` | [s03a-codex-r4.log](evidence/s03a-codex-r4.log)、[s03f-codex-r4-domain.log](evidence/s03f-codex-r4-domain.log)、[s03h-codex-chat-r3.log](evidence/s03h-codex-chat-r3.log) | 异 factKey 语义归并仍未完成 |
+| POL-MEMORY-006（长期/临时/门禁） | PASS | s03a r4＋`memory.spec.cjs` 当前用例；当前待回归 | `memory.spec.cjs` | [s03a-codex-r4.log](evidence/s03a-codex-r4.log) 15/15 | 长期保持、临时到期、时间不放开删除/权限门禁已断言 |
+| POL-MEMORY-006（普通细节降权/整理） | NOT_COVERED | 当前 `memory.spec.cjs` 第341行后仅验到期与门禁，无降权/整理断言 | `memory.spec.cjs`（无对应测试） | 无 | 不把“普通细节可降权”写成已实现；真实活动使用亦未验 |
+| POL-MEMORY-007（v1） | PASS | s03a 模块＋S03d/S03e/S03g 正式转告；当前待回归 | `memory.spec.cjs`、`memory-sharing.spec.cjs`、`sharing-ui.spec.cjs`、`chat-relay.spec.cjs` | [s03a-codex-r4.log](evidence/s03a-codex-r4.log)、[s03d-codex-domain.log](evidence/s03d-codex-domain.log)、[s03g-codex-main-domain.log](evidence/s03g-codex-main-domain.log) | 指定片段、来源、拒绝二次转发、接收不改名单/单次 HTTP 已断言；自动频率不属本 Case |
+| POL-CHAT-001（v1） | PASS | 2026-10-26 s03b 服务/窗口最终批；结束返回资格由 COMPANION-003 覆盖；当前待回归 | `chat.spec.cjs`、`chat-ui.spec.cjs`、`companionship.spec.cjs` | [s03b-codex-r2.log](evidence/s03b-codex-r2.log) 32/32、[s03b-codex-window-r2.log](evidence/s03b-codex-window-r2.log) 18/18 | 构造 HTTP；真实模型上下文另由 CHAT-008 验证；不覆盖所有语言变体 |
+| POL-CHAT-002（v1） | PASS | s03b 服务批＋第四轮真实模型语义；当前待回归 | `chat.spec.cjs`、`live-chat.spec.cjs` | [s03b-codex-r2.log](evidence/s03b-codex-r2.log)、[s03b-pol-chat-008-live-fourth.json](evidence/s03b-pol-chat-008-live-fourth.json) | 真实模型只覆盖四轮构造对话，不证明通用语义 |
+| POL-CHAT-003（v1） | PASS | s03b 服务与窗口最终批；当前待回归 | `chat.spec.cjs`、`chat-ui.spec.cjs` | [s03b-codex-r2.log](evidence/s03b-codex-r2.log)、[s03b-codex-window-r2.log](evidence/s03b-codex-window-r2.log) | 关闭持久失败、退出取消、迟到隔离已覆盖；真实模型非本 Case |
+| POL-CHAT-004（v1） | PASS | s03b 服务＋S03c/S03f 正式 GUI；当前待回归 | `chat.spec.cjs`、`memory-ui.spec.cjs`、`chat-memory-operations-ui.spec.cjs` | [s03b-codex-r2.log](evidence/s03b-codex-r2.log)、[s03c-codex-r3.log](evidence/s03c-codex-r3.log)、[s03f-codex-gui-r1.log](evidence/s03f-codex-gui-r1.log) | C 未获新事实已断言；真实模型语义不在本 Case |
+| POL-CHAT-005（v1） | PASS | s03b 服务＋S03c/S03f 正式 GUI；当前待回归 | `chat.spec.cjs`、`memory-ui.spec.cjs`、`chat-memory-operations-ui.spec.cjs` | 同 CHAT-004 | 原聊天原文保留、索引清除、在途丢弃已覆盖；真实模型不在本 Case |
+| POL-CHAT-006（v1） | PASS | s03b 单子项＋S03d/S03g/S03h 转告/独属；当前待回归 | `chat.spec.cjs`、`memory-sharing.spec.cjs`、`chat-relay.spec.cjs`、`memory-exclusive.spec.cjs` | [s03b-codex-r2.log](evidence/s03b-codex-r2.log)、[s03d-codex-domain.log](evidence/s03d-codex-domain.log)、[s03g-codex-main-domain.log](evidence/s03g-codex-main-domain.log)、[s03h-codex-chat-r3.log](evidence/s03h-codex-chat-r3.log) | 分散在多个切片 Runner；未以 CHAT-006 单名重跑；真实模型转告另有 S03g 三场对照 |
+| POL-CHAT-007（v1） | PASS | S03f 多候选/歧义＋S03h 聊天指代；当前待回归 | `chat-memory-operations.spec.cjs`、`chat-exclusive.spec.cjs`、`chat.spec.cjs` | [s03f-codex-r4-domain.log](evidence/s03f-codex-r4-domain.log)、[s03h-codex-chat-r3.log](evidence/s03h-codex-chat-r3.log) | 多候选不猜、唯一条目不当证据、正文指令不执行已覆盖；有限中文语法 |
+| POL-CHAT-008（v1） | PASS | 2026-10-26 s03b 第四轮真实服务；当前待回归 | `tests/acceptance/live-chat.spec.cjs` | [s03b-pol-chat-008-live-fourth.json](evidence/s03b-pol-chat-008-live-fourth.json) | 所有语言变体、自然语言定位/删除、外部源解析、UI 记忆管理 |
+| POL-MEMUI-001～006（v1） | PASS | 2026-10-26 s03c r3；当前待回归 | `memory-ui.spec.cjs` | [s03c-codex-r3.log](evidence/s03c-codex-r3.log) 6/6、[s03c-codex-service-final.log](evidence/s03c-codex-service-final.log) 32/32 | 当时仍为旧管理页；不等同 S08 native |
+| POL-SHARING-001～006＋REVIEW-S03D-1/2（v1） | PASS | 2026-10-26 s03d；当前待回归 | `memory-sharing.spec.cjs` 及相邻领域 | [s03d-codex-domain.log](evidence/s03d-codex-domain.log) 58/58 | 自然语言定位/转告、主题自动分享、全局禁分享未覆盖 |
+| POL-SHAREUI-001～006＋REVIEW-S03E-1（v1） | PASS | 2026-10-27 s03e 最终独立批；当前待回归 | `sharing-ui.spec.cjs`、`memory-ui.spec.cjs`、`chat-ui.spec.cjs` | [s03e-codex-domain.log](evidence/s03e-codex-domain.log) 41/41、[s03e-codex-gui-r1.log](evidence/s03e-codex-gui-r1.log) 23/23 | 真实模型语义、自然语言控制、自动定向分享未覆盖 |
+| POL-CHATMEM-001～006（v1） | PASS | 2026-10-27 s03f R4；当前待回归 | `chat-memory-operations.spec.cjs` | [s03f-codex-r4-domain.log](evidence/s03f-codex-r4-domain.log) 63/63、[s03f-codex-r4-unit.log](evidence/s03f-codex-r4-unit.log) 13/13 | R3 真实六场 PASS；R4 未冒称重跑真实模型；自然语言转告/自动共享未覆盖 |
+| POL-CHATMEM-UI-001（v1） | PASS | 2026-10-27 s03f GUI 独立批；当前待回归 | `chat-memory-operations-ui.spec.cjs` | [s03f-chat-memory-ui/codex-20261027-r1/run.json](evidence/s03f-chat-memory-ui/codex-20261027-r1/run.json)、[s03f-codex-gui-r1.log](evidence/s03f-codex-gui-r1.log) | 构造 HTTP/Electron；不是真实模型或人工体验 |
+| POL-CHATRELAY-001～006（v1） | PASS | 2026-10-27 s03g 主目录服务批；当前待回归 | `chat-relay.spec.cjs` 及相邻领域 | [s03g-codex-main-domain.log](evidence/s03g-codex-main-domain.log) | 真实模型另有三场构造对照；表达鲁棒性有限 |
+| POL-CHATRELAY-UI-001（v1） | PASS | 2026-10-27 s03g 主目录 GUI；当前待回归 | `chat-relay-ui.spec.cjs` | [s03g-chat-relay-ui/codex-20261027-r1/run.json](evidence/s03g-chat-relay-ui/codex-20261027-r1/run.json) | 构造 HTTP；非真实模型窗口同批 |
+| POL-EXCLUSIVE-001～005（v1） | PASS | 2026-10-27 s03h 服务首片；当前待回归 | `memory-exclusive.spec.cjs`、相邻领域回归 | [s03h-codex-domain-r1.log](evidence/s03h-codex-domain-r1.log) 25/25、[s03h-codex-main-domain.log](evidence/s03h-codex-main-domain.log) 65/65 | 只同 factKey/既有派生；异 factKey 语义归并未实现 |
+| POL-EXCLUSIVECHAT-001～005（v1） | PASS | 2026-10-27 s03h 聊天服务 r3；当前待回归 | `chat-exclusive.spec.cjs` 及四 Runner | [s03h-codex-chat-r3.log](evidence/s03h-codex-chat-r3.log) 45/45 | 构造 HTTP；真实模型独属指令另由 LIVE 组验证 |
+| POL-EXCLUSIVEUI-001～003（v1） | PASS | 2026-10-27 s03h 正式 GUI 独立批；当前待回归 | `memory-exclusive-ui.spec.cjs`、相邻 GUI | [run.json](evidence/s03h-memory-exclusive-ui/codex-20261027-r1/run.json)、8 张截图；相邻 [s03h-panel-neighbor-ui-r2.log](evidence/s03h-panel-neighbor-ui-r2.log) | 构造数据/本地 HTTP；非真实 DeepSeek、非人工体验 |
+| POL-EXCLUSIVE-LIVE-001～003（v1） | PASS | 2026-10-27 s03h 真实服务 r2；当前待回归 | `live-chat-exclusive.spec.cjs` | [s03h-live-exclusive/codex-20261027-r2/run.json](evidence/s03h-live-exclusive/codex-20261027-r2/run.json)、[s03h-codex-live-exclusive-r2.log](evidence/s03h-codex-live-exclusive-r2.log) | 三句构造场景；r1 Oracle 误报原件保留；不称全部自然语言可靠 |
+| POL-AUTOSHARE-CONTROL-001～004（v1） | PASS | 2026-10-27 s03i；当前待回归 | `memory-auto-share.spec.cjs`、`memory-auto-share-ui.spec.cjs` | [s03i-domain-codex-r2.log](evidence/s03i-domain-codex-r2.log)、[s03i-unit-codex-r1.log](evidence/s03i-unit-codex-r1.log) | 主题自动分享未接生产；24h 预算/名单选择未覆盖 |
+| POL-THEME-SHARE-001～005、004B～004E、006（v1） | PASS | 2026-10-27 s03j；当前待回归 | `theme-memory-sharing.spec.cjs`、`story-runtime-ui.spec.cjs`、`memory-ui.spec.cjs` | [s03j-memory-codex-r2.log](evidence/s03j-memory-codex-r2.log)、[s03j-story-domain-codex-r2.log](evidence/s03j-story-domain-codex-r2.log)、[s03j-ui-codex-r1.log](evidence/s03j-ui-codex-r1.log) | 正式四故事 assetAvailable=false；发布后 GUI 投递 NOT_COVERED |
+| POL-SHARESETTING-001～005（v1） | PASS | 2026-10-27 s03k；当前待回归 | `chat-sharing-setting.spec.cjs`、`chat-sharing-setting-ui.spec.cjs` | [s03k-domain-codex-r1.log](evidence/s03k-domain-codex-r1.log)、[s03k-ui-codex-r1.log](evidence/s03k-ui-codex-r1.log) | 有限中文命令集；其他自动设置讨论未扩展 |
+| SEM-003、004、008（v1） | PASS | 2026-10-27 s03l identity r4；当前未重跑 | `tools/memory-tuning/semantic-baseline.cjs` | [semantic-baseline-codex-identity-r4.json](tools/memory-tuning/results/semantic-baseline-codex-identity-r4.json) | 构造场景；不等于通用语义理解 |
+| SEM-001、002、005、006、007（v1） | FAIL | 同上 r4；当前未重跑 | 同上 | 同上（3 PASS/5 FAIL，50/75 检查） | 五处失败为后续必做缺口，不能以其他切片变绿抵销 |
+| POL-FACTID-001、003（v1） | PASS | 2026-10-27 s03l-a r4；当前待回归 | `memory-fact-identity.spec.cjs`、领域回归 | [s03l-domain-codex-r4.log](evidence/s03l-domain-codex-r4.log) 119/119 | 构造 HTTP/fixture；真实模型语义未验 |
+| POL-FACTID-002（v2） | INCONCLUSIVE | v1 PASS 已失效；v2 只有开发报告 2/2，未独立验收 | `memory-fact-identity.spec.cjs`、`memory-source-identity.spec.cjs` | [claude-s03l-source-identity.json](evidence/claude-s03l-source-identity.json) | 需 master 独立执行与旧机制断言迁移决定 |
+| POL-FACTID-004～006（v1） | INCONCLUSIVE | v1 业务 Expected 仍有效，r4 历史 PASS；当前 v2 实现使 5 项同文复用机制 fixture FAIL，fixture 待迁移 | 同 FACTID 套件 | [claude-s03l-source-identity.json](evidence/claude-s03l-source-identity.json) | 不把该组称为 v2 Case；不得据机制未迁移改写 v1 业务约束，待独立回归 |
+| POL-ASSOC-001、003、004、005（v1） | PASS | 2026-10-27 s03l-b r3；当前待回归 | `memory-association.spec.cjs` 及 12 领域文件 | [s03l-association-codex-r3.log](evidence/s03l-association-codex-r3.log) | 模型语义核验/资格预算接线未完成 |
+| POL-ASSOC-002（v1） | INCONCLUSIVE | r3 历史 PASS；当前 v2 实现使 1 项同文复用机制 fixture FAIL，v1 业务 Expected 不变 | 同上 | [claude-s03l-source-identity.json](evidence/claude-s03l-source-identity.json) | 待显式 associateFacts fixture 迁移与独立回归，不改写 Expected |
+| POL-SEM-HOLD-001（01～16） | FAIL | 2026-10-27 holdout 真实模型单批；当前未重跑 | `semantic-probe.cjs --dataset holdout` | [semantic-holdout-codex-live-v2.json](tools/memory-tuning/results/semantic-holdout-codex-live-v2.json) | 14 PASS/2 FAIL（11、12）；falseMerge=2；固定样本不证明泛化 |
+| POL-REL-001～003（v1） | PASS | 2026-10-27 grounding；构造输出边界 | `memory-relation-protocol.spec.cjs` | [s03l-grounding-codex-r2.log](evidence/s03l-grounding-codex-r2.log) | 不写库、不调模型；引用存在不等于解释正确 |
+| POL-REL-004（baseline 子项） | PASS | 真实模型单批 16/16 | `semantic-probe.cjs` grounded | [grounding-baseline-live-codex-v1.json](tools/memory-tuning/results/grounding-baseline-live-codex-v1.json) | 单次构造真实模型；不证明生产可靠 |
+| POL-REL-004（holdout 子项） | FAIL | 真实模型单批 14/16 | 同上 `--dataset holdout` | [grounding-holdout-live-codex-v1.json](tools/memory-tuning/results/grounding-holdout-live-codex-v1.json) | 11 uncertain、12 误 equivalent；不得改 Expected 凑绿 |
+| POL-MODEL-COMP-001（v1） | FAIL | 2026-10-27 pro 对照；未采用 pro | `tools/memory-tuning/semantic-probe.cjs --model deepseek-v4-pro`（输出参数按模板） | [grounding-pro-baseline-live-codex.json](tools/memory-tuning/results/grounding-pro-baseline-live-codex.json)、[grounding-pro-holdout-live-codex.json](tools/memory-tuning/results/grounding-pro-holdout-live-codex.json) | baseline 13/16、holdout 13/16；延迟更高且无可靠性收益 |
+| POL-SOURCECTX-001～006（v1） | PASS | 2026-10-27 source-context r2；当前待回归 | `memory-source-context.spec.cjs` 及 6 领域文件 | [s03l-source-context-codex-r2.log](evidence/s03l-source-context-codex-r2.log) 74/74 | 只读模块；未接角色回复上下文 |
+| POL-SOURCE-REL-001～004（v1） | PASS | 2026-10-27 source-grounding r3；当前待回归 | `memory-source-relation.spec.cjs`、`memory-relation-protocol.spec.cjs` | [s03l-source-grounding-codex.log](evidence/s03l-source-grounding-codex.log) 18/18 | 构造模型输出；抗注入/主体推断未验 |
+| POL-SOURCE-LIVE-001（01～12） | FAIL | 2026-10-27 真实 DeepSeek 单批；当前未重跑 | `tools/memory-tuning/source-probe.cjs` | [source-live-codex-v1.json](tools/memory-tuning/results/source-live-codex-v1.json) | 10 PASS/2 FAIL（06、11）；falseMerge=0、missedEquivalent=0；不证明泛化/抗注入 |
+| POL-SOURCE-ID-001～004（v1 计划） | INCONCLUSIVE | 开发报告 4/4，master 未独立验收；当前待回归 | `memory-source-identity.spec.cjs` | [claude-s03l-source-identity.json](evidence/claude-s03l-source-identity.json)、[s03l-source-identity-before.log](evidence/s03l-source-identity-before.log) | 存量误合组未迁移；实现未独立验收 |
+
+说明：s03b-review 是首版服务退回记录，不作为 CHAT 最终状态来源；上表以最终服务/窗口日志及后续切片 Runner 定位。CHAT-001～007 的 v1 业务 Expected 仍有效，缺证只限各行“未覆盖边界”所列子项。
+
+### S04～S05
+
+| Case（版本） | 结果 | 验收基线 / 当前适用 | Runner 入口 / 命令（模板见上） | 原始证据 | 未覆盖边界 |
+| --- | --- | --- | --- | --- | --- |
+| POL-SOURCE-001～006（v1） | PASS | 2026-10-26 s04a r2；当前未重跑 | `external-sources.spec.cjs` | [s04a-codex-r2.log](evidence/s04a-codex-r2.log) 6/6 | 构造临时目录；真实用户会话/设置页当时未接线 |
+| POL-SOURCE-007～012（v1） | PASS | 2026-10-26 s04b r2；当前未重跑 | `session-sources.spec.cjs`、`external-sources.spec.cjs` | [s04b-codex-r2.log](evidence/s04b-codex-r2.log) 12/12 | 本机 TOCTOU 最终检查后仍存在；只支持已核实 Claude/Codex 格式 |
+| POL-ANALYSIS-001～011、POL-SOURCE-013（v1） | PASS | 2026-10-26 s04c 最终索引批；当前待回归（写入 memory） | `source-analysis.spec.cjs`、`session-sources.spec.cjs`、`external-sources.spec.cjs`、`automatic-budget.spec.cjs` | [s04c-codex-index-final.log](evidence/s04c-codex-index-final.log) 32/32 | 模型响应/资格为 fixture；真实语义、跨文件同义防回流未验 |
+| POL-SOURCE-UI-001～003（v1） | PASS | 2026-10-25 s04d 最终独立批；当前未重跑 | `source-settings.spec.cjs`、`native-shell.spec.cjs`、`companionship-ui.spec.cjs`、`external-sources.spec.cjs` | [s04d-codex-final.log](evidence/s04d-codex-final.log) 16/16 | 原生目录 dialog 为 fixture；无真实人工点击；单屏布局为自动化+截图审查 |
+| POL-SOURCE-AUTO-001～005、002b/002c、004a～004e（v1） | PASS | 2026-10-26 s04e 最终独立批；当前待回归 | `source-automation.spec.cjs`、`source-settings.spec.cjs`、聊天/系统回归 | [s04e-codex-chat-final.log](evidence/s04e-codex-chat-final.log) 25/25 | 本地 HTTP/加速时间/原生 dialog/powerMonitor fixture；未读用户真实会话、未锁屏 |
+| POL-CONNECTOR-001～007（v1） | PASS | 2026-10-26 s05a r2；当前未重跑 | `connector-ledger.spec.cjs` | [s05a-codex-r2.log](evidence/s05a-codex-r2.log) 7/7 | 未接真实 Herdr 时序/UI；无服务端事件 seq |
+| POL-TRANSPORT-001～004（v1） | PASS | 2026-10-26 s05b r2；当前未重跑 | `herdr-transport.spec.cjs` | [s05b-codex-r2.log](evidence/s05b-codex-r2.log) 4/4 | 只覆盖传输模块；正式 adapter 持久身份另验 |
+| POL-HERDR-LIVE-001～003（v1） | PASS | 2026-10-26 真实隔离 Herdr 0.9.5；当前未重跑 | `herdr-live.spec.cjs`（隔离手动） | [s05b-live-codex.log](evidence/s05b-live-codex.log) 3/3 | 构造 report-agent 状态；不证明插件安装/真实模型工作/正式恢复对账 |
+| POL-HERDR-ID-001～003（v1） | PASS | 2026-10-25 s05c 身份探针；当前未重跑 | `tools/herdr-identity/probe.cjs` | [s05c-codex-identity.log](evidence/s05c-codex-identity.log) | 仅身份/生命周期事实；不等于正式架构或主应用接线 |
+| POL-REGISTER-001～004（v1） | PASS | 2026-10-26 s05d 返修；当前未重跑 | `herdr-registration.spec.cjs` | [s05d-codex-repair.log](evidence/s05d-codex-repair.log) 4/4 | 恶意本地进程真实性未承诺；100 条上限明确截断 |
+| POL-ADAPTER-001～008（v1） | PASS | 2026-10-26 s05e 返修；当前未重跑 | `herdr-adapter.spec.cjs`、`connector-ledger.spec.cjs`、`herdr-transport.spec.cjs` | [s05e-codex-repair.log](evidence/s05e-codex-repair.log) 19/19 | 无共同事件 ID；跨连接历史不可恢复；不声称 exactly-once |
+| POL-HERDR-RUNTIME-001～012（v1） | PASS | 2026-10-26 s05h 最终批；当前未重跑 | `herdr-runtime.spec.cjs`、`herdr-adapter.spec.cjs`、`connector-ledger.spec.cjs` | [s05h-codex-final.log](evidence/s05h-codex-final.log) 27/27 | 真实 Herdr 隔离；main 集成/设置页/真实通知气泡当时未完成 |
+| POL-NOTIFY-001～009（v1） | PASS | 2026-10-26 s05f 最终批；当前未重跑 | `notification-presentation.spec.cjs` | [s05f-codex-repair.log](evidence/s05f-codex-repair.log) 14/14、[codex-notify-discovery-repair.log](evidence/codex-notify-discovery-repair.log) 27/27 | 计时/可见性为 fake presenter；真实用户阅读、4/6 秒物理体验 NOT_COVERED |
+| POL-CONNECTOR-UI-001～006（v1） | PASS | 2026-10-26 s05i 最终批；当前未重跑 | `connector-ui.spec.cjs`、`herdr-runtime.spec.cjs`、`herdr-adapter.spec.cjs` | [s05i-codex-final.log](evidence/s05i-codex-final.log) 26/26、[s05i-codex-shell.log](evidence/s05i-codex-shell.log) 9/9 | 通知气泡、插件安装入口未完成；5 秒刷新不等于 P0 时效 |
+| POL-NOTIFY-UI-001～011（v1） | PASS | 2026-10-26 s05j 最终两批；当前未重跑 | `desktop-notifications.spec.cjs` | [s05j-codex-gui-r2.log](evidence/s05j-codex-gui-r2.log) 5/5、[s05j-codex-gui-r3.log](evidence/s05j-codex-gui-r3.log) 6/6 | 420pt 受控窗口；非物理小屏/人工阅读；大突发只保证有界延迟审计 |
+
+### S06～S08
+
+| Case（版本） | 结果 | 验收基线 / 当前适用 | Runner 入口 / 命令（模板见上） | 原始证据 | 未覆盖边界 |
+| --- | --- | --- | --- | --- | --- |
+| POL-BUDGET-001～008（v1） | PASS | 2026-10-26 s06a 与 s04c 预算返修；当前未重跑 | `automatic-budget.spec.cjs` 及来源相邻回归 | [s06a-codex-r2.log](evidence/s06a-codex-r2.log)、[s04c-codex-budget-r3.log](evidence/s04c-codex-budget-r3.log) | 未接真实自动活动网络/取消/发布权限；预算模块接受不等于自动活动接受 |
+| POL-OPPORTUNITY-001～007（v1） | PASS | 2026-10-26 s06b 返修；当前未重跑 | `automatic-opportunities.spec.cjs` | [s06b-codex-repair.log](evidence/s06b-codex-repair.log) 7/7 | 同 SQLite 服务重建，不是 OS 进程重启；未接心跳 |
+| POL-ACTIVITY-001～008（v1） | PASS | 2026-10-26 s06c 最终；当前未重跑 | `character-activities.spec.cjs`、`companionship.spec.cjs`、`relationship-effects.spec.cjs` | [s06c-codex-single-activity.log](evidence/s06c-codex-single-activity.log) 33/33 | 领域服务；主进程自动活动/正式动画/故事链当时未接 |
+| POL-ACTIVITY-RUNTIME-001～004（v1） | PASS | 2026-10-26 s06h 最终真实 Electron；当前未重跑 | `activity-runtime.spec.cjs`、`desktop.spec.cjs`、unit | [s06h-codex-runtime.log](evidence/s06h-codex-runtime.log) 6/6、[s06h-codex-desktop.log](evidence/s06h-codex-desktop.log) 11/11 | 其他角色 daily、探索正式离场/返回、全动画库未覆盖 |
+| POL-STORY-001～005（v1） | PASS | 2026-10-26 s06e 最终；当前待回归 | `story-progress.spec.cjs` | [s06e-codex-public-final.log](evidence/s06e-codex-public-final.log) 5/5 | 未接正式作者目录/邀请/服装解锁/main/GUI/模型 |
+| POL-DISCOVERY-001～006（v1） | PASS | 2026-10-26 s06f 返修；当前待回归 | `discovery-outcomes.spec.cjs`、故事/通知回归 | [codex-notify-discovery-repair.log](evidence/codex-notify-discovery-repair.log) 27/27 | main、共享分享预算、正式素材、GUI 回执未覆盖 |
+| POL-CONTENT-001～003（v1） | PASS | 2026-10-26 s06g 最终；当前未重跑 | `authored-content.spec.cjs` | [s06g-codex-final.log](evidence/s06g-codex-final.log) 3/3 | 仅领域；正式四条故事 assetAvailable 均 false；无正式 main/GUI/动画发布 |
+| POL-STORYRUN-001～005、004B、UI-001（v1） | PASS | 2026-10-26 s06i 最终独立批；当前待回归 | `story-runtime.spec.cjs`、`story-runtime-ui.spec.cjs` | [s06i-codex-gui-r2.log](evidence/s06i-codex-gui-r2.log) 7/7、[s06i-codex-domain.log](evidence/s06i-codex-domain.log) 54/54 | 正式内容未发布；自动准备/展示未接 main 窗口 |
+| POL-STORYUI-001～005（v1） | PASS | 2026-10-27 s06j 最终独立批；当前待回归 | `story-window-ui.spec.cjs` | [s06j-codex-gui-r2.log](evidence/s06j-codex-gui-r2.log) 7/7 | 自动桌面邀请、服装解锁窗口、正式素材发布后全链 NOT_COVERED |
+| POL-ASSET-001（v1） | PASS | 2026-10-25 asset-pilot；当前未重跑 | `tools/sprite-pipeline/test_sprite_pipeline.py` | [asset-pilot.md](asset-pilot.md) | 切帧/静态边缘；不证明动态质量 |
+| POL-ASSET-002（v1） | INCONCLUSIVE | 播放器能力通过，但仅 idle/wave 试样与关键帧审查 | `verify-player.cjs` | tools/sprite-pipeline/evidence/codex-idle-v3.json、codex-wave-v2.json | 长期自然度、桌面实际尺寸连续播放、全部动作 |
+| POL-ASSET3-001（v1） | INCONCLUSIVE | 导入/尺寸/裁剪子项 PASS；透明命中子项 NOT_COVERED | `s07b-three-character.spec.cjs`、`desktop-assets.test.cjs` | [s07b-codex-isolated-r3.log](evidence/s07b-codex-isolated-r3.log) | 透明像素不抢点击；整体不得因几何通过写 PASS |
+| POL-ASSET3-002～005（v1） | PASS | 2026-10-27 s07b 最终隔离批；当前未重跑 | `s07b-three-character.spec.cjs` | [s07b-codex-isolated-r3.log](evidence/s07b-codex-isolated-r3.log) | Hu/Cheng 仍为候选；正式素材发布、更多动作与衣装未完成 |
+| POL-RESTUI-001～003（v1） | PASS | 2026-10-27 s07-rest r2；当前未重跑 | `desktop-rest.spec.cjs` | [s07-rest-runtime-codex-r2.log](evidence/s07-rest-runtime-codex-r2.log) 3/3 | 仅凛 D01/D02；其他角色休息资源、D03/D04、真实睡眠/Retina 未覆盖 |
+| POL-HIT-001～003（v1） | PASS | 2026-10-27 s07c 主目录整合；当前未重跑 | `s07c-transparent-input.spec.cjs`、桌面回归、unit | [s07c-codex-r1-native.log](evidence/s07c-codex-r1-native.log) tests 1/pass 1，单测试覆盖 HIT-001/002/003；桌面 11/11 见 [s07c-codex-r1-desktop.log](evidence/s07c-codex-r1-desktop.log) | scaleFactor=1；Retina/Spaces/全屏未验 |
+| POL-NATIVE-001～003（v1） | PASS | 2026-10-27 s08a 收束与凛母版同步；聊天/记忆部分当前待回归 | `native-shell.spec.cjs`、`desktop.spec.cjs` | [s08a-codex-repair.log](evidence/s08a-codex-repair.log) 14/14、[rin-portrait-native-codex.log](evidence/rin-portrait-native-codex.log) 1/1 | 仅已实现三页/两尺寸；全部设置、真实服务、最终原生体验未完成 |
+
+## 当前失败、未验证与待回归（不得写成通过）
+
+- **来源身份 v2（当前未提交工作区）**：开发报告四套件 35 项为 29 PASS/6 FAIL，master 未独立验收。POL-FACTID-002 v1 的“严格同文可复用身份”PASS 已失效；6 个 FAIL 分别位于 FACTID-004 禁分享/独属、FACTID-005 迁移/回滚、FACTID-006 跨键同文、ASSOC-002 精确正文复用（见 [claude-s03l-source-identity.json](evidence/claude-s03l-source-identity.json)）。已持久旧身份组未拆解，存量误合组未迁移；修复/补验在流程补齐后另派。
+- **语义与真实模型（分层）**：SEM 是真实 SQLite/正式 memory 的本地构造 Runner，不使用真实模型，r4 为 3 PASS/5 FAIL；holdout、source-live、REL-004 与 pro 对照才是真实模型工具层，使用构造数据（holdout 2 FAIL：11、12；source-live 2 FAIL：06、11；pro FAIL）。SEM 本地失败不能由模型 probe 变绿抵销；单次 probe 也不证明生产语义。
+- **正式内容**：`app/content/maid-stories.json` 四个故事 `maid.meet.rin`、`maid.meet.hu`、`maid.meet.cheng`、`maid.outfit.rin-warm-tea` 的 `assetAvailable` 均为 `false`；CONTENT 领域 PASS 不等于正式发布、可见故事或动画完成。
+- **素材候选**：ASSET-002 仍 INCONCLUSIVE；ASSET3-001 透明命中 NOT_COVERED；Hu/Cheng 仍为候选；36 动作、正式服装、过渡与中断、其他角色日常未完成。
+- **原生边界**：DESKTOP-003（Spaces/全屏）与 DESKTOP-006 真实锁屏/休眠 NOT_COVERED；托盘原生点击 NOT_COVERED；HIT 仅 scaleFactor=1。测试截图、受控 powerMonitor 事件不能冒充物理操作或 Retina 硬件证据。
+- **当前工作区回归**：5 个未提交文件为 `app/memory.cjs`、`app/memory-store.cjs`、`app/memory-fact-identity.cjs`、`tests/acceptance/memory-fact-identity.spec.cjs`、`tests/acceptance/memory-source-identity.spec.cjs`。凡执行 memory/chat/source/story-sharing 身份链的历史组均未在当前工作区重跑，保持历史 PASS 但标“待回归”；旧 commit 的测试结果不证明新工作区通过。
+
+---
+
+## 历史批次记录（原文保留，逐项结论以上方矩阵为准）
+
 ## S01 首次相遇：受托接受当前切片
 
 2026-10-25，Codex独立执行并审核。授权来源：用户要求Codex安排全部调度、体验和交付决定直至完整Goal完成。此处不是人类用户亲自体验记录，也不是全部Bayper验收通过。
@@ -68,6 +210,8 @@ Codex查看实际窗口截图并核对真实GUI测试操作。当前1200×800及
 | POL-MEMORY-006 | 长期内容保持、临时到期过滤、时钟构造通过 | 普通细节自然降权/整理与真实活动使用尚未完成 |
 | POL-MEMORY-007 | 定向必要片段、原讲述来源、拒绝自动二次分享通过 | 用户明确再次转告、停止分享/仅自己保留入口待S03b，自动预算待S06 |
 
+注：上表为 2026-10-26 模块阶段快照；后续已补子项、仍未覆盖的服装联动与普通细节降权，以统一矩阵的逐子项拆分为准，不再用 15/15 推断七项全 PASS。
+
 独立证据：`evidence/s03a-codex-first.log`8/8；`s03a-codex-r2.log`12/12；`s03a-codex-r3.log`14/14；最终`s03a-codex-r4.log`15/15（约1.17秒）。其中第10001条记录重建前/后及重开均能检索。七个相关JS分别node --check通过。工具独立输出`tools/memory-tuning/results/codex-r4.json`；此前失败复现与r2对照保留在同工具results内，不覆盖。
 
 返修解决：纠正没有排除原聊天来源、删除原记录导致接收者派生身份丢失、同源提炼批次重复、自然问句全AND漏召回、错误限制接收者的用户管理权限、把查询否定词当真值硬过滤，以及重建索引10000条截断。r3改变了一个错误测试Oracle：PRD允许用户管理当前已知的分享记忆，不需回原讲述者；这是恢复业务预期，不是放宽权限门禁。来源记录不保存被删正文。
@@ -82,12 +226,12 @@ Codex查看实际窗口截图并核对真实GUI测试操作。当前1200×800及
 
 | Case | 当前证据 | 尚未覆盖 |
 | --- | --- | --- |
-| POL-DESKTOP-001 | 真实独立画布进程，非激活panel属性、有限IPC、模型Key未传入子环境 | OS实际点击焦点、屏幕合成、Spaces/全屏 |
-| POL-DESKTOP-002 | 管理窗关闭隐藏、托盘代码与进程清理、父退出子结束 | 原生托盘逐项点击与穿透命中 |
-| POL-DESKTOP-003 | 有界恢复、实际子进程崩溃退出与隔离profile | 长期稳定与完整资源统计 |
-| POL-DESKTOP-004 | lock/suspend交错原因集、受控系统事件与时间结算 | 用户机器真实锁屏/睡眠未触发 |
+| POL-DESKTOP-001 | 真实独立画布进程，非激活panel属性、有限IPC、模型Key未传入子环境 | OS实际屏幕合成与焦点未验 |
+| POL-DESKTOP-002 | S02b 本批未测原生点击/穿透；后续由 S07c HIT-001～003 真实 CGEvent 覆盖，见统一矩阵 | Retina/物理多屏未验；不得用 DOM 点击代替 |
+| POL-DESKTOP-003 | 无自动化 Runner，须真实 Spaces/全屏切换 | 真实 Spaces/全屏；后续 HIT 通过不能代替本项 |
+| POL-DESKTOP-004 | 管理窗关闭隐藏、重复启动、画布崩溃有界恢复、父退出子结束 | 原生托盘逐项点击 |
 | POL-DESKTOP-005 | Rin→Hu真实待机、自然节点等待、损坏PNG错误、旧加载/节点与A→B→A竞态 | 原生连续动画视觉、全部动作与服装 |
-| POL-DESKTOP-006 | 位置持久与边界实现可审查，单次RSS证据在开发日志 | 实际拖动、显示器热插拔及长期CPU |
+| POL-DESKTOP-006 | 受控 powerMonitor lock/suspend 交错原因集与时间结算 | 用户机器真实锁屏/睡眠未触发 |
 
 工具`tools/desktop-review`仅构造真实app的普通底板，不复制业务。Codex运行batch-VMVxQK，fixture关闭、quit退出0、子进程核实清理，独立语法通过。CU接口按确切app路径只能取得底板单窗口截图，未能观察独立画布叠加；没有使用DOM点击冒充原生输入。不操作用户锁屏或全局设置。工具证据只证明本次启动与清理。
 
@@ -104,6 +248,8 @@ Codex查看实际窗口截图并核对真实GUI测试操作。当前1200×800及
 | POL-CHAT-003 | 取消/关闭/失败、事务回滚、dispose后无迟到写入、明确重试 | NOT_COVERED：真实窗口和主进程退出接线 |
 | POL-CHAT-004/005 | 版本失效、旧来源排除、重试前排除原消息、延迟结果不发布 | NOT_COVERED：本地窗口纠正删除和可控展示清理 |
 | POL-CHAT-006/007/008 | 本批不覆盖 | NOT_COVERED：完整共享控制、语义定位、真实DeepSeek |
+
+注：本表是 2026-10-26 服务阶段快照；NOT_COVERED/INCONCLUSIVE 指当时窗口或真实模型尚未接线。后续切片完成情况以统一矩阵为准；s03b-review 仅为首版退回记录，不作为最终状态。
 
 两轮独立审查修复五项首版风险和消息同毫秒UUID排序、启动遗留pending、退出收束问题，见s03b-review.md与s03b-recovery-review.md。启动恢复是显式选项，main下一轮必须开启；dispose必须在关闭数据库之前await，不能把服务存在说成主进程已经使用。构造关闭重开数据库不是真实操作系统崩溃，后续需进程级证据。
 
