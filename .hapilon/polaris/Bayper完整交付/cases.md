@@ -143,3 +143,7 @@ POL-SOURCECTX-001～006，P0/v1/Codex受托确认，Contract见[s03l-source-cont
 ## S03l-b 来源感知关系核验
 
 POL-SOURCE-REL-001～004，P0/v1/Codex受托确认，唯一Contract见[s03l-source-grounding-plan.md](s03l-source-grounding-plan.md)。Runner tests/acceptance/memory-source-relation.spec.cjs；真实store/chat/source及协议，模型响应构造。本片4Case及相关18场景PASS，19unit PASS；独立结果见[s03l-source-grounding-review.md](s03l-source-grounding-review.md)，不替代真实模型语义或产品自动关联验收。
+
+## S03l-b 真实来源关系对照
+
+POL-SOURCE-LIVE-001，P0/v1/Codex受托确认，12个必需子项Expected见[s03l-source-live-plan.md](s03l-source-live-plan.md)。Runner tools/memory-tuning/source-probe.cjs：正式聊天/SQLite/来源协议，聊天提炼构造、关系核验真实模型；真实10PASS2FAIL/0ERROR，整体FAIL；证据与来源身份缺陷见[s03l-source-live-review.md](s03l-source-live-review.md)，不替代产品自动关联验收。

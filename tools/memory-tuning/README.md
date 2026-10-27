@@ -169,3 +169,20 @@ Codex独立真实结果 `results/semantic-holdout-codex-live-v2.json`：14 PASS�
 ### 相同输入比较可用模型
 
 可显式传`--model <id>`，默认deepseek-flash；live总是先查询实际/models确认id存在，再发送一次请求。dry仅记录计划模型，不联网。2026-10-27实际服务还提供deepseek-v4-pro，保持grounded消息/Expected不变的两批结果在`results/grounding-pro-*-live-codex.json`：baseline13/16、holdout13/16，holdout仍有1次指代误合并，总耗时各约8秒。该对照不支持替换产品默认；模型名称和更长耗时不代表更可靠，用户配置未改。
+
+## 真实来源关系对照（S03l）
+
+`source-probe.cjs` 与 `source-pairs.json` 是 S03l 的独立观察层：先用正式 `createStore`、`chat.sendMessage` 和 `memorySourceContext.resolve` 从真实聊天消息产生记忆条目与来源快照，再把快照交给正式 `buildRelationMessages` / `parseRelationResponse` 判定关系。聊天提炼的 HTTP 由本地 fetch fixture 返回固定合规候选，属于构造数据、不联网；只有关系判定 live 才读取根 `.env` 并请求 `deepseek-flash`。Expected 只用于事后评分，不进入模型消息。
+
+```sh
+node tools/memory-tuning/source-probe.cjs --dry-run
+node tools/memory-tuning/source-probe.cjs --out tools/memory-tuning/results/source-live-<新批次>.json
+```
+
+`--dry-run` 不读 `.env`、不联网，只构造 24 条来源并输出实际待审 messages、来源摘要和清理结果。live 必须显式给新 `--out`，先一次 `/models` 精确确认模型，再最多一次 chat（temperature 0、maxTokens 6000、超时 60s），无重试。工具固定 `deepseek-flash`，结果不调用 `associateFacts`，不更新产品记忆。
+
+每对事实使用独立临时 SQLite，而不是 12 对共用一个库：正式记忆服务会按正文复用同角色 preference 的事实身份，同一库里 04/05/06 左侧的“她喜欢蓝色”会共用一个条目并把来源串到第一段会话，06 的指代和 05 的前文都会失真。每边仍在自己的会话中经正式 chat 写入；临时库在 `finally` 依次 `chat.dispose`、关闭并删除，结果记录 12 个库的关闭/删除计数。这是本轮为保证来源真实所需的最小隔离，不改变生产实现。
+
+结果保留实际请求、模型原文、协议结构、逐项 Expected 评分、`falseMerge` / `missedEquivalent` / `uncertain`、1 次 models 与最多 1 次 chat 的调用数、各阶段耗时、工具/数据/生产模块 SHA、来源 `isCurrent` 前后结果、关系判定前后记忆条目数以及清理状态。结构失败记 `ERROR`，语义不符合 Expected 记 `FAIL`，两者不混用。真实 live 由 Codex 独立执行；工具内结果不代表生产接线或自动合并已通过。
+
+Codex独立真实结果`results/source-live-codex-v1.json`：10/12符合Expected，0错误合并、0同义正例遗漏；未知“她”和安静环境/独处仍误判different，整体FAIL。主体描述还有遗漏，暂不能用于自动合并或删除。1models+1chat，约2.99秒；12个临时库全部清理。`source-dry-codex-v1.json`为独立发送前核查。相同片段身份复用导致不同会话来源串用是另一个待修复产品缺陷，隔离试验不代表已修复。

@@ -1,0 +1,15 @@
+(node:91686) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+{
+  "status": "FAIL",
+  "summary": {
+    "total": 12,
+    "pass": 10,
+    "fail": 2,
+    "error": 0,
+    "falseMerge": 0,
+    "missedEquivalent": 0,
+    "uncertain": 1
+  },
+  "output": "/Volumes/Under_M2/morphiiouo/bayper/tools/memory-tuning/results/source-live-codex-v1.json"
+}
