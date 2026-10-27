@@ -5,7 +5,7 @@
 本文件是当前唯一逐 Case 结果入口。各 review 保留原始判断、失败过程和长证据说明，本文只登记可定位的结果，不复制全文。状态仅用 execution.md 的五种：PASS、FAIL、ERROR、INCONCLUSIVE、NOT_COVERED；不使用 PARTIAL，也不把多个 Case 压成平均分或“最差状态”。
 
 - 分组：仅当版本、状态、证据和执行边界相同时，一个精确 ID 范围可共用一行；任一 Case 或必需子项有差异即拆行。`001～003` 只表示这些 ID 满足本行，不覆盖范围外或未执行项。
-- 版本：历史行以对应 review/evidence 的验收基线与源摘要定位，未记录 commit 的不补猜。已提交快照为 `c3c6bec`（VERSION `0.1.185`）；本批准备 VERSION `0.1.186` 待 master snap。工作区未提交 memory 源码/测试的当前 SHA 见各 attempt 的 `code-sha256.txt`；[process-freeze.json](evidence/process-freeze.json) 仅保留流程补齐时点，不再作为当前实现基线。
+- 版本：历史行以对应 review/evidence 的验收基线与源摘要定位，未记录 commit 的不补猜。已提交快照为 `fff954f`（VERSION `0.1.186`）；本批准备 VERSION `0.1.187` 待 master snap。工作区未提交 memory 源码/测试的当前 SHA 见各 attempt 的 `code-sha256.txt`；[process-freeze.json](evidence/process-freeze.json) 仅保留流程补齐时点，不再作为当前实现基线。
 - master 已受托验收 7 个最终 Contract v1/Part A-B，GAP-14 流程补齐通过；GAP-01～14 流程处置完成（GAP-06 仅流程记录、产品修复未完成；GAP-08 原证据未找回限制保留）。master 另于 2026-10-27 受托接受**来源身份 v2 有限能力**与 **POL-MIG-001～006 v1 迁移有限能力**，均为 master 受托决定、不是用户亲自确认，且非 S03/Goal 完成；产品未交付。
 - 历史 PASS 只证明该验收基线，不证明当前未提交工作区。2026-10-27 master 最终 18 套件 **170/170 PASS、0 skipped、exit 0**（迁移 7 + 来源身份/关联/记忆等 17 套件），证据 [master-migration-YKY21Zj2](evidence/master-migration-YKY21Zj2/stdout.log)，前后代码 SHA 一致；未在该批执行的 UI、真实模型、holdout/source-live/pro 组保持历史状态与各自未覆盖边界，不写成当前通过。没有重跑就不写当前 PASS；当前工作区未验收也不能推断历史产品从未通过。
 - Runner 退出码、编译成功、开发报告全绿或 review 中的切片受托接受，均不自动升级为父级或整 Case 通过。体验记录已标明实际操作者、方法与局限；Codex 受托体验不是人类亲自体验，已有授权不要求真人重新批准。
@@ -91,6 +91,7 @@
 | POL-MIG-004（v1） | PASS | 同上 | 同上 | 同上 | 新显式关联、三角色 scope:self、防回流；同身份确认先过核验资格 |
 | POL-MIG-005（v1） | PASS | 同上 | 同上 | 同上 | 跨 identity 证实/非卷入/两类 trigger 回滚/关闭重开幂等/孤儿保留 |
 | POL-MIG-006（v1） | PASS | 同上 | 同上 | 同上 | 有向派生环边剔除后 union；单一已证明组件不递增 |
+| POL-SEMOP-001～008（v1） | NOT_COVERED | 2026-10-27 master 受托确认 v1/Part A-B；尚未实现 | 计划：`memory-semantic-operations.spec.cjs`、`chat-verification-ui.spec.cjs`、`operation-probe.cjs` | 无执行证据 | 两阶段/单消息/来源追溯/临时纠正/范围与真实模型尚未实现；不得预填 PASS |
 
 POL-MIG-001～006 的 master 证据为 18 套件 **170/170 PASS、0 skipped、exit 0**，before/after SHA 一致；真实依赖为真实 SQLite + 构造旧库/旧 schema，无 GUI、API、真实模型或人工体验。迁移身份相关的 DDL/控制/alias 等在同一保存点内回滚已经由 POL-MIG-005 两类 trigger 验证。
 
