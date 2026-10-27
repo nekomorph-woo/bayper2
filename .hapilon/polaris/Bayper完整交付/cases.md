@@ -208,4 +208,4 @@ POL-DETAIL-001～005 v1由master受托确认，Given/When/Expected/Oracle与边�
 
 ## S03r 明确要求记住
 
-POL-REMEMBER-001～005 v1由master受托确认，见[s03r-explicit-remember-plan.md](s03r-explicit-remember-plan.md)；Runner拟用tests/acceptance/memory-explicit-remember.spec.cjs，尚未执行。
+POL-REMEMBER-001～005 v1由master受托确认，见[s03r-explicit-remember-plan.md](s03r-explicit-remember-plan.md)；Runner为tests/acceptance/memory-explicit-remember.spec.cjs，29项（含子例）经master独立通过；已测范围及真实模型/跨键指代等未覆盖见[s03r-master-review.md](s03r-master-review.md)。

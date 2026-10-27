@@ -59,6 +59,11 @@ const DEFAULT_IMPORTANCE = Object.freeze({
   detail: 20,
 });
 
+/* S03r：用户本轮明确要求记住时，只由聊天侧已验证的原话授权附加此标记。
+   复用“重要细节”的既有阈值，不引入第二套重要性分档；identity 等更高原值
+   通过 Math.max 保留。模型返回的 importance 仍由上游丢弃。 */
+const EXPLICIT_REMEMBER_IMPORTANCE = DETAIL_CONTEXT_CONFIG.importantThreshold;
+
 /* S03i：全局开关只控制自动/派生的 share 入口；用户明确 relay 不受影响。
    默认开启表示允许窄范围自动分享，不代表已经有后台分享行为。 */
 const AUTO_SHARE_STATE_KEY = "memory_auto_share_enabled";
@@ -439,6 +444,9 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     const characterId = overrides.characterId ?? characterIdOf(input.characterId);
     const factKey = cleanText(input.factKey, "事实键", LIMITS.factKey);
     const kind = kindOf(input.kind);
+    const explicitRemember =
+      input.explicitRemember === true || overrides.explicitRemember === true;
+    const importance = importanceOf(input.importance, kind);
     return {
       characterId,
       factKey,
@@ -446,7 +454,9 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       kind,
       trust: trustOf(input.trust),
       sourceKind: overrides.sourceKind ?? sourceKindOf(input.sourceKind),
-      importance: importanceOf(input.importance, kind),
+      importance: explicitRemember
+        ? Math.max(importance, EXPLICIT_REMEMBER_IMPORTANCE)
+        : importance,
       sourceId: overrides.sourceId ?? cleanText(input.sourceId, "来源ID", LIMITS.sourceId),
       sourceVersion: overrides.sourceVersion ?? sourceVersionOf(input.sourceVersion),
       originCharacterId: characterIdOf(
@@ -456,6 +466,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       expiresAt: optionalTime(input.expiresAt, "到期时间") ?? null,
       explicitConsent:
         input.explicitConsent === true || overrides.explicitConsent === true,
+      explicitRemember,
     };
   }
 
@@ -466,13 +477,15 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
   function insertFactIfAllowed(fact) {
     // 旧来源重扫永远不是新许可；即使显式同意也不能用被控制过的旧来源回填。
     if (store.hasSourceControl(fact.characterId, sourceIdHash(fact.sourceId))) {
-      return { created: false, blocked: "source", entry: null };
+      return { created: false, promoted: false, fulfilled: false, blocked: "source", entry: null };
     }
     const existing = store.getEntryByFact(fact.characterId, fact.factKey);
     if (existing) {
       if (!sameBody(existing.body, fact.body)) {
         return {
           created: false,
+          promoted: false,
+          fulfilled: false,
           blocked: null,
           conflict: "fact_key_body",
           entry: existing,
@@ -481,12 +494,58 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       if (!sameFactMetadata(existing, fact)) {
         return {
           created: false,
+          promoted: false,
+          fulfilled: false,
           blocked: null,
           conflict: "fact_key_metadata",
           entry: existing,
         };
       }
-      return { created: false, blocked: null, entry: existing };
+      /* 用户明确要求记住时，只提升当前角色这一条同键同正文条目的重要性：
+         保留正文/来源/时间/身份与关系，不新建、不传播、不绕过来源或删除控制。 */
+      if (fact.explicitRemember === true) {
+        const active = existing.expiresAt === null || existing.expiresAt > fact.createdAt;
+        const promotionBlocked =
+          store.hasSourceControl(fact.characterId, sourceIdHash(existing.sourceId)) ||
+          insertForgetBlocked(
+            fact.characterId,
+            existing.factIdentityId ? [existing.factIdentityId] : [],
+            deletedFingerprintOf(existing),
+            existing.factKey,
+          );
+        if (active && !promotionBlocked) {
+          if (fact.importance > existing.importance) {
+            const promoted = {
+              ...existing,
+              importance: fact.importance,
+              version: existing.version + 1,
+              updatedAt: existing.updatedAt,
+            };
+            store.updateEntry(promoted, tokenizeForIndex(promoted.body));
+            return {
+              created: false,
+              promoted: true,
+              fulfilled: true,
+              blocked: null,
+              entry: promoted,
+            };
+          }
+          return {
+            created: false,
+            promoted: false,
+            fulfilled: true,
+            blocked: null,
+            entry: existing,
+          };
+        }
+      }
+      return {
+        created: false,
+        promoted: false,
+        fulfilled: false,
+        blocked: null,
+        entry: existing,
+      };
     }
 
     const fingerprint = identityFingerprint(fact);
@@ -497,7 +556,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       deletedFingerprint,
       fact.factKey,
     )) {
-      return { created: false, blocked: "forget", entry: null };
+      return { created: false, promoted: false, fulfilled: false, blocked: "forget", entry: null };
     }
     const identityId = createIdentity(fact, fingerprint);
 
@@ -521,14 +580,20 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       updatedAt: fact.createdAt,
     };
     store.insertEntry(entry, tokenizeForIndex(entry.body));
-    return { created: true, blocked: null, entry };
+    return {
+      created: true,
+      promoted: false,
+      fulfilled: true,
+      blocked: null,
+      entry,
+    };
   }
 
   function remember(input = {}) {
     const fact = normalizeFact(input);
     const applyRemember = () => {
       const result = insertFactIfAllowed(fact);
-      if (!result.created) {
+      if (!result.created && !result.promoted) {
         return result;
       }
       const contextVersion = store.bumpContextVersion(fact.characterId, fact.createdAt);
@@ -586,10 +651,10 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
        传入 inTransaction 时不再自行 BEGIN；调用方必须已开启事务并负责提交/回滚。 */
     const applyBatch = () => {
       if (store.hasSourceControl(characterId, sourceHash)) {
-        return { applied: false, reason: "blocked_source", facts: [] };
+        return { applied: false, reason: "blocked_source", facts: [], created: 0, promoted: 0 };
       }
       if (store.hasExtractionBatch(characterId, sourceHash, sourceVersion)) {
-        return { applied: false, reason: "duplicate_batch", facts: [] };
+        return { applied: false, reason: "duplicate_batch", facts: [], created: 0, promoted: 0 };
       }
 
       const results = facts.map((fact) => ({
@@ -598,9 +663,11 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       }));
       store.addExtractionBatch(characterId, sourceHash, sourceVersion, appliedAt);
       const created = results.filter((result) => result.created).length;
+      const promoted = results.filter((result) => result.promoted).length;
+      // 新建与既有条目提升都改变上下文；一次批次只递增一次。
       const contextVersion =
-        created > 0 ? store.bumpContextVersion(characterId, appliedAt) : null;
-      return { applied: true, reason: null, facts: results, contextVersion };
+        created + promoted > 0 ? store.bumpContextVersion(characterId, appliedAt) : null;
+      return { applied: true, reason: null, facts: results, created, promoted, contextVersion };
     };
     return input.inTransaction === true ? applyBatch() : store.transaction(applyBatch);
   }

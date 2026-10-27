@@ -399,6 +399,16 @@ master独立POL-SLEEPUI-001/002/003/004A/004B/005/005B/005C/006/007共10/10 PASS
 均为真实SQLite/正式服务＋本地HTTP fixture；未验GUI/真实模型表达。不能将importance保护当作自然语言“请记住”已实现。父级自动整理、实际活动使用及MEMORY-006整体仍未完成，见[s03q-master-review.md](s03q-master-review.md)。
 
 
-## S03r 明确要求记住：NOT_COVERED
+## S03r 明确要求记住：有限能力PASS
 
-POL-REMEMBER-001～005 v1均尚未执行，不能把S03q的重要性字段保护当作自然语言接线通过。见[s03r-explicit-remember-plan.md](s03r-explicit-remember-plan.md)。
+master独立最新4文件158/158（新Runner29项）、exit0/0skip/SHA一致，证据`evidence/s03r-explicit-remember/master-polite-IunFLlsY/`；前轮11文件441/441与unit21/21覆盖未变存储/来源/共享事务部分，证据master-final-c6e29kDM。实际服务/SQLite真实、模型HTTP构造。
+
+| Case | 状态 | 实际观察 |
+| --- | --- | --- |
+| POL-REMEMBER-001 | PASS | 新明确细节本地80、远期竞争保护、无额外请求；无候选澄清 |
+| POL-REMEMBER-002 | PASS | 引用/假设等不提升；礼貌前缀与尾随否定不保存；已有不删，无关不牵连 |
+| POL-REMEMBER-003 | PASS | 两个明确命令分别处理；宽候选拦截澄清；独立成功＋歧义如实部分确认 |
+| POL-REMEMBER-004 | PASS | 同键同正文只升本角色、保持来源/时间/身份，幂等和冲突保护、高值不降 |
+| POL-REMEMBER-005 | PASS | 本轮来源控制、到期临时、删除、管理操作优先与事务故障/重试均通过 |
+
+本表限定计划的直接事实与同键同正文，不能推断真实模型、跨键语义、一般指代、自动整理或GUI通过。其他来源失效/并发组合沿父级既有Case继续验证，不把分支数量当完整产品接受。审查记录[s03r-master-review.md](s03r-master-review.md)。

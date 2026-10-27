@@ -1502,6 +1502,7 @@ module.exports = {
   buildCharacterCandidates,
   characterCandidatesText,
   detectOperationIntent,
+  normalizeGrounding,
   planOperation,
   forgetTargetClarification,
   parseForgetTargetAnswer,

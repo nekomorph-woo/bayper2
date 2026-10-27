@@ -25,7 +25,7 @@ Claude只读核查UUID476bbcd8-0415-4a0c-9eea-f7cc6288019f，结果/tmp/bayper-e
 | ID | Given / When | Expected与Oracle |
 | --- | --- | --- |
 | POL-REMEMBER-001 | 单个新detail，用户明确要求记住；随后时间前进并与3新普通细节竞争 | 新条目至少80，正文/来源正确，老重要条目仍入选；仅一次既有模型请求；无候选或失败不假确认 |
-| POL-REMEMBER-002 | 引用命令、假设、否定、转述、助手内容、陈述或问能力；模型恶意附importance100 | 不发生本地优先提升；普通合法事实可沿既有保存，不把命令段当事实；有外部明确命令的引用事实另有正例 |
+| POL-REMEMBER-002 | 引用命令、假设、否定、转述、助手内容、陈述或问能力；模型恶意附importance100 | 不发生本地优先提升；明确“别记住/不要保存”所指内容不得新建或提升；其他普通合法事实可沿既有保存，不强制引用/假设候选落库，不把命令段当事实；有外部明确命令的引用事实另有正例 |
 | POL-REMEMBER-003 | 同轮明确事实＋无关“另外”事实；两个独立明确命令；无法唯一指代的命令 | 精确提升授权事实，其他不变；明确两条均可处理；歧义如实澄清不假完成 |
 | POL-REMEMBER-004 | 同键同正文旧20再次要求、重复request/再次请求；同键异正文/metadata | 只升优先级不改来源/时间/关系；version/contextVersion一次有效变更；冲突不覆盖；更高原值不降低 |
 | POL-REMEMBER-005 | A/B分享或独属、来源排除/临时失效/删除控制、已有管理操作、事务失败 | 仅合法当前角色提升；不复活旧内容，不取消临时期，不绕过管理操作；失败无半写入/成功回复，重试幂等 |
@@ -35,3 +35,9 @@ Runner：`tests/acceptance/memory-explicit-remember.spec.cjs`，默认unit入口
 ## 派发与规模
 
 允许app/chat.cjs、app/chat-memory-operations.cjs、app/memory.cjs及必要小app/memory-explicit-remember.cjs；确需memory-store.cjs窄写接口先反馈理由。新增上述Runner，不改旧Expected。生产约150～250行、Runner约400～600行作为审查信号，不压行凑数。先解释局部接线，不一次扩成通用语义系统；如约束互相冲突先给master反馈。禁止子代理、GUI/Herdr/真实API、Git/版本/文档改动；Codex负责文档、验收和snap。
+
+## master中途纠偏（2026-10-28）
+
+首版Runner负例统一assert.ok(row)，包含“别记住，门牌是309”，将不保存请求仍落库当作通过，违反本计划“普通合法事实”前提。master在实际审查后中止60444（CLI PID84022，SIGINT，终态exit0），保留工作区和原输出；这是方向性Oracle纠偏，不是等待超时重启。
+
+明确不保存只限制该请求所指事实的本轮自动学习，不自动删除既有事实，不影响同轮独立授权或普通事实；引用/假设等负例不得为证明未提升而强制写入。需要观察未变状态与无越权，不用错误Expected保住旧行为。事务回滚测试原调用真实applyExtractionBatch后注入异常可以保留，需注明故障注入边界。Runner790行超过信号，须按独立业务分支必要性说明，不通过压行缩短。

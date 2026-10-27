@@ -23,6 +23,13 @@ const {
   REPLIES,
 } = require("./chat-memory-operations.cjs");
 const { detectSharingSetting } = require("./chat-sharing-setting.cjs");
+const {
+  REPLIES: EXPLICIT_REMEMBER_REPLIES,
+  analyzeExplicitRemember,
+  resolveExplicitRemember,
+  markExplicitRememberCandidates,
+  summarizeExplicitRememberResult,
+} = require("./memory-explicit-remember.cjs");
 const { locateCorrectionSegments } = require("./memory-correction-evidence.cjs");
 const {
   createChatMemoryVerification,
@@ -792,6 +799,8 @@ function createChatService({
       .slice(-MAX_RECENT_MESSAGES);
     const recentText = recent.map((message) => message.content).join("\n");
     const intent = detectOperationIntent(userText);
+    // 只由本轮用户原话生成授权定位；模型候选稍后再按该事实段核对。
+    const explicitRemember = analyzeExplicitRemember(userText);
     const relayCharacters = intent.action === "relay" ? knownCharacters() : [];
     const characterCandidates = buildCharacterCandidates(relayCharacters, characterId);
     const operationContext = buildOperationContext({
@@ -821,6 +830,7 @@ function createChatService({
       operationContext: {
         ...operationContext,
         intent,
+        explicitRemember,
         characters: relayCharacters,
         characterCandidates,
       },
@@ -1095,7 +1105,7 @@ function createChatService({
 
   function applyMemoryCandidates({ characterId, sourceId, candidates, nowMs, inTransaction }) {
     if (candidates.length === 0) {
-      return { applied: false, count: 0, reason: null };
+      return { applied: false, count: 0, promoted: 0, facts: [], reason: null };
     }
     const result = memory.applyExtractionBatch({
       characterId,
@@ -1109,6 +1119,8 @@ function createChatService({
     return {
       applied: result.applied,
       count: result.facts.filter((fact) => fact.created).length,
+      promoted: result.facts.filter((fact) => fact.promoted).length,
+      facts: result.facts,
       reason: result.reason ?? null,
     };
   }
@@ -1805,7 +1817,11 @@ function createChatService({
     request,
     messages,
     contextVersion,
-    operationContext = { candidates: [], recentText: "" },
+    operationContext = {
+      candidates: [],
+      recentText: "",
+      explicitRemember: { kind: "none", commands: [] },
+    },
     preplannedPlan = null,
     selection = false,
     selectionErrorCode = FORGET_SELECTION_FAILED,
@@ -1878,6 +1894,14 @@ function createChatService({
           nowMs: currentMs(),
         });
       }
+
+      /* 授权定位只对普通记忆回合生效；已有管理操作仍按原优先级执行，
+         操作回合不把候选再学一遍。 */
+      const explicitRememberPlan =
+        operationContext.explicitRemember ?? { kind: "none", commands: [] };
+      const explicitRememberResolution = operationPlan.kind === "none"
+        ? resolveExplicitRemember(explicitRememberPlan, parsed.memoryCandidates)
+        : { status: "none", matches: [] };
 
       const operation = operationPlan.kind === "execute" ? operationPlan.operation : null;
       const twoPhaseCorrect =
@@ -1984,14 +2008,42 @@ function createChatService({
         // memoryApplied 只统计本轮新学习的事实；操作变更由回复和数据库结果核验。
         let memoryApplied = 0;
         if (operationPlan.kind === "none") {
+          /* 否定/歧义段只排除对应候选，其他独立事实仍按原规则保存；
+             授权提升只作用于本地已定位的事实段。 */
+          const candidates = markExplicitRememberCandidates(
+            parsed.memoryCandidates,
+            explicitRememberResolution,
+          );
           const memoryResult = applyMemoryCandidates({
             characterId: request.characterId,
             sourceId: userMessage.sourceId,
-            candidates: parsed.memoryCandidates,
+            candidates,
             nowMs: completedAt,
             inTransaction: true,
           });
           memoryApplied = memoryResult.count;
+          if (explicitRememberResolution.clarify) {
+            // 独立候选可能已保存/提升；按真实结果反馈，不谎称整轮零变更。
+            reply = memoryApplied + memoryResult.promoted > 0
+              ? EXPLICIT_REMEMBER_REPLIES.ambiguousPartial
+              : EXPLICIT_REMEMBER_REPLIES.ambiguous;
+          } else if (explicitRememberResolution.blockedMatched ||
+            explicitRememberResolution.blockedRequested) {
+            // 其他独立事实或提升仍可能已生效；只有确无变化时才说完全未保存。
+            reply = memoryApplied + memoryResult.promoted > 0
+              ? EXPLICIT_REMEMBER_REPLIES.partial
+              : EXPLICIT_REMEMBER_REPLIES.notSaved;
+          } else if (explicitRememberResolution.status === "resolved") {
+            const outcome = summarizeExplicitRememberResult(
+              explicitRememberResolution,
+              memoryResult.facts,
+            );
+            if (outcome === "failed") {
+              reply = EXPLICIT_REMEMBER_REPLIES.notSaved;
+            } else if (outcome === "partial") {
+              reply = EXPLICIT_REMEMBER_REPLIES.partial;
+            }
+          }
         } else if (operationPlan.kind === "execute") {
           /* 操作、确认回复和请求完成同属这一事务；任何一步失败都整笔回滚。
              操作回合不把被删正文或命令再作为 memoryCandidates 学习。 */
@@ -2018,6 +2070,10 @@ function createChatService({
             } else {
               throw error;
             }
+          }
+          /* 操作回合不学习候选；若同轮还出现记住/不要记住命令，如实说明本片未执行。 */
+          if (explicitRememberPlan.kind !== "none") {
+            reply = `${reply}${EXPLICIT_REMEMBER_REPLIES.operationSuffix}`;
           }
           let proof = null;
           if (twoPhaseTemporary && targetEvidence &&

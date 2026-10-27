@@ -12,9 +12,9 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 
 此处保存用户对active Goal的当前执行约束；系统Goal工具仅能更新状态，不能改写仍进行中的objective原文，因此不把本文同步冒称系统Goal字段已修改。原系统Goal本已包含Polaris master与流程迭代要求，本条将其持续执行方式明确化。
 
-## 当前阶段（2026-10-28，S03q有限接受）
+## 当前阶段（2026-10-28，S03r有限接受）
 
-S07睡眠有限运行时验收已保存bb72ed0，正式动画候选不等于发布；通知连续可读性修复已保存ec3204f。S03q细节召回与年龄淡化经master独立398/398及unit21/21接受，见[s03q-master-review.md](s03q-master-review.md)。接下来继续S03明确记住的自然语言保护、自动整理和真实模型体验；S03及完整Goal未完成，无GUI占用。
+S07睡眠有限运行时验收已保存bb72ed0，正式动画候选不等于发布；通知连续可读性修复已保存ec3204f。S03q细节召回与年龄淡化经master独立398/398及unit21/21接受，见[s03q-master-review.md](s03q-master-review.md)。S03r直接事实/同键同正文明确记住及不保存已有限接受，见[s03r-master-review.md](s03r-master-review.md)。接下来继续真实模型候选/事实键/指代体验与自动整理；S03及完整Goal未完成，无GUI占用。
 
 ## 按可用路径推进
 

@@ -128,3 +128,5 @@ S03q执行入口：`node --test tests/acceptance/memory-detail-context.spec.cjs`
 ## S03r 明确要求记住
 
 Part A/B、业务边界、规模和独立证据要求见[s03r-explicit-remember-plan.md](s03r-explicit-remember-plan.md)。只用构造HTTP替代模型，真实SQLite/chat，真实模型与GUI后续另验。
+
+S03r正式执行入口：`node --test tests/acceptance/memory-explicit-remember.spec.cjs`；最新master四文件158/158及前轮未变范围回归见[s03r-master-review.md](s03r-master-review.md)。
