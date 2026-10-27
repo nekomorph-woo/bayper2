@@ -20,7 +20,10 @@ const {
   REPLIES,
 } = require("./chat-memory-operations.cjs");
 const { detectSharingSetting } = require("./chat-sharing-setting.cjs");
-const { createChatMemoryVerification } = require("./chat-memory-verification.cjs");
+const {
+  createChatMemoryVerification,
+  provenDerivedMembers,
+} = require("./chat-memory-verification.cjs");
 
 const MAX_MESSAGE_CHARS = 2000;
 const MAX_REQUEST_ID_CHARS = 200;
@@ -836,6 +839,39 @@ function createChatService({
     });
   }
 
+  /* 临时阶段0的旧长期证据：锚条目本身未变、来源快照可重新解析且不可变字段
+     一致；随后阶段1引起的 contextVersion 变化不作为 stale。 */
+  function temporaryTargetEvidenceCurrent(inside, evidence, nowMs) {
+    const anchor = memory.getHeldEntry({
+      characterId: inside.characterId,
+      entryId: evidence.anchorEntryId,
+    });
+    if (!anchor ||
+      anchor.version !== evidence.anchorVersion ||
+      anchor.sourceId !== evidence.anchorSourceId ||
+      anchor.body !== evidence.anchorBody) {
+      return false;
+    }
+    const current = memorySourceContext.resolve({
+      characterId: inside.characterId,
+      entryId: anchor.id,
+      expectedVersion: anchor.version,
+      nowMs,
+    });
+    if (current.status !== "ok") {
+      return false;
+    }
+    const captured = evidence.snapshot;
+    return current.sourceId === captured.sourceId &&
+      current.excerpt === captured.excerpt &&
+      current.sourceAnchorEntryId === captured.sourceAnchorEntryId &&
+      current.direct === captured.direct &&
+      current.via === captured.via &&
+      current.sourceMessage?.id === captured.sourceMessage?.id &&
+      current.sourceMessage?.content === captured.sourceMessage?.content &&
+      JSON.stringify(current.segments ?? []) === JSON.stringify(captured.segments ?? []);
+  }
+
   function candidateEvidenceCurrent(candidate) {
     if (memorySourceContext.isCurrent(candidate.snapshot)) {
       return sourceControlsMatch(
@@ -959,6 +995,103 @@ function createChatService({
     );
   }
 
+  /* 阶段 1 实际覆盖的来源控制作为临时候选允许增量；不推测差量。 */
+  function applyTemporarySourceControls({ targetEvidence, candidates, sourceControls }) {
+    const increments = (holder) => sourceControls?.[holder] ?? [];
+    targetEvidence.allowedSourceHashes = [...new Set([
+      ...(targetEvidence.allowedSourceHashes ?? []),
+      ...increments(targetEvidence.snapshot.holderCharacterId),
+    ])];
+    for (const candidate of candidates) {
+      candidate.sourceIncrements = [...new Set([
+        ...(candidate.sourceIncrements ?? []),
+        ...increments(candidate.characterId),
+      ])];
+      for (const member of candidate.members) {
+        member.sourceIncrements = [...new Set([
+          ...(member.sourceIncrements ?? []),
+          ...increments(member.characterId),
+        ])];
+      }
+    }
+  }
+
+  /* 临时候选：代表条目必须有直接旧事实；同 identity 的 relay 成员没有来源快照
+     时仍保留（其版本/来源/控制精确核对），不因缺快照跳过已知 holder。 */
+  function temporaryCandidateMembersMatch(candidate) {
+    const members = memory.listIdentityEntries(candidate.identityId)
+      .filter((member) => memory.isKnownCharacter(member.characterId));
+    if (members.length !== candidate.members.length) {
+      return false;
+    }
+    const byId = new Map(members.map((member) => [member.id, member]));
+    const expectedById = new Map(candidate.members.map((member) => [member.entryId, member]));
+    const chainMembers = members.map((member) => ({
+      ...member,
+      snapshot: expectedById.get(member.id)?.snapshot ?? null,
+    }));
+    for (const expected of candidate.members) {
+      const current = byId.get(expected.entryId);
+      if (!current ||
+        current.characterId !== expected.characterId ||
+        current.version !== expected.version ||
+        current.sourceId !== expected.sourceId ||
+        !sourceControlsMatch(
+          expected.characterId,
+          expected.excludedSourceHashes,
+          expected.sourceIncrements,
+        )) {
+        return false;
+      }
+      if (expected.snapshot && !memberEvidenceCurrent(expected)) {
+        return false;
+      }
+    }
+    return provenDerivedMembers(chainMembers, candidate.entryId);
+  }
+
+  function temporaryCandidateEligible(candidate) {
+    const entry = memory.getHeldEntry({
+      characterId: candidate.characterId,
+      entryId: candidate.entryId,
+    });
+    return Boolean(
+      entry &&
+      entry.version === candidate.version &&
+      entry.factIdentityId === candidate.identityId &&
+      entry.trust === "stated" &&
+      (entry.sourceKind ?? "user") === "user" &&
+      entry.expiresAt === null &&
+      temporaryCandidateMembersMatch(candidate) &&
+      candidateEvidenceCurrent(candidate),
+    );
+  }
+
+  function applyApprovedTemporary(inside, proof, targetEvidence, approved, nowMs) {
+    if (!memory.verifyOperationProof({
+      action: "temporary",
+      controlProof: proof,
+      nowMs,
+    }) || !temporaryTargetEvidenceCurrent(inside, targetEvidence, nowMs)) {
+      throw new AppError("VERIFICATION_STALE", "原操作已变化。");
+    }
+    for (const candidate of approved) {
+      if (!temporaryCandidateEligible(candidate)) {
+        throw new AppError("VERIFICATION_STALE", "候选已变化。");
+      }
+    }
+    return memory.applyConfirmedTemporaryCorrectionToHolders({
+      temporaryIdentityId: proof.temporaryIdentityId,
+      expiresAt: proof.expiresAt,
+      originEntryId: proof.originEntryId,
+      originVersion: proof.originVersion,
+      initiatorCharacterId: proof.initiatorCharacterId,
+      approved,
+      nowMs,
+      inTransaction: true,
+    });
+  }
+
   function applyApprovedCorrection(inside, proof, targetEvidence, approved, nowMs) {
     let currentAnchor = memory.getHeldEntry({
       characterId: inside.characterId,
@@ -1057,18 +1190,27 @@ function createChatService({
     request, proof, targetEvidence, candidates, truncated, controller,
   }) {
     const forget = proof.action === "forget";
+    const temporary = proof.version === 3 && proof.mode === "temporary";
     const requestId = request.id;
     const unconfirmedOptions = { unconfirmed: candidates.length, truncated };
     const fail = (status = "failed") => finalizeVerification(requestId, status, unconfirmedOptions);
     const proofCurrent = (inside) => (forget
       ? forgetProofCurrent(inside, proof, targetEvidence)
-      : proofMatches(memory.getHeldEntry({
-        characterId: inside.characterId,
-        entryId: proof.anchorEntryId,
-      }), proof) && targetEvidenceCurrent(inside, targetEvidence));
+      : temporary
+        ? memory.verifyOperationProof({
+          action: "temporary",
+          controlProof: proof,
+          nowMs: currentMs(),
+        }) && temporaryTargetEvidenceCurrent(inside, targetEvidence, currentMs())
+        : proofMatches(memory.getHeldEntry({
+          characterId: inside.characterId,
+          entryId: proof.anchorEntryId,
+        }), proof) && targetEvidenceCurrent(inside, targetEvidence));
     const candidateEligible = (candidate) => (forget
       ? forgetCandidateEligible(candidate)
-      : correctCandidateEligible(candidate));
+      : temporary
+        ? temporaryCandidateEligible(candidate)
+        : correctCandidateEligible(candidate));
     const filterActive = (list) => {
       let unconfirmed = 0;
       const active = list.filter((candidate) => {
@@ -1144,6 +1286,22 @@ function createChatService({
         }
         if (!proofCurrent(inside)) {
           throw new AppError("VERIFICATION_STALE", "原操作已变化。");
+        }
+        if (temporary) {
+          const result = applyApprovedTemporary(inside, proof, targetEvidence, approved, nowMs);
+          writeVerificationResult(inside, "completed", {
+            applied: result.updatedEntries,
+            unconfirmed: unresolved,
+            truncated,
+          });
+          store.setVerification(requestId, "completed", JSON.stringify({
+            ...proof,
+            verification: "completed",
+            applied: result.updatedEntries,
+            updatedHolders: result.updatedHolders,
+            contextVersions: result.contextVersions,
+          }));
+          return;
         }
         if (forget) {
           const { results, skipped } = deleteApprovedCandidates(inside, proof, approved, nowMs);
@@ -1285,6 +1443,11 @@ function createChatService({
         verification &&
         operation?.action === "forget" &&
         operation?.target?.entry;
+      const twoPhaseTemporary =
+        verification &&
+        operation?.action === "correct" &&
+        operation?.mode === "temporary" &&
+        operation?.target?.entry;
       let targetEvidence = null;
       if (twoPhaseCorrect) {
         try {
@@ -1305,6 +1468,28 @@ function createChatService({
             : { candidates: [], truncated: false };
         } catch {
           // 候选核验是不可靠增强；捕获异常不得阻止已明确的本地 correct。
+          targetEvidence = null;
+          candidateScan = { candidates: [], truncated: false, captureFailed: true };
+        }
+      } else if (twoPhaseTemporary) {
+        try {
+          targetEvidence = verification.captureTemporaryTargetEvidence({
+            characterId: request.characterId,
+            targetEntry: operation.target.entry,
+            nowMs: currentMs(),
+          });
+          candidateScan = targetEvidence?.anchorEntry
+            ? verification.captureCandidates({
+              characterId: request.characterId,
+              holderCharacterIds: knownCharacters()
+                .map((character) => character.characterId),
+              targetEntry: targetEvidence.anchorEntry,
+              sourceIncrementsByHolder: targetEvidence.sourceIncrementsByHolder,
+              allowProvenDerivedMembers: true,
+              nowMs: currentMs(),
+            })
+            : { candidates: [], truncated: false };
+        } catch {
           targetEvidence = null;
           candidateScan = { candidates: [], truncated: false, captureFailed: true };
         }
@@ -1389,7 +1574,59 @@ function createChatService({
             }
           }
           let proof = null;
-          if (twoPhaseCorrect && targetEvidence && candidateScan.candidates.length > 0) {
+          if (twoPhaseTemporary && targetEvidence &&
+            candidateScan.candidates.length > 0 &&
+            operationResult?.temporaryIdentityId &&
+            operationResult?.originEntryId &&
+            Array.isArray(operationResult.entries)) {
+            applyTemporarySourceControls({
+              targetEvidence,
+              candidates: candidateScan.candidates,
+              sourceControls: operationResult.sourceControls ?? {},
+            });
+            const relatedHolders = new Set(
+              operationResult.entries.map((entry) => entry.holder),
+            );
+            for (const candidate of candidateScan.candidates) {
+              relatedHolders.add(candidate.characterId);
+              for (const member of candidate.members) {
+                relatedHolders.add(member.characterId);
+              }
+            }
+            const contextVersions = {};
+            const sourceControls = {};
+            for (const holder of [...relatedHolders].sort()) {
+              contextVersions[holder] = memory.getContextVersion(holder);
+              sourceControls[holder] = memory.listExcludedSources(holder);
+            }
+            proof = {
+              version: 3,
+              action: "correct",
+              mode: "temporary",
+              temporaryIdentityId: operationResult.temporaryIdentityId,
+              expiresAt: operationResult.expiresAt,
+              originEntryId: operationResult.originEntryId,
+              originVersion: operationResult.originVersion,
+              rootIdentityId: operationResult.rootIdentityId,
+              initiatorCharacterId: request.characterId,
+              entries: operationResult.entries,
+              candidates: candidateScan.candidates.map((candidate) => ({
+                identityId: candidate.identityId,
+                characterId: candidate.characterId,
+                entryId: candidate.entryId,
+                version: candidate.version,
+                sourceIdHash: sourceHash(candidate.sourceId),
+                members: candidate.members.map((member) => ({
+                  entryId: member.entryId,
+                  holder: member.characterId,
+                  version: member.version,
+                  sourceIdHash: sourceHash(member.sourceId),
+                })),
+              })),
+              contextVersions,
+              sourceControls,
+            };
+          } else if (twoPhaseCorrect && targetEvidence && candidateScan.candidates.length > 0) {
             const anchor = memory.getHeldEntry({
               characterId: request.characterId,
               entryId: operationPlan.operation.target.entry.id,

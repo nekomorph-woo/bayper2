@@ -11,6 +11,8 @@ const { test } = require("node:test");
 const { DatabaseSync } = require("node:sqlite");
 const { createStore } = require("../../app/store.cjs");
 const { createAutomaticBudget } = require("../../app/automatic-budget.cjs");
+const { createChatMemoryVerification } = require("../../app/chat-memory-verification.cjs");
+const { parseTemporarySource } = require("../../app/memory-temporary-source.cjs");
 
 const START = Date.UTC(2026, 9, 27, 10, 0, 0);
 const MODEL_NAME = "fixture-semantic-operations";
@@ -2725,4 +2727,925 @@ test("POL-SEMOP-001d/S12 多个合法T无法唯一证明时最小澄清且零写
   assert.match(result.reply, /哪一条|还没法确定关联/u);
   assert.deepEqual(memoryState(ctx), before, "歧义时不应写入任何记忆/身份/控制/上下文");
   assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+});
+
+
+/* S03m 2c-2b 测试先行（r2）：临时当日理解进入真实 chat 阶段 2。
+   所有长期候选都经真实 chat/chat source 创建，并用现有 captureCandidates 只读
+   预检；聊天与关系模型均为本机构造 HTTP。阶段 2 未实现时，首个 pending 业务
+   断言失败；其后的深层分支未到达，不记为已证明。 */
+function candidateProbe(ctx) {
+  return createChatMemoryVerification({
+    memory: ctx.store.memory,
+    memorySourceContext: ctx.store.memorySourceContext,
+    requestChatCompletion: async () => {
+      throw new Error("预检不发起网络请求");
+    },
+    now: ctx.nowMs,
+  });
+}
+
+function captureRealCandidates(
+  ctx, targetEntry, holders = ["a", "b", "c"], characterId = "a", options = {},
+) {
+  return candidateProbe(ctx).captureCandidates({
+    characterId,
+    holderCharacterIds: holders,
+    targetEntry,
+    nowMs: ctx.nowMs(),
+    ...options,
+  });
+}
+
+async function correctLongNonToday(ctx, conversation, { text, needle, excerpt, evidence }) {
+  ctx.server.enqueue(({ body, res }) =>
+    sendEnvelope(res, correctionEnvelope(body, { needle, excerpt, evidence })));
+  const result = await ctx.store.chat.sendMessage({
+    characterId: "a",
+    conversationId: conversation.id,
+    text,
+    requestId: crypto.randomUUID(),
+  });
+  assert.equal(result.status, "completed");
+  assert.notEqual(result.verificationStatus, "pending");
+  return result;
+}
+
+async function rememberLongViaChat(ctx, characterId, factKey, body, text) {
+  const conversation = openConversation(ctx.store, characterId);
+  await chatTurn(ctx, conversation, text, [
+    { factKey, body, kind: "preference", trust: "stated", evidence: text },
+  ], characterId);
+  const entry = entryOf(ctx.store, characterId, factKey);
+  assert.ok(entry, `chat 长期夹具 ${factKey} 应存在`);
+  const source = snapshotOf(ctx, characterId, entry);
+  assert.equal(source.status, "ok", `${factKey} 来源必须可解析`);
+  // 旧 direct 形状没有 direct 字段；direct=false 才表示传播副本。
+  assert.notEqual(source.direct, false, `${factKey} 不能是传播副本`);
+  assert.equal(source.format, undefined, `${factKey} 必须保持旧 direct 形状`);
+  assert.match(entry.sourceId, /^chat:/u, `${factKey} 必须使用真实 chat 来源`);
+  return entry;
+}
+
+async function seedAWithIndependentB(ctx) {
+  const aConversation = openConversation(ctx.store);
+  await seedCoffeeA(ctx, aConversation);
+  const aLong = entryOf(ctx.store, "a", "pref.coffee");
+  const bLong = await rememberLongViaChat(
+    ctx, "b", "pref.coffeeB", "用户也爱喝咖啡", "我也爱喝咖啡。",
+  );
+  return { aConversation, aLong, bLong };
+}
+
+function temporaryEntriesOf(ctx, characterId, tempIdentityId) {
+  return ctx.store.memory.listMemories(characterId).filter((entry) =>
+    entry.expiresAt !== null && entry.factIdentityId === tempIdentityId);
+}
+
+function entryLinkOf(ctx, entryId) {
+  return withDatabase(ctx.store.dbPath, (db) => db.prepare(`
+    SELECT entry_id, temp_identity_id, holder_character_id, expires_at,
+           long_identity_id, root_identity_id
+    FROM memory_temporary_entry_links WHERE entry_id = ?
+  `).get(entryId) ?? null);
+}
+
+function temporaryEntryLinksOf(ctx, tempIdentityId, holderCharacterId) {
+  return withDatabase(ctx.store.dbPath, (db) => db.prepare(`
+    SELECT * FROM memory_temporary_entry_links
+    WHERE temp_identity_id = ? AND holder_character_id = ?
+    ORDER BY entry_id ASC
+  `).all(tempIdentityId, holderCharacterId));
+}
+
+function fullTemporarySnapshot(ctx) {
+  return withDatabase(ctx.store.dbPath, (db) => {
+    const rows = (table) => db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all();
+    return {
+      entries: rows("memory_entries"),
+      identities: rows("memory_fact_identities"),
+      derivations: rows("memory_derivations"),
+      fts: rows("memory_fts"),
+      relations: rows("memory_fact_relation_edges"),
+      aliases: rows("memory_fact_aliases"),
+      aliasConflicts: rows("memory_fact_alias_conflicts"),
+      sourceControls: rows("memory_source_controls"),
+      identityForgetControls: rows("memory_forget_identity_controls"),
+      identityShareControls: rows("memory_share_identity_controls"),
+      deletedFingerprints: rows("memory_deleted_fact_fingerprints"),
+      legacyForgetControls: rows("memory_forget_controls"),
+      legacyShareControls: rows("memory_share_controls"),
+      contextVersions: rows("memory_context_versions"),
+      temporaryLinks: rows("memory_temporary_links"),
+      temporaryEntryLinks: rows("memory_temporary_entry_links"),
+    };
+  });
+}
+
+function assistantMessages(ctx, conversation, characterId = "a") {
+  return ctx.store.chat.getConversation({
+    characterId,
+    conversationId: conversation.id,
+  }).messages.filter((message) => message.role === "assistant");
+}
+
+function assistantState(ctx, conversation, characterId = "a") {
+  const list = ctx.store.chat.getConversation({
+    characterId,
+    conversationId: conversation.id,
+  }).messages.filter((message) => message.role === "assistant");
+  return { count: list.length, lastId: list.at(-1)?.id ?? null };
+}
+
+function quoteForSide(side) {
+  const sources = [side.text];
+  const context = side.sourceContext;
+  if (context) {
+    if (typeof context.utterance === "string") sources.push(context.utterance);
+    for (const segment of context.segments ?? []) sources.push(segment);
+    for (const message of context.context ?? []) sources.push(message.content);
+  }
+  const hit = sources.find((text) =>
+    typeof text === "string" && (text.includes("用户") || text.includes("我")));
+  assert.ok(hit, "关系夹具必须含可引用的主体原文");
+  return hit.includes("用户") ? "用户" : "我";
+}
+
+/* 关系响应必须使用双方实际原文片段；不能固定“我”。 */
+function equivalentResultForPair(pair) {
+  const description = (side) => {
+    const subjectQuote = quoteForSide(side);
+    return {
+      subject: "用户",
+      subjectQuote,
+      scope: "current",
+      time: null,
+      timeQuote: null,
+    };
+  };
+  return {
+    pair: pair.id,
+    relation: "equivalent",
+    left: description(pair.left),
+    right: description(pair.right),
+  };
+}
+
+const equivalentResponder = () =>
+  relationResponder((pairs) => pairs.map(equivalentResultForPair));
+
+async function sendTodayWithVerification(
+  ctx, conversation, characterId, { text, needle, excerpt, evidence }, verification,
+) {
+  ctx.server.enqueue(({ body, res }) =>
+    sendEnvelope(res, correctionEnvelope(body, { needle, excerpt, evidence })));
+  if (verification) ctx.server.enqueue(verification);
+  return ctx.store.chat.sendMessage({
+    characterId,
+    conversationId: conversation.id,
+    text,
+    requestId: crypto.randomUUID(),
+  });
+}
+
+async function awaitVerificationSettled(ctx, result, characterId = "a") {
+  await waitFor(() => verificationRequests(ctx).length >= 1, 5000);
+  await waitFor(() => {
+    const request = ctx.store.chat.getRequest({
+      characterId,
+      requestId: result.requestId,
+    });
+    return request.verificationStatus !== "pending";
+  }, 5000);
+  return ctx.store.chat.getRequest({ characterId, requestId: result.requestId });
+}
+
+function assertAssistantAdvanced(before, after, result) {
+  assert.equal(typeof result.assistantMessageId, "string", "请求结果必须返回 assistantMessageId");
+  assert.ok(result.assistantMessageId);
+  assert.equal(after.count, before.count + 1, "本次请求只新增一条 assistant");
+  assert.equal(after.lastId, result.assistantMessageId, "原位更新同一个 assistant");
+}
+
+test("POL-SEMOP/D1 临时阶段2：B独立旧事实核验后建同T current，长期不合并", async (t) => {
+  const ctx = await setupContext(t);
+  const { aConversation, aLong, bLong } = await seedAWithIndependentB(ctx);
+  assert.notEqual(bLong.factIdentityId, aLong.factIdentityId);
+  const precheck = captureRealCandidates(ctx, aLong);
+  assert.deepEqual(
+    precheck.candidates.map((candidate) => candidate.identityId),
+    [bLong.factIdentityId],
+    "真实 captureCandidates 必须能捕获B独立候选",
+  );
+  const assistantBefore = assistantState(ctx, aConversation);
+
+  const result = await sendTodayWithVerification(ctx, aConversation, "a", {
+    text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+    needle: aLong.body,
+    excerpt: "我今天想喝茶",
+    evidence: "请帮我改过来",
+  }, equivalentResponder());
+  assert.equal(result.status, "completed");
+  assert.equal(result.verificationStatus, "pending", "临时理解必须进入阶段 2");
+  assertAssistantAdvanced(assistantBefore, assistantState(ctx, aConversation), result);
+  const aTemp = temporaryEntryOf(ctx.store, "a");
+  assert.ok(aTemp);
+  assert.equal(temporaryEntryOf(ctx.store, "b"), null, "阶段1不应猜B的独立长期");
+
+  const finished = await awaitVerificationSettled(ctx, result);
+  assert.equal(finished.verificationStatus, "completed");
+  assert.equal(verificationRequests(ctx).length, 1, "一次关系核验");
+  const pair = pairsOf(verificationRequests(ctx)[0])[0];
+  assert.equal(pair.left.text, aLong.body, "left 必须是A旧长期，不是今日 body");
+  assert.equal(pair.left.text.includes("我今天想喝茶"), false);
+  assert.equal(pair.right.text, bLong.body);
+  assert.equal(pair.left.holder, "a");
+  assert.equal(pair.right.holder, "b");
+
+  const bTemp = temporaryEntryOf(ctx.store, "b");
+  assert.ok(bTemp, "核验通过后B应有同一当日理解");
+  assert.equal(bTemp.factIdentityId, aTemp.factIdentityId);
+  assert.equal(bTemp.body, aTemp.body);
+  const bLink = entryLinkOf(ctx, bTemp.id);
+  assert.equal(bLink.long_identity_id, bLong.factIdentityId);
+  assert.equal(bLink.root_identity_id, entryLinkOf(ctx, aTemp.id).long_identity_id);
+  assert.equal(snapshotOf(ctx, "b", bTemp).status, "ok");
+  const bLongAfter = entryOf(ctx.store, "b", "pref.coffeeB");
+  assert.equal(bLongAfter.factIdentityId, bLong.factIdentityId);
+  assert.equal(bLongAfter.body, bLong.body);
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee").body, aLong.body);
+  assert.equal(temporaryEntryOf(ctx.store, "c"), null);
+  const assistantAfter = assistantState(ctx, aConversation);
+  assertAssistantAdvanced(assistantBefore, assistantAfter, result);
+  const last = ctx.store.chat.getConversation({
+    characterId: "a", conversationId: aConversation.id,
+  }).messages.find((message) => message.id === result.assistantMessageId);
+  assert.equal(last.content.includes("正在核对"), false);
+  assert.match(last.content, /一并更正/u);
+});
+
+async function seedBMultiL(ctx) {
+  const l2a = await rememberLongViaChat(
+    ctx, "b", "pref.coffeeB", "用户也爱喝咖啡", "我也爱喝咖啡。",
+  );
+  const l2b = await rememberLongViaChat(
+    ctx, "b", "pref.coffeeB.anchor2", "用户也爱喝咖啡", "我也爱喝咖啡。",
+  );
+  ctx.store.memory.associateFacts({
+    left: { entryId: l2a.id, expectedVersion: l2a.version },
+    right: { entryId: l2b.id, expectedVersion: l2b.version },
+  });
+  const l3 = await rememberLongViaChat(
+    ctx, "b", "pref.coffeeB3", "用户偏爱咖啡", "我偏爱咖啡。",
+  );
+  const l2 = entryOf(ctx.store, "b", "pref.coffeeB");
+  assert.equal(l2.factIdentityId, entryOf(ctx.store, "b", "pref.coffeeB.anchor2").factIdentityId);
+  assert.notEqual(l3.factIdentityId, l2.factIdentityId);
+  return { l2, l3 };
+}
+
+test("POL-SEMOP/D2+D10 临时阶段2：多holder/已触碰B/同L双锚/不同L不重复", async (t) => {
+  const ctx = await setupContext(t);
+  const pair = await seedSameFactPair(ctx);
+  const prepared = await seedBMultiL(ctx);
+  const aLong = entryOf(ctx.store, "a", "pref.coffee");
+  // 预检在 relay 之前完成，确认真实候选集合；relay 后再验证阶段2覆盖同L的C。
+  const precheck = captureRealCandidates(ctx, aLong, ["a", "b", "c"]);
+  const preIdentityIds = new Set(precheck.candidates.map((candidate) => candidate.identityId));
+  assert.deepEqual(preIdentityIds, new Set([prepared.l2.factIdentityId, prepared.l3.factIdentityId]));
+  const l2Now = entryOf(ctx.store, "b", "pref.coffeeB");
+  ctx.store.memory.relay({
+    fromCharacterId: "b",
+    toCharacterId: "c",
+    entries: [{ entryId: l2Now.id, expectedVersion: l2Now.version }],
+  });
+  const cLong = entryOf(ctx.store, "c", "pref.coffeeB");
+  assert.equal(cLong.factIdentityId, prepared.l2.factIdentityId);
+  const assistantBefore = assistantState(ctx, pair.aConversation);
+
+  const result = await sendTodayWithVerification(ctx, pair.aConversation, "a", {
+    text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+    needle: aLong.body,
+    excerpt: "我今天想喝茶",
+    evidence: "请帮我改过来",
+  }, equivalentResponder());
+  assert.equal(result.verificationStatus, "pending", "临时理解必须进入阶段 2");
+  assertAssistantAdvanced(assistantBefore, assistantState(ctx, pair.aConversation), result);
+  const aTemp = temporaryEntryOf(ctx.store, "a");
+  const bStage1 = temporaryEntryOf(ctx.store, "b");
+  assert.ok(aTemp && bStage1, "阶段1已同步B的同一L");
+  const tempIdentityId = aTemp.factIdentityId;
+
+  const finished = await awaitVerificationSettled(ctx, result);
+  assert.equal(finished.verificationStatus, "completed");
+  assert.equal(verificationRequests(ctx).length, 1);
+  const pairs = pairsOf(verificationRequests(ctx)[0]);
+  assert.equal(pairs.length, 2, "B的两个独立identity各一个候选");
+  assert.ok(pairs.every((item) => item.left.text === aLong.body));
+  assert.ok(pairs.every((item) => typeof item.right.holder === "string"));
+
+  const bEntries = temporaryEntriesOf(ctx, "b", tempIdentityId);
+  assert.equal(bEntries.length, 3, "阶段1的L1 + 阶段2的L2/L3，各一条");
+  const links = temporaryEntryLinksOf(ctx, tempIdentityId, "b");
+  assert.equal(new Set(links.map((link) => link.long_identity_id)).size, 3);
+  assert.equal(
+    links.filter((link) => link.long_identity_id === prepared.l2.factIdentityId).length,
+    1,
+    "同L双锚只建一条 current",
+  );
+  assert.equal(
+    links.filter((link) => link.long_identity_id === prepared.l3.factIdentityId).length,
+    1,
+  );
+  const cEntries = temporaryEntriesOf(ctx, "c", tempIdentityId);
+  assert.equal(cEntries.length, 1, "同L的C也必须获得current");
+  assert.equal(entryLinkOf(ctx, cEntries[0].id).long_identity_id, prepared.l2.factIdentityId);
+  assert.equal(entryLinkOf(ctx, cEntries[0].id).root_identity_id, entryLinkOf(ctx, aTemp.id).long_identity_id);
+  for (const entry of [...bEntries, ...cEntries]) {
+    assert.equal(entry.body, aTemp.body);
+    assert.equal(snapshotOf(ctx, entry.characterId, entry).status, "ok");
+  }
+  // 长期 identity/正文不变。
+  assert.equal(entryOf(ctx.store, "b", "pref.coffeeB").body, prepared.l2.body);
+  assert.equal(entryOf(ctx.store, "b", "pref.coffeeB3").body, prepared.l3.body);
+  assert.equal(entryOf(ctx.store, "c", "pref.coffeeB").body, cLong.body);
+  assert.equal(entryOf(ctx.store, "b", "pref.coffeeB").factIdentityId, prepared.l2.factIdentityId);
+  assertAssistantAdvanced(assistantBefore, assistantState(ctx, pair.aConversation), result);
+});
+
+async function seedD3(ctx) {
+  const pair = await seedSameFactPair(ctx);
+  const aLong = entryOf(ctx.store, "a", "pref.coffee");
+  const bL2 = await rememberLongViaChat(
+    ctx, "b", "pref.coffeeB", "用户也爱喝咖啡", "我也爱喝咖啡。",
+  );
+  const precheck = captureRealCandidates(ctx, aLong);
+  assert.deepEqual(
+    precheck.candidates.map((candidate) => candidate.identityId),
+    [bL2.factIdentityId],
+  );
+  return { pair, aLong, bL2, bConversation: pair.bConversation };
+}
+
+test("POL-SEMOP/D3 临时阶段2：已触碰B额外context变化stale，无变化对照完成", async (t) => {
+  await t.test("extra-context-stale", async (t2) => {
+    const ctx = await setupContext(t2);
+    const seeded = await seedD3(ctx);
+    const gate = gatedVerification(t2);
+    const result = await sendTodayWithVerification(ctx, seeded.pair.aConversation, "a", {
+      text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+      needle: seeded.aLong.body,
+      excerpt: "我今天想喝茶",
+      evidence: "请帮我改过来",
+    }, gate.responder);
+    assert.equal(result.verificationStatus, "pending", "临时理解必须进入阶段 2");
+    const aTemp = temporaryEntryOf(ctx.store, "a");
+    const bStage1 = temporaryEntryOf(ctx.store, "b");
+    assert.ok(aTemp && bStage1, "B必须是阶段1已触碰成员");
+    await gate.waitStarted();
+    ctx.store.memory.remember({
+      characterId: "b",
+      factKey: "pref.walk",
+      body: "用户喜欢散步",
+      kind: "preference",
+      sourceId: "seed-b-walk",
+    });
+    gate.release();
+    const finished = await awaitVerificationSettled(ctx, result);
+    assert.equal(finished.verificationStatus, "stale");
+    assert.equal(temporaryEntriesOf(ctx, "b", aTemp.factIdentityId).length, 1,
+      "阶段2不得为B的独立L写current");
+    assert.equal(temporaryEntryOf(ctx.store, "b").body, aTemp.body, "阶段1的B副本保留");
+    assert.equal(entryOf(ctx.store, "b", "pref.coffeeB").body, seeded.bL2.body);
+  });
+  await t.test("no-extra-change-control", async (t2) => {
+    const ctx = await setupContext(t2);
+    const seeded = await seedD3(ctx);
+    const result = await sendTodayWithVerification(ctx, seeded.pair.aConversation, "a", {
+      text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+      needle: seeded.aLong.body,
+      excerpt: "我今天想喝茶",
+      evidence: "请帮我改过来",
+    }, equivalentResponder());
+    assert.equal(result.verificationStatus, "pending", "临时理解必须进入阶段 2");
+    const finished = await awaitVerificationSettled(ctx, result);
+    assert.equal(finished.verificationStatus, "completed");
+    const bEntries = temporaryEntriesOf(ctx, "b", temporaryEntryOf(ctx.store, "a").factIdentityId);
+    assert.equal(bEntries.length, 2, "阶段1 L1 + 阶段2 L2");
+    assert.ok(bEntries.some((entry) =>
+      entryLinkOf(ctx, entry.id).long_identity_id === seeded.bL2.factIdentityId));
+  });
+});
+
+test("POL-SEMOP/D4 临时阶段2：第二候选写失败全回滚，阶段1保留", async (t) => {
+  const ctx = await setupContext(t);
+  const { aConversation, aLong, bLong } = await seedAWithIndependentB(ctx);
+  const cLong = await rememberLongViaChat(
+    ctx, "c", "pref.coffeeC", "用户偏爱咖啡", "我偏爱咖啡。",
+  );
+  const precheck = captureRealCandidates(ctx, aLong);
+  assert.deepEqual(
+    new Set(precheck.candidates.map((candidate) => candidate.identityId)),
+    new Set([bLong.factIdentityId, cLong.factIdentityId]),
+  );
+  let triggerHits = 0;
+  ctx.store.db.function("fixture_mark_stage2_trigger", () => {
+    triggerHits += 1;
+    return 0;
+  });
+  withDatabase(ctx.store.dbPath, (db) => {
+    db.exec(`
+      CREATE TRIGGER fail_stage2_second_candidate
+      BEFORE INSERT ON memory_entries
+      WHEN NEW.character_id = 'c' AND NEW.expires_at IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM memory_entries b
+          WHERE b.character_id = 'b'
+            AND b.fact_identity_id = NEW.fact_identity_id
+            AND b.expires_at IS NOT NULL
+        )
+      BEGIN
+        SELECT fixture_mark_stage2_trigger();
+        SELECT RAISE(ABORT, 'fixture temporary stage2 second candidate');
+      END;
+    `);
+  });
+  const gate = gatedVerification(t);
+  const assistantBefore = assistantState(ctx, aConversation);
+  const result = await sendTodayWithVerification(ctx, aConversation, "a", {
+    text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+    needle: aLong.body,
+    excerpt: "我今天想喝茶",
+    evidence: "请帮我改过来",
+  }, gate.responder);
+  assert.equal(result.verificationStatus, "pending", "临时理解必须进入阶段 2");
+  assertAssistantAdvanced(assistantBefore, assistantState(ctx, aConversation), result);
+  const aTemp = temporaryEntryOf(ctx.store, "a");
+  assert.ok(aTemp);
+  const afterStage1 = fullTemporarySnapshot(ctx);
+  await gate.waitStarted(); // 关系请求已发出但未响应，阶段1状态已捕获
+  gate.release();
+  const finished = await awaitVerificationSettled(ctx, result);
+  assert.equal(finished.verificationStatus, "failed");
+  assert.deepEqual(fullTemporarySnapshot(ctx), afterStage1, "阶段2必须整笔回滚");
+  assert.ok(temporaryEntryOf(ctx.store, "a"), "阶段1的A current必须保留");
+  assert.equal(temporaryEntryOf(ctx.store, "b"), null, "B阶段2 current回滚");
+  assert.equal(temporaryEntryOf(ctx.store, "c"), null, "C阶段2 current回滚");
+  assert.equal(triggerHits, 1, "第二候选 trigger 必须实际命中");
+  assert.equal(entryOf(ctx.store, "b", "pref.coffeeB").body, bLong.body);
+  assert.equal(entryOf(ctx.store, "c", "pref.coffeeC").body, cLong.body);
+  const assistantAfter = assistantState(ctx, aConversation);
+  assertAssistantAdvanced(assistantBefore, assistantAfter, result);
+  const last = ctx.store.chat.getConversation({
+    characterId: "a", conversationId: aConversation.id,
+  }).messages.find((message) => message.id === result.assistantMessageId);
+  assert.match(last.content, /本地这次更正已完成/u);
+});
+
+test("POL-SEMOP/D5 临时阶段2：未结识角色不进入候选、不新增关系/副本", async (t) => {
+  const ctx = await setupContext(t);
+  const { aConversation, aLong, bLong } = await seedAWithIndependentB(ctx);
+  // 防御夹具边界：d 先经真实 relay 持有与 B 同 L 的长期副本，再关闭外键删除
+  // 关系，模拟“已核验 L 携带未知 holder”；这不是正常产品状态。
+  withDatabase(ctx.store.dbPath, (db) => {
+    db.prepare("INSERT OR IGNORE INTO relationships (character_id, accepted_at) VALUES ('d', '2026-01-01T00:00:00.000Z')").run();
+  });
+  ctx.store.memory.relay({
+    fromCharacterId: "b",
+    toCharacterId: "d",
+    entries: [{ entryId: bLong.id, expectedVersion: bLong.version }],
+  });
+  const dLong = entryOf(ctx.store, "d", "pref.coffeeB");
+  assert.equal(dLong.factIdentityId, bLong.factIdentityId);
+  withDatabase(ctx.store.dbPath, (db) => {
+    db.exec("PRAGMA foreign_keys = OFF");
+    db.prepare("DELETE FROM relationships WHERE character_id = 'd'").run();
+  });
+  const relationshipsBefore = withDatabase(ctx.store.dbPath, (db) => db.prepare(
+    "SELECT character_id FROM relationships ORDER BY character_id",
+  ).all());
+  const precheck = captureRealCandidates(ctx, aLong, ["a", "b", "c"], "a", {
+    memberSnapshotOptional: true,
+    allowProvenDerivedMembers: true,
+  });
+  assert.deepEqual(
+    precheck.candidates.map((candidate) => candidate.identityId),
+    [bLong.factIdentityId],
+    "同 L 的未知 holder 不改变候选代表，但必须在阶段2被过滤",
+  );
+  assert.equal(
+    withDatabase(ctx.store.dbPath, (db) => db.prepare(
+      "SELECT fact_identity_id FROM memory_entries WHERE character_id = 'd' AND fact_key = 'pref.coffeeB'",
+    ).get()).fact_identity_id,
+    bLong.factIdentityId,
+    "d 必须与 B 同 L，用于验证阶段2 known 过滤",
+  );
+
+  const result = await sendTodayWithVerification(ctx, aConversation, "a", {
+    text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+    needle: aLong.body,
+    excerpt: "我今天想喝茶",
+    evidence: "请帮我改过来",
+  }, equivalentResponder());
+  assert.equal(result.verificationStatus, "pending", "临时理解必须进入阶段 2");
+  const finished = await awaitVerificationSettled(ctx, result);
+  assert.equal(finished.verificationStatus, "completed");
+  const pairs = pairsOf(verificationRequests(ctx)[0]);
+  assert.ok(pairs.length >= 1);
+  assert.ok(pairs.every((pair) =>
+    typeof pair.right.holder === "string" &&
+    ["a", "b", "c"].includes(pair.right.holder)));
+  assert.equal(pairs.some((pair) => pair.right.holder === "d"), false);
+  const dRows = withDatabase(ctx.store.dbPath, (db) => ({
+    long: db.prepare(
+      "SELECT body FROM memory_entries WHERE character_id = 'd' AND fact_key = ?",
+    ).get("pref.coffeeB"),
+    temporary: db.prepare(
+      "SELECT COUNT(*) AS count FROM memory_entries WHERE character_id = 'd' AND expires_at IS NOT NULL",
+    ).get().count,
+  }));
+  assert.equal(dRows.long.body, dLong.body);
+  assert.equal(dRows.temporary, 0);
+  assert.deepEqual(withDatabase(ctx.store.dbPath, (db) => db.prepare(
+    "SELECT character_id FROM relationships ORDER BY character_id",
+  ).all()), relationshipsBefore);
+});
+
+test("POL-SEMOP/D11 临时阶段2后再次改口：用own L长期锚且多L同步、来源有效", async (t) => {
+  const ctx = await setupContext(t);
+  const { aConversation, aLong, bLong } = await seedAWithIndependentB(ctx);
+  const bConversation = openConversation(ctx.store, "b");
+  const aAssistantBefore = assistantState(ctx, aConversation);
+
+  const first = await sendTodayWithVerification(ctx, aConversation, "a", {
+    text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+    needle: aLong.body,
+    excerpt: "我今天想喝茶",
+    evidence: "请帮我改过来",
+  }, equivalentResponder());
+  assert.equal(first.verificationStatus, "pending", "首次临时理解必须进入阶段 2");
+  assertAssistantAdvanced(aAssistantBefore, assistantState(ctx, aConversation), first);
+  await awaitVerificationSettled(ctx, first);
+  const aTemp = temporaryEntryOf(ctx.store, "a");
+  const bTemp = temporaryEntryOf(ctx.store, "b");
+  assert.ok(aTemp && bTemp);
+  const tempIdentityId = aTemp.factIdentityId;
+  const firstBody = bTemp.body;
+  const bAssistantBefore = assistantState(ctx, bConversation, "b");
+
+  const second = await sendTodayWithVerification(ctx, bConversation, "b", {
+    text: "不是茶，我今天想喝咖啡，请帮我改过来。",
+    needle: firstBody,
+    excerpt: "我今天想喝咖啡",
+    evidence: "请帮我改过来",
+  }, equivalentResponder());
+  assert.equal(second.verificationStatus, "pending", "再次改口也必须进入阶段 2");
+  assertAssistantAdvanced(bAssistantBefore, assistantState(ctx, bConversation, "b"), second);
+  const bNow = temporaryEntryOf(ctx.store, "b");
+  assert.ok(bNow, "B的current必须仍是真实入口");
+  const secondBody = bNow.body;
+  assert.notEqual(secondBody, firstBody);
+  assert.ok(secondBody.includes("咖啡"));
+  await waitFor(() => verificationRequests(ctx).length === 2, 5000);
+  const secondPair = pairsOf(verificationRequests(ctx)[1])[0];
+  assert.equal(secondPair.left.text, bLong.body, "再次选择current时left是own L长期锚");
+  assert.equal(secondPair.left.text.includes("我今天想喝茶"), false);
+  assert.equal(secondPair.left.holder, "b");
+
+  const finished = await awaitVerificationSettled(ctx, second, "b");
+  assert.equal(finished.verificationStatus, "completed");
+  const entries = temporaryEntriesOf(ctx, "b", tempIdentityId);
+  assert.ok(entries.length >= 1);
+  for (const entry of entries) {
+    assert.equal(entry.body, secondBody);
+    assert.equal(snapshotOf(ctx, "b", entry).status, "ok");
+  }
+  const aAfter = temporaryEntryOf(ctx.store, "a");
+  assert.equal(aAfter.body, secondBody);
+  assert.equal(entryOf(ctx.store, "b", "pref.coffeeB").body, bLong.body);
+  assert.equal(entryOf(ctx.store, "b", "pref.coffeeB").factIdentityId, bLong.factIdentityId);
+  assertAssistantAdvanced(aAssistantBefore, assistantState(ctx, aConversation), first);
+  assertAssistantAdvanced(bAssistantBefore, assistantState(ctx, bConversation, "b"), second);
+});
+
+/* 2c-2b 审查反例：合法锚、派生链负例、同L未知holder、受限T、proof篡改。 */
+async function awaitVerificationFinal(ctx, result, characterId = "a") {
+  await waitFor(() => {
+    const request = ctx.store.chat.getRequest({
+      characterId,
+      requestId: result.requestId,
+    });
+    return request.verificationStatus !== "pending";
+  }, 5000);
+  return ctx.store.chat.getRequest({ characterId, requestId: result.requestId });
+}
+
+async function seedRelayCandidateToC(ctx) {
+  const pair = await seedSameFactPair(ctx);
+  const bL2 = await rememberLongViaChat(
+    ctx, "b", "pref.coffeeB", "用户也爱喝咖啡", "我也爱喝咖啡。",
+  );
+  const bNow = entryOf(ctx.store, "b", "pref.coffeeB");
+  ctx.store.memory.relay({
+    fromCharacterId: "b",
+    toCharacterId: "c",
+    entries: [{ entryId: bNow.id, expectedVersion: bNow.version }],
+  });
+  const cLong = entryOf(ctx.store, "c", "pref.coffeeB");
+  assert.equal(cLong.factIdentityId, bL2.factIdentityId);
+  return {
+    pair,
+    aLong: entryOf(ctx.store, "a", "pref.coffee"),
+    bL2,
+    bNow,
+    cLong,
+  };
+}
+
+test("POL-SEMOP/D1 合法 corrected_v2 长期锚进入临时阶段2", async (t) => {
+  const ctx = await setupContext(t);
+  const aConversation = openConversation(ctx.store);
+  await seedCoffeeA(ctx, aConversation);
+  const original = entryOf(ctx.store, "a", "pref.coffee");
+  await correctLongNonToday(ctx, aConversation, {
+    text: "不是咖啡，我更喜欢茶，请帮我改过来。",
+    needle: original.body,
+    excerpt: "我更喜欢茶",
+    evidence: "请帮我改过来",
+  });
+  const aLong = entryOf(ctx.store, "a", "pref.coffee");
+  const correctedSource = snapshotOf(ctx, "a", aLong);
+  assert.equal(correctedSource.status, "ok");
+  assert.equal(correctedSource.format, "corrected_v2");
+  assert.equal(correctedSource.direct, true);
+  const bLong = await rememberLongViaChat(
+    ctx, "b", "pref.teaB", "用户也爱喝茶", "我也爱喝茶。",
+  );
+  const precheck = captureRealCandidates(ctx, aLong);
+  assert.deepEqual(
+    precheck.candidates.map((candidate) => candidate.identityId),
+    [bLong.factIdentityId],
+  );
+  const result = await sendTodayWithVerification(ctx, aConversation, "a", {
+    text: "不是茶，我今天想喝咖啡，请帮我改过来。",
+    needle: aLong.body,
+    excerpt: "我今天想喝咖啡",
+    evidence: "请帮我改过来",
+  }, equivalentResponder());
+  assert.equal(result.verificationStatus, "pending", "合法 corrected_v2 锚必须进入阶段2");
+  const finished = await awaitVerificationSettled(ctx, result);
+  assert.equal(finished.verificationStatus, "completed");
+  const bTemp = temporaryEntryOf(ctx.store, "b");
+  assert.ok(bTemp);
+  assert.equal(entryLinkOf(ctx, bTemp.id).long_identity_id, bLong.factIdentityId);
+  assert.equal(snapshotOf(ctx, "b", bTemp).status, "ok");
+});
+
+test("POL-SEMOP/D1 可解析传播长期锚进入临时阶段2", async (t) => {
+  const ctx = await setupContext(t);
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  await seedCoffeeA(ctx, aConversation);
+  const original = entryOf(ctx.store, "a", "pref.coffee");
+  ctx.store.memory.relay({
+    fromCharacterId: "a",
+    toCharacterId: "b",
+    entries: [{ entryId: original.id, expectedVersion: original.version }],
+  });
+  await correctLongNonToday(ctx, aConversation, {
+    text: "不是咖啡，我更喜欢茶，请帮我改过来。",
+    needle: original.body,
+    excerpt: "我更喜欢茶",
+    evidence: "请帮我改过来",
+  });
+  const bLong = entryOf(ctx.store, "b", "pref.coffee");
+  const propagated = snapshotOf(ctx, "b", bLong);
+  assert.equal(propagated.status, "ok");
+  assert.equal(propagated.format, "corrected_v2");
+  assert.equal(propagated.direct, false);
+  const cLong = await rememberLongViaChat(
+    ctx, "c", "pref.teaC", "用户也爱喝茶", "我也爱喝茶。",
+  );
+  const precheck = captureRealCandidates(ctx, bLong, ["a", "b", "c"], "b");
+  assert.deepEqual(
+    precheck.candidates.map((candidate) => candidate.identityId),
+    [cLong.factIdentityId],
+  );
+  const result = await sendTodayWithVerification(ctx, bConversation, "b", {
+    text: "不是茶，我今天想喝咖啡，请帮我改过来。",
+    needle: bLong.body,
+    excerpt: "我今天想喝咖啡",
+    evidence: "请帮我改过来",
+  }, equivalentResponder());
+  assert.equal(result.verificationStatus, "pending", "可解析传播锚必须进入阶段2");
+  const finished = await awaitVerificationSettled(ctx, result, "b");
+  assert.equal(finished.verificationStatus, "completed");
+  const cTemp = temporaryEntryOf(ctx.store, "c");
+  assert.ok(cTemp);
+  assert.equal(entryLinkOf(ctx, cTemp.id).long_identity_id, cLong.factIdentityId);
+  assert.equal(snapshotOf(ctx, "c", cTemp).status, "ok");
+});
+
+test("POL-SEMOP/D2 relay成员派生链篡改必须拒绝，不宽泛放行", async (t) => {
+  const mutations = {
+    "narrator-mismatch": (ctx, seeded) => withDatabase(ctx.store.dbPath, (db) => {
+      db.prepare("UPDATE memory_derivations SET narrator_character_id = 'x' WHERE entry_id = ?")
+        .run(seeded.cLong.id);
+    }),
+    "parent-orphan": (ctx, seeded) => withDatabase(ctx.store.dbPath, (db) => {
+      db.prepare("UPDATE memory_derivations SET parent_entry_id = 'orphan-parent' WHERE entry_id = ?")
+        .run(seeded.cLong.id);
+    }),
+    "source-version-mismatch": (ctx, seeded) => withDatabase(ctx.store.dbPath, (db) => {
+      db.prepare("UPDATE memory_derivations SET source_version = 2 WHERE entry_id = ?")
+        .run(seeded.cLong.id);
+    }),
+  };
+  for (const [name, mutate] of Object.entries(mutations)) {
+    await t.test(name, async (t2) => {
+      const ctx = await setupContext(t2);
+      const seeded = await seedRelayCandidateToC(ctx);
+      mutate(ctx, seeded);
+      const result = await sendTodayWithVerification(ctx, seeded.pair.aConversation, "a", {
+        text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+        needle: seeded.aLong.body,
+        excerpt: "我今天想喝茶",
+        evidence: "请帮我改过来",
+      }, equivalentResponder());
+      const finished = await awaitVerificationFinal(ctx, result);
+      assert.notEqual(finished.verificationStatus, "pending");
+      const aTemp = temporaryEntryOf(ctx.store, "a");
+      assert.ok(aTemp, "阶段1仍应本地完成");
+      assert.equal(temporaryEntryOf(ctx.store, "c"), null, `${name} 必须拒绝 C 的派生链`);
+      const bL2Entries = temporaryEntryLinksOf(ctx, aTemp.factIdentityId, "b")
+        .filter((link) => link.long_identity_id === seeded.bL2.factIdentityId);
+      assert.equal(bL2Entries.length, 0, `${name} 不得仅凭 broad optional 写入 B 的L2`);
+      assert.equal(verificationRequests(ctx).length, 0, "链不足不应发关系核验");
+    });
+  }
+});
+
+test("POL-SEMOP/D2 T受限时既有holder可增另一L，T外holder不新增", async (t) => {
+  const ctx = await setupContext(t);
+  const seeded = await seedRelayCandidateToC(ctx);
+  const gate = gatedVerification(t);
+  const result = await sendTodayWithVerification(ctx, seeded.pair.aConversation, "a", {
+    text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+    needle: seeded.aLong.body,
+    excerpt: "我今天想喝茶",
+    evidence: "请帮我改过来",
+  }, gate.responder);
+  assert.equal(result.verificationStatus, "pending");
+  const aTemp = temporaryEntryOf(ctx.store, "a");
+  assert.ok(aTemp);
+  await gate.waitStarted();
+  ctx.store.memory.restrictSharing({
+    characterId: "a",
+    entryId: aTemp.id,
+    expectedVersion: aTemp.version,
+  });
+  gate.release();
+  const finished = await awaitVerificationSettled(ctx, result);
+  assert.equal(finished.verificationStatus, "completed");
+  const bL2 = temporaryEntryLinksOf(ctx, aTemp.factIdentityId, "b")
+    .filter((link) => link.long_identity_id === seeded.bL2.factIdentityId);
+  assert.equal(bL2.length, 1, "B 已在 T 内，受限时仍可新增另一 L");
+  assert.equal(temporaryEntryOf(ctx.store, "c"), null, "C 在 T 外，受限时不得新增");
+});
+
+test("POL-SEMOP/D2 全部holder被控制跳过时本地完成且applied=0", async (t) => {
+  const ctx = await setupContext(t);
+  const { aConversation, aLong, bLong } = await seedAWithIndependentB(ctx);
+  const gate = gatedVerification(t);
+  const result = await sendTodayWithVerification(ctx, aConversation, "a", {
+    text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+    needle: aLong.body,
+    excerpt: "我今天想喝茶",
+    evidence: "请帮我改过来",
+  }, gate.responder);
+  assert.equal(result.verificationStatus, "pending");
+  const aTemp = temporaryEntryOf(ctx.store, "a");
+  assert.ok(aTemp);
+  await gate.waitStarted();
+  ctx.store.memory.restrictSharing({
+    characterId: "a",
+    entryId: aTemp.id,
+    expectedVersion: aTemp.version,
+  });
+  gate.release();
+  const finished = await awaitVerificationSettled(ctx, result);
+  assert.equal(finished.verificationStatus, "completed");
+  assert.equal(temporaryEntryOf(ctx.store, "b"), null, "T外holder不得新增");
+  const proof = JSON.parse(proofOf(ctx, result.requestId).operation_proof);
+  assert.equal(proof.applied, 0, "全部跳过后 applied 必须为 0");
+  const assistant = assistantMessages(ctx, aConversation)
+    .find((message) => message.id === result.assistantMessageId);
+  assert.equal(assistant.content.includes("一并更正"), false);
+  assert.match(assistant.content, /没有确认到可以一起更正/u);
+});
+
+test("POL-SEMOP/D3 无关已知角色context变化不使阶段2 stale", async (t) => {
+  const ctx = await setupContext(t);
+  const seeded = await seedD3(ctx);
+  const gate = gatedVerification(t);
+  const result = await sendTodayWithVerification(ctx, seeded.pair.aConversation, "a", {
+    text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+    needle: seeded.aLong.body,
+    excerpt: "我今天想喝茶",
+    evidence: "请帮我改过来",
+  }, gate.responder);
+  assert.equal(result.verificationStatus, "pending");
+  await gate.waitStarted();
+  ctx.store.memory.remember({
+    characterId: "c",
+    factKey: "pref.walkC",
+    body: "用户喜欢散步",
+    kind: "preference",
+    sourceId: "seed-c-walk",
+  });
+  gate.release();
+  const finished = await awaitVerificationSettled(ctx, result);
+  assert.equal(finished.verificationStatus, "completed");
+  const bL2 = temporaryEntriesOf(ctx, "b", temporaryEntryOf(ctx.store, "a").factIdentityId)
+    .filter((entry) => entryLinkOf(ctx, entry.id).long_identity_id === seeded.bL2.factIdentityId);
+  assert.equal(bL2.length, 1);
+});
+
+test("POL-SEMOP/D2 proof负例：holder集合/root/expiry/来源有效性", async (t) => {
+  const cases = {
+    "candidate-identifiers": (ctx, proof) => {
+      assert.ok(Array.isArray(proof.candidates), "proof 必须有候选无正文标识");
+      assert.ok(proof.candidates.every((candidate) =>
+        candidate.identityId && candidate.entryId && candidate.version &&
+        candidate.sourceIdHash));
+    },
+    "holder-set-removal": (ctx, proof) => {
+      const tampered = JSON.parse(JSON.stringify(proof));
+      const holder = Object.keys(tampered.contextVersions).find((key) => key !== "a");
+      assert.ok(holder);
+      delete tampered.contextVersions[holder];
+      assert.equal(ctx.store.memory.verifyOperationProof({
+        action: "temporary",
+        controlProof: tampered,
+        nowMs: ctx.nowMs(),
+      }), false);
+    },
+    expiry: (ctx, proof) => {
+      assert.equal(ctx.store.memory.verifyOperationProof({
+        action: "temporary",
+        controlProof: proof,
+        nowMs: proof.expiresAt + 1,
+      }), false);
+    },
+    "source-validity": (ctx, proof) => {
+      const aTemp = temporaryEntryOf(ctx.store, "a");
+      withDatabase(ctx.store.dbPath, (db) => {
+        db.prepare("UPDATE chat_messages SET role = 'assistant' WHERE id = ?")
+          .run(parseTemporarySource(aTemp.sourceId).messageSourceId.slice("chat:".length));
+      });
+      assert.equal(ctx.store.memory.verifyOperationProof({
+        action: "temporary",
+        controlProof: proof,
+        nowMs: ctx.nowMs(),
+      }), false);
+    },
+    "member-root-tamper": (ctx, proof) => {
+      const aTemp = temporaryEntryOf(ctx.store, "a");
+      const bMember = temporaryEntriesOf(ctx, "b", aTemp.factIdentityId)[0];
+      assert.ok(bMember, "需要非root成员验证 root_identity_id");
+      withDatabase(ctx.store.dbPath, (db) => {
+        db.prepare("UPDATE memory_temporary_entry_links SET root_identity_id = 'forged-root' WHERE entry_id = ?")
+          .run(bMember.id);
+      });
+      assert.equal(ctx.store.memory.verifyOperationProof({
+        action: "temporary",
+        controlProof: proof,
+        nowMs: ctx.nowMs(),
+      }), false);
+    },
+  };
+  for (const [name, check] of Object.entries(cases)) {
+    await t.test(name, async (t2) => {
+      const ctx = await setupContext(t2);
+      const seeded = await seedD3(ctx);
+      const gate = gatedVerification(t2);
+      const result = await sendTodayWithVerification(ctx, seeded.pair.aConversation, "a", {
+        text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+        needle: seeded.aLong.body,
+        excerpt: "我今天想喝茶",
+        evidence: "请帮我改过来",
+      }, gate.responder);
+      assert.equal(result.verificationStatus, "pending");
+      const proof = JSON.parse(proofOf(ctx, result.requestId).operation_proof);
+      assert.equal(ctx.store.memory.verifyOperationProof({
+        action: "temporary",
+        controlProof: proof,
+        nowMs: ctx.nowMs(),
+      }), true);
+      check(ctx, proof);
+      await gate.waitStarted();
+      gate.release();
+      await awaitVerificationSettled(ctx, result);
+    });
+  }
 });

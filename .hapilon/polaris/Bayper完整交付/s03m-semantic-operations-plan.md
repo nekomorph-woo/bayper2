@@ -489,7 +489,7 @@ master 2026-10-27 受托批准本方向，**不是用户亲自确认**。C2 旧 
 
 ## 13. 2c-2 多 L 粒度最小方案（r40 定稿 + r41 收口修正；Codex 受托批准，不是用户亲自确认）
 
-Codex 2026-10-27 受托批准本节方案与 D1～D16（不是用户亲自确认）。**2c-2a 已于 2026-10-27 实现，并由 master 独立复跑 20 相关套件 335/335、exit 0、before/after SHA 一致后受托接受为“已测存储/来源/操作有限能力”**（不是用户亲自确认、不是 GUI/真实模型、不是完整 S03）；2c-2b（阶段 2 proof、原子回滚、单 assistant、contextVersion 精确放行）仍未实现，D1/D3/D4/D5/D10 的阶段 2 行为 NOT_COVERED。批准的是计划与验收口径，不是产品通过；以下 r38/r39 退回依据与 r43/r44 记录保留为历史。
+Codex 2026-10-27 受托批准本节方案与 D1～D16（不是用户亲自确认）。**2c-2a 已由 master 独立复跑 20 套件 335/335、exit 0、before/after SHA 一致后受托接受为“已测存储/来源/操作有限能力”**；**2c-2b 已由 master 独立复跑 20 相关套件 358/358、exit 0、before/after SHA 一致后受托接受为“已测真实 chat/SQLite + 构造 HTTP 有限能力”**（`master-temporary-chat-OKCwajaU`）。两者都不是用户亲自确认、不是真实模型/GUI、不是完整 S03。D1/D2/D3/D4/D5/D10/D11 及审查反例已测；temporary 专属 cancel/close/dispose/recover、真实模型 L1/L2、UI IPC/GUI/live、完整 S03 与 POL-SEMOP 聚合仍 NOT_COVERED。批准的是计划与验收口径，不是产品通过；以下 r38/r39 退回依据与 r43/r44/r49 记录保留为历史。
 
 r38 退回依据保留：旧表 PK `(T,L,holder,expiry)` 无法容纳同元组多个 entry 历史；“按 entry_id 删旧行又保留历史”矛盾；阶段 0 把今日 body 当 left；§13.4 只更新选中 L 会使其他 L 成员 stale。
 r39 退回依据保留：holder long 删除仍判 ok 与 §12 A2 的“已声明 holder 锚必须存在且版本匹配”冲突；`verifyOperationProof` 只核发起人 contextVersion；keepExclusive 保留自身 current 时未同事务修正 root 引用；`root_identity_id/own L` 未与 source 锚及持久证明交叉校验。本节只给一套首选方案；本轮不实施，待 master snap 后另派。
@@ -585,7 +585,7 @@ Mock 只替换聊天与关系模型 HTTP；不 mock 核心 store/chat/memory/sou
 
 ### 13.9 局限
 
-- 2c-2a 已实现并由 master 独立 335/335 复验后受托接受为已测存储/来源/操作有限能力；2c-2b 未实现。2c-1 的 295/295 与 S1～S16 只证明单 T 单 L 已测路径，不据此判其失败。
+- 2c-2a 与 2c-2b 已分别由 master 独立复验并受托接受为已测有限能力；temporary 专属 cancel/close/dispose/recover、真实模型 L1/L2、GUI/UI IPC/live 仍未覆盖。2c-1 的 295/295 与 S1～S16 只证明单 T 单 L 已测路径，不据此判其失败。
 - 真实模型 L1/L2、GUI/UI IPC/live、完整 S03 与 `POL-SEMOP-001～008` 聚合仍 NOT_COVERED；本方案不改变这些边界。
 
 ### 13.10 2c-2a 实施记录（r43，历史；master 已退回，不接受）
@@ -613,3 +613,12 @@ Mock 只替换聊天与关系模型 HTTP；不 mock 核心 store/chat/memory/sou
 - **仍未实现/NOT_COVERED**：2c-2b（真实 chat 两阶段、temporary proof、contextVersion 精确放行、阶段 2 原子回滚、单 assistant、候选去重/HTTP 预算）；D1/D3/D4/D5/D10 的阶段 2 行为；真实模型 L1/L2；GUI/UI IPC/live；完整 S03 与 `POL-SEMOP-001～008` 聚合。
 - Polaris 复盘：本批真实使用了 Case/失败基线/独立复验机制，捕获了测试夹具错误、origin 双删自证、isCurrent 旧 direct 兼容与 relay 无锚 root 轮换的计划歧义；后者由 master 受托决定澄清（relay 无锚 own=root 仅首次创建，轮换后保留 own L、root 随来源更新）。现行 skill 能支持这些发现与返修，无新 skill 缺陷，故不修改 skill。
 - 历史记录：r43 整体被退回、r44 三处反例返修；旧 attempt 与失败全部保留，不覆盖、不补造 PASS。
+
+### 13.13 2c-2b 有限能力受托接受与当前口径（2026-10-27 r50）
+
+- master 证据：[master-temporary-chat-OKCwajaU](evidence/master-temporary-chat-OKCwajaU/stdout.log)。master 独立复跑 20 相关套件：**358 tests / 358 pass / 0 fail / 0 skipped、真实 exit 0**，before/after SHA 相等，当前源码对照 after 清单一致。
+- 受托接受范围：**2c-2b 已测真实 chat/SQLite + 构造 HTTP 有限能力**。已实际执行 D1（临时阶段2 left 用旧长期）、D2/D10（已触碰 B、同 L 双锚、不同 L、同 L 的 C、同 L 未知 holder 过滤）、D3（阶段1已触碰 B 的额外 context stale、无额外变化对照、无关角色变化对照）、D4（第二候选 trigger 实际命中、阶段2全回滚、阶段1保留）、D5（未结识角色/同 L 未知 holder）、D11（阶段2后再次改口用 own L 长期锚、多 L 同步、来源有效），以及审查反例：corrected_v2/传播锚、派生链 narrator/parent/source 篡改、T 受限既有 holder 另一 L、全部控制跳过 applied=0、proof holder 集合/root/expiry/来源/候选标识、D4 UDF 命中。
+- 共用机制与专属 Case：chat 请求取消、close/dispose、旧 pending 恢复等既有共用机制由 20 相关套件回归覆盖；**temporary 专属 cancel/close/dispose/recover 组合未单独执行，仍 NOT_COVERED**，不因共用机制回归而视为通过。
+- 生产净增 **748 行**（chat +237、verification +127、temporary +206、memory +178）经 master 职责审查认可为必要的来源/证明/事务/流程职责；本批**不再代码重构**，原超规模迟报保留，master 已裁决接受该规模。
+- 未覆盖：temporary 专属取消/恢复 GUI 真实链、真实模型 L1/L2、UI IPC/GUI/live、跨角色独立同义、完整 S03 与 `POL-SEMOP-001～008` 聚合。
+- Polaris 复盘：本批问题属于实现资格、测试夹具与规模迟报；master 的实际退回与独立复验证据保留。现行 skill 能处理这些发现，无新 skill 缺陷，故不改 skill；不将任何自动/Agent 结果记为用户人工确认。

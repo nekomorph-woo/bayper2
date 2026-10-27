@@ -71,6 +71,66 @@ function createChatMemoryVerification({
     }
   }
 
+  /* 临时当日理解：阶段 0 的 left 必须是 own L 长期锚的旧事实，不能是今日 body。
+     无有效长期锚的 relay 条目不进入两阶段。 */
+  function captureTemporaryTargetEvidence({ characterId, targetEntry, nowMs = clock() }) {
+    if (!targetEntry) {
+      return null;
+    }
+    try {
+      let anchor = targetEntry;
+      let temporaryInfo = null;
+      if (typeof memory.getTemporaryTarget === "function") {
+        const info = memory.getTemporaryTarget({
+          characterId,
+          entryId: targetEntry.id,
+          nowMs,
+        });
+        if (info) {
+          if (!info.anchorEntryId || !info.anchorIdentityId || !info.anchorVersion) {
+            return null;
+          }
+          temporaryInfo = info;
+          anchor = memory.getHeldEntry({
+            characterId,
+            entryId: info.anchorEntryId,
+          });
+        }
+      }
+      if (!anchor || anchor.characterId !== characterId ||
+        anchor.expiresAt !== null ||
+        anchor.trust !== "stated" ||
+        (anchor.sourceKind ?? "user") !== "user") {
+        return null;
+      }
+      const snapshot = memorySourceContext.resolve({
+        characterId,
+        entryId: anchor.id,
+        expectedVersion: anchor.version,
+        nowMs,
+      });
+      if (snapshot.status !== "ok") {
+        return null;
+      }
+      /* temporary 阶段 1 不改长期条目，因此不预置长期来源增量；只允许阶段 1
+         实际写入的 sourceControls（由 chat 在阶段 1 后回填）。 */
+      return {
+        snapshot,
+        anchorEntry: anchor,
+        anchorEntryId: anchor.id,
+        anchorVersion: anchor.version,
+        anchorSourceId: anchor.sourceId,
+        anchorBody: anchor.body,
+        temporary: temporaryInfo,
+        excludedSourceHashes: memory.listExcludedSources(characterId),
+        allowedSourceHashes: [],
+        sourceIncrementsByHolder: {},
+      };
+    } catch {
+      return null;
+    }
+  }
+
   function captureForgetTargetEvidence({ characterId, targetEntry, nowMs = clock() }) {
     if (!targetEntry || !targetEntry.factIdentityId) {
       return null;
@@ -102,6 +162,7 @@ function createChatMemoryVerification({
     targetEntry,
     sourceIncrementsByHolder = {},
     forgetMode = false,
+    allowProvenDerivedMembers = false,
     nowMs = clock(),
   }) {
     const incrementsFor = (holderId) =>
@@ -162,7 +223,10 @@ function createChatMemoryVerification({
         if (snapshot.status !== "ok" || snapshot.direct === false) {
           continue;
         }
-        const members = memory.listIdentityEntries(entry.factIdentityId);
+        const members = memory.listIdentityEntries(entry.factIdentityId)
+          .filter((member) =>
+            typeof memory.isKnownCharacter !== "function" ||
+            memory.isKnownCharacter(member.characterId));
         if (members.length === 0) {
           continue;
         }
@@ -183,13 +247,24 @@ function createChatMemoryVerification({
             entryId: member.id,
             version: member.version,
             sourceId: member.sourceId,
+            factIdentityId: member.factIdentityId,
+            derived: member.derived,
+            derivedFromEntryId: member.derivedFromEntryId,
+            narratorCharacterId: member.narratorCharacterId,
+            derivationSourceId: member.derivationSourceId,
+            derivationSourceVersion: member.derivationSourceVersion,
             snapshot: memberSnapshot?.status === "ok" ? memberSnapshot : null,
             excludedSourceHashes: memory.listExcludedSources(member.characterId),
             sourceIncrements: incrementsFor(member.characterId),
           };
         });
-        if (!forgetMode && memberEvidence.some((member) => !member.snapshot)) {
-          continue;
+        if (!forgetMode) {
+          const missingSnapshot = memberEvidence.some((member) => !member.snapshot);
+          if (missingSnapshot &&
+            !(allowProvenDerivedMembers &&
+              provenDerivedMembers(memberEvidence, entry.id))) {
+            continue;
+          }
         }
         seenIdentity.add(entry.factIdentityId);
         seenEntry.add(entry.id);
@@ -198,6 +273,7 @@ function createChatMemoryVerification({
           entryId: entry.id,
           version: entry.version,
           factKey: entry.factKey,
+          sourceId: entry.sourceId,
           kind: entry.kind,
           trust: entry.trust,
           sourceKind: entry.sourceKind ?? "user",
@@ -268,7 +344,58 @@ function createChatMemoryVerification({
     };
   }
 
-  return { captureTargetEvidence, captureForgetTargetEvidence, captureCandidates, verify };
+  return {
+    captureTargetEvidence,
+    captureTemporaryTargetEvidence,
+    captureForgetTargetEvidence,
+    captureCandidates,
+    verify,
+  };
 }
 
-module.exports = { createChatMemoryVerification };
+function provenDerivedMember(member, byId, representativeId) {
+  const seen = new Set();
+  let current = member;
+  while (current) {
+    const entryId = current.entryId ?? current.id;
+    if (entryId === representativeId || current.snapshot) {
+      return true;
+    }
+    if (seen.has(entryId)) {
+      return false;
+    }
+    seen.add(entryId);
+    if (!current.derived || !current.derivedFromEntryId ||
+      !current.narratorCharacterId ||
+      current.derivationSourceId !== current.sourceId ||
+      current.derivationSourceVersion !== 1) {
+      return false;
+    }
+    const parent = byId.get(current.derivedFromEntryId);
+    if (!parent ||
+      (parent.factIdentityId ?? null) !== (current.factIdentityId ?? null) ||
+      (parent.characterId ?? parent.holder) !== current.narratorCharacterId) {
+      return false;
+    }
+    current = parent;
+  }
+  return false;
+}
+
+/* 缺来源快照的长期成员只能经持久派生链到达本候选已验证代表；每个父子角色、
+   同一 identity、source/derivation 与版本都核，环/断链一律拒绝。 */
+function provenDerivedMembers(members, representativeId) {
+  const byId = new Map(members.map((member) => [member.entryId ?? member.id, member]));
+  return members.every((member) => {
+    const entryId = member.entryId ?? member.id;
+    if (entryId === representativeId || member.snapshot) {
+      return true;
+    }
+    return provenDerivedMember(member, byId, representativeId);
+  });
+}
+
+module.exports = {
+  createChatMemoryVerification,
+  provenDerivedMembers,
+};

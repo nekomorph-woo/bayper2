@@ -586,10 +586,30 @@ function createMemoryTemporary({
       for (const holder of Object.keys(sourceControls)) {
         sourceControls[holder].sort();
       }
+      const memberEvidence = store.listEntriesByIdentity(temporaryIdentityId)
+        .filter((entry) =>
+          isTemporaryEntry(entry) &&
+          entry.expiresAt === expiresAt)
+        .map((entry) => {
+          const link = linkOfEntry(entry);
+          return {
+            entryId: entry.id,
+            holder: entry.characterId,
+            longIdentityId: link?.ownLongIdentityId ?? null,
+            version: entry.version,
+            sourceIdHash: hashSource(entry.sourceId),
+          };
+        })
+        .sort((left, right) => left.entryId.localeCompare(right.entryId));
       return {
         mode: "temporary",
         temporaryIdentityId,
         expiresAt,
+        originEntryId: originCurrent.id,
+        originVersion: originCurrent.version,
+        rootIdentityId,
+        initiatorCharacterId: characterId,
+        entries: memberEvidence,
         longTermFactKey: longAnchor.factKey,
         updated: affected.size,
         sourceControls,
@@ -742,6 +762,190 @@ function createMemoryTemporary({
     return rawInput.inTransaction === true ? apply() : store.transaction(apply);
   }
 
+  /* 阶段 2：只为已核验 identity 的现有 holder 建/更新“holder+该 L”一条 current。
+     不合并长期、不新建 T、不改写 own L；跳过 T forget/删除指纹与受控新 holder。 */
+  function applyApprovedCorrectionToHolders({
+    temporaryIdentityId,
+    expiresAt,
+    originEntryId,
+    originVersion,
+    initiatorCharacterId,
+    approved,
+    nowMs,
+  }) {
+    const root = store.getEntryById(originEntryId);
+    if (!root ||
+      root.factIdentityId !== temporaryIdentityId ||
+      root.expiresAt !== expiresAt ||
+      root.version !== originVersion ||
+      root.originCharacterId !== initiatorCharacterId) {
+      throw new MemoryError("MEMORY_CHANGED", "临时理解的根 current 已变化。");
+    }
+    const rootLink = linkOfEntry(root, { write: true });
+    const parsed = parseTemporarySource(root.sourceId);
+    if (!rootLink || !parsed || parsed.kind !== "direct" ||
+      rootLink.ownLongIdentityId !== rootLink.rootIdentityId) {
+      throw new MemoryError("TEMPORARY_SOURCE_UNAVAILABLE", "临时根 current 来源不完整。");
+    }
+    if (!Array.isArray(approved) || approved.length === 0) {
+      throw new MemoryError("INVALID_INPUT", "已核验 identity 列表无效。");
+    }
+    const rootIdentityId = rootLink.rootIdentityId;
+    const rootLong = store.getEntryById(parsed.originLongEntryId);
+    const originLongVersion = rootLong?.version ?? 0;
+    const rootBody = root.body;
+    const deletedFingerprint = fingerprintOf({
+      kind: root.kind,
+      trust: root.trust,
+      sourceKind: "user",
+      expiresAt,
+      body: rootBody,
+    });
+    const shareControlled = store.hasShareIdentityControl(temporaryIdentityId);
+    const identityIds = [...new Set(approved.map((candidate) =>
+      candidate?.identityId).filter((value) => typeof value === "string" && value))];
+    if (identityIds.length === 0) {
+      throw new MemoryError("INVALID_INPUT", "已核验 identity 列表无效。");
+    }
+    const affected = new Set();
+    const tMembers = activeMembers(temporaryIdentityId, nowMs);
+    const holdersInT = new Set(tMembers.map((entry) => entry.characterId));
+    let updatedEntries = 0;
+    let skipped = 0;
+    for (const identityId of identityIds) {
+      const holders = [...new Set(
+        store.listEntriesByIdentity(identityId)
+          .filter((entry) => !isTemporaryEntry(entry) &&
+            (entry.expiresAt === null || entry.expiresAt > nowMs) &&
+            store.isKnownCharacter(entry.characterId))
+          .map((entry) => entry.characterId),
+      )];
+      for (const holder of holders) {
+        if (store.hasForgetIdentityControl(holder, temporaryIdentityId) ||
+          (deletedFingerprint &&
+            store.hasDeletedFactFingerprint(holder, deletedFingerprint))) {
+          skipped += 1;
+          continue;
+        }
+        const anchor = holderLong(holder, identityId, nowMs);
+        if (!anchor) {
+          skipped += 1;
+          continue;
+        }
+        const existing = tMembers.find((entry) =>
+          entry.characterId === holder &&
+          linkOfEntry(entry)?.ownLongIdentityId === identityId) ?? null;
+        if (!existing && shareControlled && !holdersInT.has(holder)) {
+          skipped += 1;
+          continue;
+        }
+        const sourceId = copiedTemporarySource({
+          originLongEntryId: parsed.originLongEntryId,
+          originLongVersion,
+          originCurrentEntryId: originEntryId,
+          originCurrentVersion: originVersion,
+          holderLongEntryId: anchor.id,
+          holderLongVersion: anchor.version,
+          messageSourceId: parsed.messageSourceId,
+        });
+        if (sourceId.length > limits.sourceId ||
+          store.hasSourceControl(holder, hashSource(sourceId))) {
+          skipped += 1;
+          continue;
+        }
+        if (existing) {
+          if (existing.sourceId !== sourceId) {
+            store.addSourceControl(holder, hashSource(existing.sourceId), nowMs);
+          }
+          const next = {
+            ...existing,
+            body: rootBody,
+            kind: root.kind,
+            trust: root.trust,
+            sourceKind: "user",
+            importance: anchor.importance ?? root.importance,
+            expiresAt,
+            sourceId,
+            sourceVersion: 1,
+            version: existing.version + 1,
+            updatedAt: nowMs,
+          };
+          store.updateEntry(next, tokenize(rootBody));
+          store.setDerivation({
+            ...next,
+            derivedFromEntryId: originEntryId,
+            narratorCharacterId: initiatorCharacterId,
+            originCharacterId: initiatorCharacterId,
+          });
+          store.updateTemporaryOrigin(existing.id, initiatorCharacterId, originEntryId);
+          store.removeRelationEdgesToEntry(existing.id);
+          store.insertTemporaryEntryLink({
+            entryId: existing.id,
+            tempIdentityId: temporaryIdentityId,
+            holderCharacterId: holder,
+            expiresAt,
+            longIdentityId: identityId,
+            rootIdentityId,
+          });
+        } else {
+          const entry = {
+            id: newId(),
+            characterId: holder,
+            factKey: uniqueFactKey(
+              holder,
+              temporaryFactKey(anchor.factKey, anchor.id),
+              temporaryIdentityId,
+            ),
+            factIdentityId: temporaryIdentityId,
+            originCharacterId: initiatorCharacterId,
+            derivedFromEntryId: originEntryId,
+            narratorCharacterId: initiatorCharacterId,
+            kind: root.kind,
+            body: rootBody,
+            trust: root.trust,
+            sourceKind: "user",
+            importance: anchor.importance ?? root.importance,
+            expiresAt,
+            sourceId,
+            sourceVersion: 1,
+            version: 1,
+            createdAt: nowMs,
+            updatedAt: nowMs,
+          };
+          store.insertEntry(entry, tokenize(rootBody));
+          store.insertTemporaryEntryLink({
+            entryId: entry.id,
+            tempIdentityId: temporaryIdentityId,
+            holderCharacterId: holder,
+            expiresAt,
+            longIdentityId: identityId,
+            rootIdentityId,
+          });
+        }
+        store.insertTemporaryLink({
+          tempIdentityId: temporaryIdentityId,
+          longIdentityId: identityId,
+          holderCharacterId: holder,
+          expiresAt,
+        });
+        updatedEntries += 1;
+        affected.add(holder);
+      }
+    }
+    const contextVersions = {};
+    for (const holder of [...affected].sort()) {
+      contextVersions[holder] = store.bumpContextVersion(holder, nowMs);
+    }
+    return {
+      updated: updatedEntries,
+      updatedEntries,
+      updatedHolders: affected.size,
+      skipped,
+      affectedCharacters: [...affected].sort(),
+      contextVersions,
+    };
+  }
+
   /* 显式转告/分享临时条目时复用权威校验结果；只有明确同一长期事实关联且
      当前有效的 holder long 才写入来源，收件人有任意别的长期记忆也不挂靠。 */
   function propagationSource({ entry, holderCharacterId, nowMs }) {
@@ -881,6 +1085,8 @@ function createMemoryTemporary({
     propagationSource,
     temporaryInfo,
     holderLong,
+    linkOfEntry,
+    applyApprovedCorrectionToHolders,
     filterSearch,
     annotateContext,
   };

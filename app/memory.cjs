@@ -1558,17 +1558,192 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     return entry && entry.characterId === characterId ? entry : null;
   }
 
+  /* 窄只读：阶段 2 只为已结识角色写 current；未知残留行不进入候选相关集合。 */
+  function isKnownCharacter(characterIdInput) {
+    const characterId = cleanText(characterIdInput, "角色ID", 200);
+    return store.isKnownCharacter(characterId);
+  }
+
   /* 只读身份成员，供候选去重与阶段 2 成员集合重核；不暴露给 renderer。 */
   function listIdentityEntries(identityIdValue) {
     const identityId = cleanText(identityIdValue, "身份ID", 200);
     return store.listEntriesByIdentity(identityId);
   }
 
+  /* 2c-2b 阶段 0 窄接口：临时 current 的 own L 有效长期锚；无锚 relay 返回 null。 */
+  function getTemporaryTarget({ characterId: rawCharacterId, entryId: rawEntryId, nowMs } = {}) {
+    const characterId = characterIdOf(rawCharacterId);
+    const entryId = cleanText(rawEntryId, "记忆ID", 200);
+    const at = resolveNow(nowMs);
+    const entry = store.getEntryById(entryId);
+    if (!entry || entry.characterId !== characterId || !temporary.isTemporaryEntry(entry)) {
+      return null;
+    }
+    const link = temporary.linkOfEntry(entry);
+    if (!link) {
+      return null;
+    }
+    const anchor = temporary.holderLong(characterId, link.ownLongIdentityId, at);
+    return {
+      temporaryIdentityId: entry.factIdentityId,
+      expiresAt: entry.expiresAt,
+      ownLongIdentityId: link.ownLongIdentityId,
+      rootIdentityId: link.rootIdentityId,
+      anchorEntryId: anchor?.id ?? null,
+      anchorIdentityId: anchor?.factIdentityId ?? null,
+      anchorVersion: anchor?.version ?? null,
+    };
+  }
+
+  /* 2c-2b 阶段 2 窄接口：只按 approved identity 写 T 内 current，不合并长期。 */
+  function applyConfirmedTemporaryCorrectionToHolders(input = {}) {
+    const temporaryIdentityId = cleanText(input.temporaryIdentityId, "临时身份ID", 200);
+    const originEntryId = cleanText(input.originEntryId, "根条目ID", 200);
+    const originVersion = input.originVersion;
+    const expiresAt = input.expiresAt;
+    const initiatorCharacterId = characterIdOf(input.initiatorCharacterId);
+    if (!Number.isSafeInteger(originVersion) || originVersion < 1 ||
+      !Number.isSafeInteger(expiresAt) ||
+      !Array.isArray(input.approved)) {
+      throw new MemoryError("INVALID_INPUT", "阶段 2 参数无效。");
+    }
+    const nowMs = resolveNow(input.nowMs);
+    const approved = input.approved.map((candidate) => ({
+      identityId: cleanText(candidate?.identityId, "身份ID", 200),
+    }));
+    const apply = () => temporary.applyApprovedCorrectionToHolders({
+      temporaryIdentityId,
+      expiresAt,
+      originEntryId,
+      originVersion,
+      initiatorCharacterId,
+      approved,
+      nowMs,
+    });
+    return input.inTransaction === true ? apply() : store.transaction(apply);
+  }
+
   /* S03m 2b 只读 proof 核对：只读控制与身份/版本，不读正文。forget 证明已删
      条目不在、目标 identity 现存成员等于应保留集合、控制键仍在，且发起角色
      contextVersion 未变；任何新身份重学或后续记忆变动都会使旧 proof 失效。 */
+  function verifyTemporaryProof(input) {
+    const proof = input.controlProof;
+    if (!proof || proof.version !== 3 || proof.mode !== "temporary") {
+      return false;
+    }
+    const temporaryIdentityId = cleanText(proof.temporaryIdentityId, "临时身份ID", 200);
+    const initiatorCharacterId = cleanText(proof.initiatorCharacterId, "角色ID", 200);
+    const nowMs = Number.isSafeInteger(input.nowMs) ? input.nowMs : Date.now();
+    if (!Number.isSafeInteger(proof.expiresAt) ||
+      proof.expiresAt <= nowMs ||
+      !Number.isSafeInteger(proof.originVersion) || proof.originVersion < 1) {
+      return false;
+    }
+    if (!Array.isArray(proof.candidates)) {
+      return false;
+    }
+    const relatedHolders = new Set();
+    for (const expected of proof.entries ?? []) {
+      if (typeof expected?.holder === "string") {
+        relatedHolders.add(expected.holder);
+      }
+    }
+    for (const candidate of proof.candidates) {
+      if (!candidate || typeof candidate.characterId !== "string" ||
+        !candidate.identityId || !candidate.entryId ||
+        !Number.isInteger(candidate.version) ||
+        typeof candidate.sourceIdHash !== "string" ||
+        !Array.isArray(candidate.members) ||
+        candidate.members.some((member) =>
+          !member || typeof member.holder !== "string" ||
+          !member.entryId || !Number.isInteger(member.version) ||
+          typeof member.sourceIdHash !== "string")) {
+        return false;
+      }
+      relatedHolders.add(candidate.characterId);
+      for (const member of candidate.members) {
+        relatedHolders.add(member.holder);
+      }
+    }
+    const contextKeys = Object.keys(proof.contextVersions ?? {}).sort();
+    const controlKeys = Object.keys(proof.sourceControls ?? {}).sort();
+    const expectedHolders = [...relatedHolders].sort();
+    if (JSON.stringify(contextKeys) !== JSON.stringify(expectedHolders) ||
+      JSON.stringify(controlKeys) !== JSON.stringify(expectedHolders)) {
+      return false;
+    }
+    for (const [holder, version] of Object.entries(proof.contextVersions ?? {})) {
+      const characterId = cleanText(holder, "角色ID", 200);
+      if (!Number.isInteger(version) || store.getContextVersion(characterId) !== version) {
+        return false;
+      }
+    }
+    for (const [holder, hashes] of Object.entries(proof.sourceControls ?? {})) {
+      const characterId = cleanText(holder, "角色ID", 200);
+      if (!Array.isArray(hashes)) {
+        return false;
+      }
+      const current = store.listSourceControls(characterId);
+      const expected = new Set(hashes);
+      if (current.length !== expected.size || current.some((hash) => !expected.has(hash))) {
+        return false;
+      }
+    }
+    const root = store.getEntryById(cleanText(proof.originEntryId, "根条目ID", 200));
+    if (!root ||
+      root.factIdentityId !== temporaryIdentityId ||
+      root.expiresAt !== proof.expiresAt ||
+      root.version !== proof.originVersion ||
+      root.originCharacterId !== initiatorCharacterId) {
+      return false;
+    }
+    const rootLink = store.getTemporaryEntryLink(root.id);
+    if (!rootLink ||
+      rootLink.tempIdentityId !== temporaryIdentityId ||
+      rootLink.holderCharacterId !== initiatorCharacterId ||
+      rootLink.expiresAt !== proof.expiresAt ||
+      rootLink.longIdentityId !== proof.rootIdentityId ||
+      rootLink.rootIdentityId !== proof.rootIdentityId) {
+      return false;
+    }
+    if (!Array.isArray(proof.entries)) {
+      return false;
+    }
+    const currentEntries = store.listEntriesByIdentity(temporaryIdentityId)
+      .filter((entry) =>
+        temporary.isTemporaryEntry(entry) &&
+        entry.expiresAt === proof.expiresAt);
+    if (currentEntries.length !== proof.entries.length) {
+      return false;
+    }
+    const byId = new Map(currentEntries.map((entry) => [entry.id, entry]));
+    const seen = new Set();
+    for (const expected of proof.entries) {
+      const entry = byId.get(cleanText(expected.entryId, "记忆ID", 200));
+      const link = entry ? store.getTemporaryEntryLink(entry.id) : null;
+      if (!entry || seen.has(entry.id) ||
+        entry.characterId !== expected.holder ||
+        entry.version !== expected.version ||
+        sourceIdHash(entry.sourceId) !== expected.sourceIdHash ||
+        !link ||
+        link.tempIdentityId !== temporaryIdentityId ||
+        link.holderCharacterId !== expected.holder ||
+        link.expiresAt !== proof.expiresAt ||
+        link.longIdentityId !== expected.longIdentityId ||
+        link.rootIdentityId !== proof.rootIdentityId ||
+        !temporary.temporaryInfo(entry, nowMs)) {
+        return false;
+      }
+      seen.add(entry.id);
+    }
+    return true;
+  }
+
   function verifyOperationProof(input = {}) {
     try {
+      if (input.action === "temporary") {
+        return verifyTemporaryProof(input);
+      }
       if (input.action !== "forget") {
         return false;
       }
@@ -1834,7 +2009,10 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     allowSharing,
     associateFacts,
     getHeldEntry,
+    isKnownCharacter,
     listIdentityEntries,
+    getTemporaryTarget,
+    applyConfirmedTemporaryCorrectionToHolders,
     verifyOperationProof,
     applyConfirmedCorrectionToIdentityMembers,
     buildContext,
