@@ -139,3 +139,7 @@ POL-MODEL-COMP-001：同grounded协议模型对照，Contract见[s03l-model-comp
 ## S03l-b 聊天来源上下文
 
 POL-SOURCECTX-001～006，P0/v1/Codex受托确认，Contract见[s03l-source-context-plan.md](s03l-source-context-plan.md)，Runner tests/acceptance/memory-source-context.spec.cjs。真实store/chat→memory→来源→管理失效链，专属6项及相关领域合计74PASS、19unit PASS。边界与证据见[s03l-source-context-review.md](s03l-source-context-review.md)；只验证来源链，不冒称语义分类或自动关联已完成。
+
+## S03l-b 来源感知关系核验
+
+POL-SOURCE-REL-001～004，P0/v1/Codex受托确认，唯一Contract见[s03l-source-grounding-plan.md](s03l-source-grounding-plan.md)。Runner tests/acceptance/memory-source-relation.spec.cjs；真实store/chat/source及协议，模型响应构造。本片4Case及相关18场景PASS，19unit PASS；独立结果见[s03l-source-grounding-review.md](s03l-source-grounding-review.md)，不替代真实模型语义或产品自动关联验收。

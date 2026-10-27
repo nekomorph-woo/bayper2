@@ -49,6 +49,7 @@ function single(pairs, relation, left, right) {
 test("生产协议只导出约定入口", () => {
   assert.deepEqual(Object.keys(protocol).sort(), [
     "POLICY_VERSION",
+    "SOURCE_POLICY_VERSION",
     "buildRelationMessages",
     "parseRelationResponse",
   ]);
