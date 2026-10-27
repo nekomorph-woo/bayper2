@@ -486,3 +486,103 @@ master 2026-10-27 受托批准本方向，**不是用户亲自确认**。C2 旧 
 - D1/D2 明确独立同义候选不能在核验前合并长期 identity L。进入 2c-2 后，一个 T 可能在阶段 2 关联多个已核实的独立 L，同一 holder 也可能存在多个锚条目；这与当前“T → 单一 L”的校验/控制查找粒度冲突。
 - 2c-2 实施前必须先设计清楚 holder+long 粒度、权威来源、对账、控制与临时抑制关联；不得用“合并长期 identity”或“跳过已触碰 holder”绕过。
 - 本节仅登记待审事实，不把该矛盾写成 2c-1/1b 的产品失败，也不新增业务限制或预设方案。
+
+## 13. 2c-2 多 L 粒度最小方案（r40 定稿 + r41 收口修正；Codex 受托批准，不是用户亲自确认）
+
+Codex 2026-10-27 受托批准本节方案与 D1～D16（不是用户亲自确认）。**实现仍未开始，D1～D16 与 2c-2 实现均 NOT_COVERED**；批准的是计划与验收口径，不是产品通过。
+
+r38 退回依据保留：旧表 PK `(T,L,holder,expiry)` 无法容纳同元组多个 entry 历史；“按 entry_id 删旧行又保留历史”矛盾；阶段 0 把今日 body 当 left；§13.4 只更新选中 L 会使其他 L 成员 stale。
+r39 退回依据保留：holder long 删除仍判 ok 与 §12 A2 的“已声明 holder 锚必须存在且版本匹配”冲突；`verifyOperationProof` 只核发起人 contextVersion；keepExclusive 保留自身 current 时未同事务修正 root 引用；`root_identity_id/own L` 未与 source 锚及持久证明交叉校验。本节只给一套首选方案；本轮不实施，待 master snap 后另派。
+
+### 13.1 不变量与两表分工
+
+- T 是“当前理解组”，L 是长期 fact identity；同一 T 可关联多个已核验 L，禁止合并/改写长期 identity。
+- 现有 `memory_temporary_links` 原样保留：它是无正文控制关系，PK 与含义不变，记录 T 与哪些 holder+L 发生过控制关系，用于继承 forget/share/exclusive 和查找，不承载 entry 历史。
+- 新窄表 `memory_temporary_entry_links(entry_id PRIMARY KEY, temp_identity_id, holder_character_id, expires_at, long_identity_id, root_identity_id)`：只存 id/时间。`long_identity_id`=本条依附 L（B 的 L2，entry 生命周期内不可变）；`root_identity_id`=本条当前来源链的根长期 L（copy 的 B 条目为 A 的 L1，direct 的 B 条目为 B 的 L2）。relay 无自身 long 时两者相同。
+- 每条 temp entry 恰一行；同一 `(T,L,holder,expiry)` 可有多个历史 entry 行，各保留自己的 entry_id。正文删除时保留 entry 关联行与旧 `memory_temporary_links`，用于根证明与查证。无正文、无通用图、不合并长期。
+- 阶段 2 只在既有 T 内新增/更新 current 与 entry 关联，不新建 T、不 `associateFacts`、不改长期条目/identity。
+
+### 13.2 表、迁移与旧 2c-1 兼容
+
+- DDL 放在既有 `FACT_IDENTITY_MIGRATION_SAVEPOINT` 内 `CREATE TABLE IF NOT EXISTS`；建表/回填/写入失败随保存点整笔回滚。
+- **初始化迁移**（打开库时、同保存点内）：仅当旧 T 的 `long_identity_id` 唯一、该 entry 的 holder 在该 T 恰一行且 `expires_at` 一致时，为 entry 回填 `long_identity_id=该 L, root_identity_id=该 L`；缺证、多 L 歧义不猜、不回填。旧 origin current/root entry 已删不影响回填：root L 只取旧 T 的唯一 L；无法唯一则不迁移，读取按旧规则需 holder/expiry 唯一。
+- 未能回填的旧 entry：读取只回退旧表，且必须整 T 唯一 L、同 expiry、该 holder 恰一行（等价 2c-1 规则）；source-context 只构造内存结果，读取永不补齐。首选初始化迁移；写入前补齐仅用于未回填旧行的下一次合法写入（edit/再发起/relay/share/阶段 2），与写入同事务且按同一可证明条件补齐；不能证明 → `TEMPORARY_SOURCE_UNAVAILABLE`，零写。
+- 新写入与条目/derivation 同事务写 entry 行与旧 `memory_temporary_links` 控制关系行。更新同一 entry 时 `long_identity_id` 不得变；`root_identity_id` 只在本次明确陈述使该 entry 的 direct origin 轮换时随 source 同事务更新，不由第一条 link 推断。发起角色轮换（B 从 copy 转 direct、A 再发起）由各自 entry 明确记录 own L/root L，不互相覆盖。
+- 同一 `(T,L,holder,expiry)` 新 entry 保留旧 entry 行与历史根证明，不覆盖。可执行顺序：建表 → 单 L 回填 → 重开幂等 → 失败注入全量回滚 → 既有 2c-1 套件重放。
+
+### 13.3 source 快照：根 L 与本条 L 分离
+
+- `sourceAnchorEntryId/Version/IdentityId` 必须真实指向 origin 长期（A 的 L1）及来源消息；IdentityId 取 entry 关联的 `root_identity_id`，即使 origin current/root entry 已删仍可证明。不得把 B 的 L2 冒充 A 的 L1。
+- 新增 `holderLongIdentityId`（必填，取 entry 关联 `long_identity_id`）：本条依附 L，用于抑制、查找和 holder 锚核对；可与 `sourceAnchorIdentityId` 不同。copy/edit 的 B 条目：`sourceAnchor*=A L1`、`holderLongIdentityId=L2`；direct 条目（含 B 再发起）：`sourceAnchor*=own L`，此时可与 `holderLongIdentityId` 相同。copy/edit 分别核 source 内 originLong 与 holderLongEntryId；relay 无自身 long 时 `holderLongIdentityId=root L`、`holderLongEntryId='-'`。
+- 删除与变化分开：root long 已删 → `sourceAnchorStatus="removed"`，仍靠 `root_identity_id` 与持久 entry 关联核，ok；origin current 已删 → `temporarySourceStatus="removed"`，仍靠持久 derivation/link/消息核，ok；root current 存在但版本/正文/trust/expiry 变 → `temporary_source_changed`；**已声明 holder long 锚删除或版本/身份变化一律 `holder_anchor_changed`**（与 §12 A2 一致，恢复旧 Expected）；relay 从始无 holder 锚的合法分支保持（`holderLongEntryId='-'` 且无 held 锚可核）；无 entry 关联且旧回退不成立 → `link_missing/link_conflict`；控制排除 → `source_excluded`。
+- entry 关联字段不能单独作证：`root_identity_id/long_identity_id` 必须与 source 内嵌 origin/holder 锚、仍存活的根/own 长期条目、已持久 origin entry/current/derivation/消息相互一致；任一矛盾 → unavailable，不取字段或第一条 link。root 与 origin current 都删除时，仅当 entry 关联、source 锚 id、derivation/关系边与消息仍形成同一条无正文证明链才继续；证明不足不猜。
+- sourceId 格式与长度不变（上限 200），不嵌入 L2 或 token，不按任意现存 long/第一条 link 推断。
+- digest 与 isCurrent 纳入 `holderLongIdentityId`（及 entry 关联根/own L 的必要字段）；旧单 L 快照无该字段时按 `sourceAnchorIdentityId` 兼容读取，仍以 digest 自校验，旧 direct/corrected 形状不变。
+
+### 13.4 阶段 1 / edit / exclusive（多 L 同组）
+
+- 选中临时条目：由 entry 关联得所选 L；发起人 origin current 必须是该 holder+L 下的 T 成员。选中长期条目仍按 2c-1 的唯一可证明 T 查找。
+- 新明确今日陈述更新 T 中已有且未被控制阻断的**全部成员**（含不同 L），每条保留自身 holder+L 与 holderLong 锚，body/expiry 同步；source 的 origin current id 统一为 T 本轮根 direct、`originCurrentVersion` 取更新后根版本，derivation parent 同步同一 id；holderLong 锚各按自身 L 不变。再为所选 L 的已有长期 holder 补 copy。B 的其他 L 成员也被更新正文，但其 entry 关联 own L 与 holderLong 锚不被改写。
+- 每 holder+L 一条 current：已有成员原地更新；无成员时按该 holder+L 选锚新建；同 holder+L 多锚确定性取一条（优先既有成员，否则最早 `created_at/id`）。
+- T 旧 forget/share/exclusive 与旧 source 控制先查，不因换 L、换措辞或换 T 绕过；未知角色不创建。
+- `editUnderstanding` 对 T 内全部有效成员按各自 entry 关联选择 holderLong/锚，统一更新 body/expiry，origin/消息沿用 T 的 direct origin；不把 L2 改写成 L1。
+- `keepExclusive`（memory.cjs）保留选中 holder 在 T 的全部 L current（逐条 version+1）；若 root current 也 version+1，必须在同一事务重写其他保留条目的 source `originCurrentVersion` 与 derivation，使 root 引用一致，不能出现保留后自身 copy 已失效；删除其他 holder 在 T 的全部副本并写 T share control 与其 source/forget 控制；`self/all` 仍按 T 覆盖全部 L。exclusive 后保留者的 resolve/search/context/再次编辑合法，但 share/relay 仍被 T share control 拒绝且零写；只有先经既有明确 `allowSharing` 流程解除限制后才可转告，另列对照，不自动解除。
+- `applyUnderstanding` 返回 `entries[{entryId,holder,longIdentityId,version,sourceIdHash}]`（不含正文）与 `contextVersions/sourceControls`，供阶段 2 proof。
+
+### 13.5 阶段 0 / 阶段 2（真实 chat）
+
+- 阶段 0 选中临时条目时，沿 entry 关联的 L 取该 holder 的有效长期锚，用该锚 `captureTargetEvidence`；left/right 始终是“A 旧长期事实 vs B 旧长期事实”，不得用今日 body。无有效长期锚的 relay 条目按现行合法编辑/转告范围处理，不造长期、不进入两阶段核验。
+- `captureCandidates` 以该长期锚作为 targetEntry 调用，不再因临时目标 `expiresAt` 直接返回空；候选仍按 identity 去重，排除同 identity/派生/受限/过期，未结识不进入。
+- 阶段 1 后写 temporary proof（无正文）：version 3、`temporaryIdentityId`、`expiresAt`、root entry/identity、发起人、T 成员集合（entryId/holder/longIdentityId/version/sourceIdHash）、候选旧事实快照标识、`contextVersionsAfterLocal`、`sourceControls`。
+- `verifyOperationProof` 增 temporary 分支：T 成员集合/版本/来源/entry 关联与 proof 完全一致，root/own L 与记录一致；对本轮所有有关 holder（T 成员、候选及 approved 成员）按捕获的 contextVersion 与阶段 1 确切已知增量逐一重核，非发起者额外变化同样 stale；首写前统一检查，任一外部新增/删除/改版本/无关 context 变化 → stale。
+- 阶段 2 仍一次 `verification.verify`（15s、无重试、无自动预算）；候选资格复用 `correctCandidateEligible`；`proof.sourceControls` 同时作为 targetEvidence 与候选/成员的允许增量，阶段 1 已触碰 holder 不跳过。
+- 事务内首写前重核 proof 与全部 approved（`candidateMembersMatch`+`candidateEvidenceCurrent`），按 approved identity 去重；每个候选为每个已知成员 holder 在 T 内建“该 holder+该候选 L”一条 current（已有原地更新，无则 copy），多锚取一条；已有 T forget 控制/删除指纹的 holder 跳过且不解除；T 已 share/exclusive 时只更新 T 内已有 holder，不向 T 外新增。
+- 窄接口 `memory.applyConfirmedTemporaryCorrectionToHolders({temporaryIdentityId,expiresAt,originCurrentEntryId,originCurrentVersion,approved,nowMs,inTransaction:true})`；内部重读 origin/成员/entry 关联，任一失败抛错。阶段 2（currents/derivations/entry links/source controls/context/FTS/assistant）单一事务，失败整笔回滚、保留阶段 1、同一 assistant 原位更新为本地完成；成功不追加第二条。
+- 取消/关闭/dispose/recover 沿用现有 `verifications`/request 状态；重启 pending→`interrupted`，不重试、不回滚阶段 1。
+
+### 13.6 控制、防回流、上下文
+
+- self 删该 holder 在 T 的全部 L 条目；all 删 T 全部条目；正文/derivation 删，entry 关联、旧 T-L links 与控制保留。
+- restrict 仍写 T share control；allow 只解 T；不升级为长期禁令。
+- 新 T 查找覆盖旧 T-L links 的全部 L；新 T 继承旧 T share 与各 holder forget 控制（跨 L），旧 source 始终阻断；新明确陈述只授权发起人建 direct，其他 holder 仅在旧控制允许且 T 未 share/exclusive 时 copy，旧 forget 不解除。
+- `buildContext` 去重键=`holder + tempIdentityId + body + expiresAt`（含 T，不能把无关 T 仅因同文合并）：同 T 同 holder 同正文同到期只注入一次，同时抑制这些条目明确关联的全部 L（`holderLongIdentityId` 集合）；不同 T 即使同文也不合并，并分别抑制各自 L；不同正文/到期分别注入。search/list 不变。
+
+### 13.7 反例（真实 store/chat/memory/source-context；聊天 HTTP 与关系 HTTP 均构造，核心存储与业务逻辑真实）
+
+| ID | Given → When | Expected / 禁止 | Oracle |
+|---|---|---|---|
+| D1 | A L1 current；B 仅独立 L2 长期同义 | 一次 HTTP 合格后 B 在 T 内建 L2 current；approved L 的全部已知 holder 按控制更新；长期 identity/正文不动；同一 assistant 原位更新 | T/entry links/entries/identities、HTTP 计数、消息 id |
+| D2 | B 有 L1（阶段 1 已同步）+ L2 同 identity 两锚 + L3 独立 identity | 阶段 2 不跳过 B；B 的 L2/L3 各一条 current，多锚不重复；上下文不重复注入；self/all/exclusive 覆盖 T 全部条目；exclusive 后保留者 resolve/search/context/再次编辑合法，但 share/relay 仍被 T share control 拒绝且零写；若另测转告成功，必须先经既有明确 `allowSharing` 解除限制，作为独立对照且不自动解除；覆盖 root 为自身 current 与 root 在其他角色已被删除两种 | entries/entry links/derivations/controls、context、source-context、edit/share/relay 返回与零写快照 |
+| D3 | 阶段 1 触碰 B 后 B（非发起者）又有无关 contextVersion 变化 | 按 B 捕获版本+阶段 1 已知增量重核；额外变化 stale、阶段 2 零写；A 或候选成员额外变化同样不放行；无额外变化时完成 | proof、context_versions、逐表快照 |
+| D4 | 两个 approved 候选，第二个写 current 触发失败 | 阶段 2 全部回滚；阶段 1 current/link/控制保留；同一 assistant 本地完成、无 pending | 全表前后快照、trigger、request/message |
+| D5 | 候选检索含未结识角色/holder | 不新增关系/角色/T copy；HTTP pair 只含已知 holder | relationships、entries、HTTP 请求 |
+| D6 | 阶段 2 后 A 删除根 L1 long 或 origin current；对照 B 已声明 holder 锚删除/版本变 | 正：B 快照 `sourceAnchorIdentityId=L1`、`holderLongIdentityId=L2`，root `removed` 仍 resolve ok；负：holder 锚删除或变化 → `holder_anchor_changed`，不得沿用 root 删除即 ok；relay 从始无 holder 锚的正例仍有效 | source-context/entry links/entries |
+| D7 | 旧多 L T 已 restrict/exclusive/他人 forget 且无 active current，再建新 T | 旧 share/exclusive 不解除、他人 forget 不解除、旧 source 仍阻断；新 T 只给发起人 current | controls/links/entries、重开 |
+| D8 | A self 删除 T 全部 L current | B 的 L2 current 保留且可验证、可检索；长期不动 | entries/entry links/source-context |
+| D9 | 旧 2c-1 单 L 库重开/迁移；迁移失败注入 | 合法单 L 回填；旧行按唯一 L 回退可解析；缺证多 L 不猜；建表/回填失败全量回滚、重开一致 | 旧库 fixture、全表快照 |
+| D10 | 同一 approved identity 重复出现/重复执行 | 同一 holder+L 只一条 current；只发一次 HTTP；同一 assistant 不追加第二条 | entries 计数、HTTP、消息计数 |
+| D11 | 多 L 阶段 2 成功后 B 再次明确改口 | 同 T 多 L 持有者全部得到新正文；各 L 不改、来源可解析；不把其他 L 写成 B 当前 L | entries/entry links/source-context、assistant |
+| D12 | 多 L T 上编辑后再转告 | 全部有效成员同步编辑正文/expiry，各自 holder+L/锚保留；转告继承 T/expiry/root，`holderLongIdentityId` 按真实情况，不冒充直接告知 | entries/entry links/derivation、relay 返回 |
+| D13 | 同 T/同 holder/同 L 旧 entry 删除后新建 entry | 新 entry 与旧 entry 各一行历史；根长期证明不丢；不覆盖旧行 | entry links 行数、root/own L、source-context |
+| D14 | 原 S1～S16 与单 L 旧路径 | Expected 不变、不 skip、不削弱；多 L 新行为不反向改写旧断言 | 既有套件、逐表快照 |
+| D15 | 篡改 D6 的 `root_identity_id/long_identity_id`/source 内嵌锚，或删除持久 origin entry 使证明链不足 | 字段与 source 锚/存活根/持久 origin/derivation/消息任一矛盾 → unavailable；不取字段或第一条 link 猜根；无正文证明不足不继续 | entry links/source-context/derivation |
+| D16 | 篡改 D13 的旧 entry 关联 root/own L，或删除历史根证明 | 新 entry 不因旧行篡改改变；旧历史不覆盖不丢；矛盾条目 unavailable；不按字段猜根 | entry links 行数/root/own L/source-context |
+
+Mock 只替换聊天与关系模型 HTTP；不 mock 核心 store/chat/memory/source-context。Oracle 独立断言业务状态，不以 HTTP 200 或 exit 0 代替。
+
+### 13.8 分步、文件、接口与规模
+
+| 批 | 允许文件 | 内容 | 生产规模 |
+|---|---|---|---|
+| 2c-2a | `memory-store.cjs`、`memory-temporary.cjs`、`memory-source-context.cjs`、`memory.cjs`（keepExclusive）、同 Runner | entry 关联表/迁移/回填、单 L 回退、root+own L、多 L 有效性与 stage1/edit/exclusive 领域切片 | 170～230 |
+| 2c-2b | `chat.cjs`、`chat-memory-verification.cjs`、`memory.cjs`、`memory-temporary.cjs`、同 Runner | 阶段 0 长期锚、temporary proof、阶段 2、context 精确放行、整笔回滚、单 assistant | 110～160 |
+
+- store：`insertTemporaryEntryLink`、`getTemporaryEntryLink`、`listTemporaryEntryLinksByIdentity`、迁移回填函数；旧 `insertTemporaryLink`/查询保持。
+- temporary：`linkOfEntry(entry)`、`holderLong(holder,L,now)`、`applyUnderstanding`、`editUnderstanding`、`propagationSource`；`memory`：`applyConfirmedTemporaryCorrectionToHolders`、`verifyOperationProof` temporary 分支、多 L `keepExclusive`。
+- chat：`twoPhaseTemporary`、temporary proof 构造/`proofCurrent`、阶段 0 `captureTemporaryTargetEvidence`；候选去重复用 identity 规则。
+- 先写失败基线；S1～S16 不重写 Expected。规模按最小职责估算，不是机械上限；超出先报告职责与拆分，不靠压行/删断言。
+
+### 13.9 局限
+
+- 2c-2 未实现；2c-1 的 295/295 与 S1～S16 只证明单 T 单 L 已测路径，不据此判其失败。
+- 真实模型 L1/L2、GUI/UI IPC/live、完整 S03 与 `POL-SEMOP-001～008` 聚合仍 NOT_COVERED；本方案不改变这些边界。

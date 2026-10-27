@@ -18,7 +18,7 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 | --- | --- | --- |
 | S01 首次相遇 | 独立启动、配置模型、表达愿望、接纳首位、重启保持关系；REQ-05/21/45/55 | 当前切片6项Case PASS，受托接受；不覆盖这些REQ在后续切片的其余部分 |
 | S02 桌面陪伴 | 小窝、每日名单、固定安排、临时聊天、自然轮换、数值恢复；REQ-01/03/44/47/48/50/56/57 | S02a安排/轮换、S02b凛画布、S02c关系数值基础已接受；正式活动接线见S06d。数值基础不等于所有有效互动/共同故事触发均完成，完整成长路径与最终原生体验仍需逐项闭环 |
-| S03 有记忆的对话 | 模型回应、人格、独属记忆、定向共享、纠正删除防回流；REQ-09/18/49/51/60/61 | 对话、条目式纠正删除与防回流已部分接受（969c391/e87d332/9c8e505）；真实模型构造链路见state.md；明确转告/禁分享本地领域已独立58/58接受（s03d-review.md）；S03e正式共享入口独立23项GUI与41项领域通过（s03e-review.md）；S03f聊天纠正/忘记/禁分享及正式GUI已通过（s03f-review.md），明确聊天转告与独属控制的领域/正式GUI/真实模型已在各自边界接受（s03g/s03h-review.md）；S03i持久自动共享开关已独立65领域、19unit、14GUI通过（s03i-review.md）。S03j主题新活动→定向记忆共享链与来源归因已在构造发布目录的领域链、正式记忆UI和正式未发布门中接受（s03j-review.md）；S03k聊天全局关闭/恢复及失败GUI重试已独立94领域、19unit、1专属GUI和12邻接检查接受（s03k-review.md）；来源身份 v2 有限能力（17套件163/163）与 POL-MIG v1 迁移有限能力（18套件170/170，真实SQLite/构造旧库）已由 master 受托接受；S03m 显式纠正/忘记语义核验 POL-SEMOP-001～008 v1 已受托确认计划（两阶段/来源追溯/临时纠正），008 已测有限能力经 master 19 套件 185/185 受托接受，但 008 聚合仍 NOT_COVERED（部分已验）；001～007 NOT_COVERED；S03m temporary 2c-1 的已测领域与真实 chat/构造 HTTP 范围已由 master 独立复跑 20 套件 295/295、exit 0、摘要一致后受托接受（`master-temporary-final-gmf6gukR`；不是用户亲自确认、不是真实模型/GUI/UI IPC）；2c-2 未实施；POL-SEMOP-001～008 聚合仍 NOT_COVERED；异 factKey 语义纠正/删除/共享生产入口、语义模型闭环/GUI/正式资源仍未完成 |
+| S03 有记忆的对话 | 模型回应、人格、独属记忆、定向共享、纠正删除防回流；REQ-09/18/49/51/60/61 | 对话、条目式纠正删除与防回流已部分接受（969c391/e87d332/9c8e505）；真实模型构造链路见state.md；明确转告/禁分享本地领域已独立58/58接受（s03d-review.md）；S03e正式共享入口独立23项GUI与41项领域通过（s03e-review.md）；S03f聊天纠正/忘记/禁分享及正式GUI已通过（s03f-review.md），明确聊天转告与独属控制的领域/正式GUI/真实模型已在各自边界接受（s03g/s03h-review.md）；S03i持久自动共享开关已独立65领域、19unit、14GUI通过（s03i-review.md）。S03j主题新活动→定向记忆共享链与来源归因已在构造发布目录的领域链、正式记忆UI和正式未发布门中接受（s03j-review.md）；S03k聊天全局关闭/恢复及失败GUI重试已独立94领域、19unit、1专属GUI和12邻接检查接受（s03k-review.md）；来源身份 v2 有限能力（17套件163/163）与 POL-MIG v1 迁移有限能力（18套件170/170，真实SQLite/构造旧库）已由 master 受托接受；S03m 显式纠正/忘记语义核验 POL-SEMOP-001～008 v1 已受托确认计划（两阶段/来源追溯/临时纠正），008 已测有限能力经 master 19 套件 185/185 受托接受，但 008 聚合仍 NOT_COVERED（部分已验）；001～007 NOT_COVERED；S03m temporary 2c-1 的已测领域与真实 chat/构造 HTTP 范围已由 master 独立复跑 20 套件 295/295、exit 0、摘要一致后受托接受（`master-temporary-final-gmf6gukR`；不是用户亲自确认、不是真实模型/GUI/UI IPC）；2c-2 §13 方案/D1～D16 已由 Codex 受托批准（非用户亲自确认），实现未开始、仍 NOT_COVERED；POL-SEMOP-001～008 聚合仍 NOT_COVERED；异 factKey 语义纠正/删除/共享生产入口、语义模型闭环/GUI/正式资源仍未完成 |
 | S04 外部来源 | 发现 Coding Agent，默认不分析、逐目录授权与撤销，来源分析与预算；REQ-13 | 权限/reader/提炼防回流、S04d正式授权设置及S04e生产心跳分析已接受；S04e独立25/25（含来源12、设置3、聊天UI10），见s04e-review.md。本地HTTP与构造目录不证明全部真实来源语义效果；原生目录对话框人工体验尚未取得 |
 | S05 工作陪伴 | Herdr 插件、双向启动、独立 Agent、重连对账、普通和加急通知；REQ-06/21/28/35/58 | 正式插件登记/发现、adapter恢复、stop证据及S05i连接设置已接受，见s05h/s05i-review.md。S05j正式气泡已受托接受：当前11项通知GUI分两批独立通过，桌面/连接设置17项回归通过，见s05j-review.md；超量延迟如实审计，自动化窗口不替代最终原生体验 |
 | S06 低频故事 | 自动机会、并发预算、探索退出/接替、连续线索、邀请与服装解锁；REQ-46/48/52/53/54/59 | S06a/b预算与机会、S06c活动领域、S06d生产用途路由/暂停及探索接替已接受相应边界；S06h凛真实日常已独立活动6/6、桌面11/11接受，Hu/Cheng日常候选接线见S07b，透明输入S07c已独立验收，探索缺出发/返回动画。S06e/f/g故事/发现领域及4故事8节点作者目录已验，正式assetAvailable均false，S06i main活动→故事运行接线已独立54项Node/7项GUI通过，正式目录仍false；故事回看/可见手动邀请及接纳窗口已在S06j接受（s06j-review.md），自动邀请与服装窗口仍待闭环；见s06i/s06j-review.md |
@@ -35,7 +35,7 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 | --- | --- | --- | --- |
 | S01 首次相遇 | REQ-05/21/45/55；[cases.md](cases.md) ONBOARD-001～006 | 6 项当前切片 PASS 并受托接受；首次配置/愿望/接纳/重启/真实服务核实 | S01 切片接受有效；这些 REQ 在桌面、聊天、Herdr、最终体验中的剩余义务由相应父级承担，不要求重做 S01 |
 | S02 桌面陪伴 | REQ-01/03/44/47/48/50/56/57；COMPANION、DESKTOP、RELATION | 安排/轮换/数值、关系事件、Rin 画布与生命周期基础已接受 | DESKTOP-002 已由 S07c 1 test/3 Case 覆盖真实点击；003 Spaces/全屏、006 真实锁屏、004 托盘点击未闭；正式活动接线在 S06 |
-| S03 有记忆的对话 | REQ-09/18/49/51/60/61；MEMORY/CHAT/MEMUI/SHARING/SHAREUI/CHATMEM/CHATRELAY/EXCLUSIVE/AUTOSHARE/THEME/SHARESETTING/SEM/FACTID/ASSOC/SOURCE-*/SEMOP | 基础记忆、聊天、条目管理、转告、独属、自动共享开关、主题定向共享、正式 GUI 与部分真实模型构造链已按切片接受；来源身份 v2 与 POL-MIG v1 迁移有限能力已受托接受；SEMOP-001～008 v1 计划已受托确认 | 来源身份 v2（17套件163/163）与迁移 v1（18套件170/170）已接受有限能力；POL-SEMOP-008 已测有限能力经 master 19 套件 185/185 受托接受，但 008 聚合仍 NOT_COVERED（部分已验）；001～007 NOT_COVERED；FACTID-002 v1 机制 PASS 仍失效；缺失历史边不恢复、孤儿旧键兼容、非拆分身份保守检查；SEM 5 FAIL、holdout 2 FAIL、source-live 2 FAIL 未重跑；异 factKey 语义闭环、正式主题自动分享 GUI 未闭 |
+| S03 有记忆的对话 | REQ-09/18/49/51/60/61；MEMORY/CHAT/MEMUI/SHARING/SHAREUI/CHATMEM/CHATRELAY/EXCLUSIVE/AUTOSHARE/THEME/SHARESETTING/SEM/FACTID/ASSOC/SOURCE-*/SEMOP | 基础记忆、聊天、条目管理、转告、独属、自动共享开关、主题定向共享、正式 GUI 与部分真实模型构造链已按切片接受；来源身份 v2 与 POL-MIG v1 迁移有限能力已受托接受；SEMOP-001～008 v1 计划已受托确认；2c-2 §13 方案/D1～D16 已批准、实现未开始 | 来源身份 v2（17套件163/163）与迁移 v1（18套件170/170）已接受有限能力；POL-SEMOP-008 已测有限能力经 master 19 套件 185/185 受托接受，但 008 聚合仍 NOT_COVERED（部分已验）；001～007 NOT_COVERED；FACTID-002 v1 机制 PASS 仍失效；缺失历史边不恢复、孤儿旧键兼容、非拆分身份保守检查；SEM 5 FAIL、holdout 2 FAIL、source-live 2 FAIL 未重跑；2c-2 实现未开始、NOT_COVERED；异 factKey 语义闭环、正式主题自动分享 GUI 未闭 |
 | S04 外部来源 | REQ-13；SOURCE/ANALYSIS/SOURCE-UI/SOURCE-AUTO | 权限/读取/分析、设置、正式心跳自动分析已接受 | 真实来源语义质量、跨文件同义防回流、原生目录 dialog 人工体验未验证；上游记忆改动待回归 |
 | S05 工作陪伴 | REQ-06/21/28/35/58；CONNECTOR/TRANSPORT/HERDR-LIVE/HERDR-ID/REGISTER/ADAPTER/RUNTIME/NOTIFY/UI | 账本/传输、真实隔离 Herdr、登记、适配、运行、停止证据、通知队列与正式气泡/连接设置已按切片接受 | 最终真实模型＋隔离 Herdr 端到端、插件安装入口与跨重启恢复仍需整体复验；不得读取用户真实工作会话 |
 | S06 低频故事 | REQ-46/48/52/53/54/59；BUDGET/OPPORTUNITY/ACTIVITY/STORY/DISCOVERY/CONTENT/STORYRUN/STORYUI | 预算/机会、活动生命周期、探索、故事/发现/作者目录领域、main 消费与故事窗口已接受相应边界 | 正式四故事 assetAvailable=false；自动邀请、正式活动→相遇、服装 72h 解锁/穿用、发布后 GUI 全链未闭 |
@@ -76,13 +76,13 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 
 工具组织REQ-41贯穿所有切片：现有SQLite/造型目录工具是已存在能力，新增项目工具仍须自包含审查，不将此横向约束标作一次性完成。
 
-## 当前阶段：S03m 2c-1 已测有限能力受托接受，2c-2 待设计（2026-10-27 r37）
+## 当前阶段：S03m 2c-1 有限能力已受托接受；2c-2 方案已批准、实现未开始（2026-10-27 r41）
 
-master 对 2c-1 工作区实际复跑 20 个相关套件：**295/295 PASS、0 skipped、exit 0**，before/after 摘要一致且当前 after 清单 `shasum -c` 一致，证据 [master-temporary-final-gmf6gukR](evidence/master-temporary-final-gmf6gukR/stdout.log)。受托接受 2c-1 的**已测领域与真实 chat/构造 HTTP 范围**；不是用户亲自确认、不是真实模型语义、不是真实 GUI/UI IPC 或 live，也不接受 S03/完整 Goal。`POL-SEMOP-001～008` 聚合仍 **NOT_COVERED**。
+master 对 2c-1 工作区实际复跑 20 个相关套件：**295/295 PASS、0 skipped、exit 0**，before/after 摘要一致且当前 after 清单 `shasum -c` 一致，证据 [master-temporary-final-gmf6gukR](evidence/master-temporary-final-gmf6gukR/stdout.log)。受托接受 2c-1 的**已测领域与真实 chat/构造 HTTP 范围**；不是用户亲自确认、不是真实模型语义、不是真实 GUI/UI IPC 或 live，也不接受 S03/完整 Goal。`POL-SEMOP-001～008` 聚合仍 **NOT_COVERED**。2c-2 §13 多 L 方案与 D1～D16 已由 Codex 受托批准（不是用户亲自确认），**实现未开始、仍 NOT_COVERED**。
 
 - 已验（有限范围）：S1～S6、S7/S7b/S8、S9～S16 的 T/link、来源归属、显式转告/分享、面板编辑、同锚防回流、合法多 T 澄清、self/all/restrict/exclusive 与编辑关系变异；真实 SQLite/chat/memory/source-context，聊天模型为构造 HTTP。
-- 未覆盖：2c-2 独立同义阶段 2、真实模型 L1/L2、GUI/UI IPC/live、跨角色独立同义；2c-2 实施前须先解决计划 §12.8 登记的“T→单一长期 identity”与 D1/D2 多已核实独立 L/同 holder 多锚的粒度矛盾，不得合并长期或跳过已触碰 holder。
-- 版本：`0.1.192 → 0.1.193`（仅 10 文件 11 处字面量）待 master snap；本批只做文档与版本，未写生产/测试代码、未跑新测试/API/GUI、未 Git/skill。2b 235/235、2a 28/28 与更早验收历史保留在 evaluation/state。
+- 未覆盖：2c-2 实现（方案已批准）、真实模型 L1/L2、GUI/UI IPC/live、跨角色独立同义；2c-2 实现按 §13 的 entry 关联/root+own L/全 holder context 校验执行，不得合并长期或跳过已触碰 holder。D2 的 exclusive 后 share/relay 仍被 T share control 拒绝，明确 allow 后才可另列对照。
+- 版本：`0.1.193 → 0.1.194`（仅 10 文件 11 处字面量）待 master snap；本批只做文档与版本，未写生产/测试代码、未跑新测试/API/GUI、未 Git/skill。2b 235/235、2a 28/28 与更早验收历史保留在 evaluation/state。
 
 ## 历史阶段：POL-MIG v1 迁移有限能力已受托接受（2026-10-27 r10）
 
