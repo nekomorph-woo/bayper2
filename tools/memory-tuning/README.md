@@ -147,3 +147,15 @@ node tools/memory-tuning/semantic-probe.cjs --out tools/memory-tuning/results/se
 结果包含实际调用次数、延迟、严格响应结构检查、逐项关系、错误合并/漏关联/不确定统计及源文件摘要。ERROR表示配置、网络或结构未形成有效判定，FAIL表示实际关系违背Expected；不能只看退出码。策略提示位于脚本的SYSTEM_PROMPT，修改策略时同步策略版本，并用同一数据与新的独立结果文件对照。少量固定样本不代表生产可靠性，接入预算、隔离、取消与事务需另行验证。
 
 2026-10-27 独立真实对照：策略v1与v2各15/16符合Expected，均0错误合并、0同义正例遗漏；v1错把未知参与者的共同经历判为不同，v2修正为不确定，但把“喜欢牛奶/乳糖不耐受”保守判为不确定。保留两轮FAIL，v2仅作为后续候选，尚未接入产品。证据为`results/semantic-probe-codex-live-r2.json`、`results/semantic-probe-codex-live-v2.json`；两轮总计2次models+2次chat，各批约1秒，不代表稳定延迟或生产效果。
+
+### 无参与者元数据的独立留出（S03l-b）
+
+`semantic-holdout.json` 为冻结v2提示后新增的16对构造事实，participants全部为null。
+使用 `node tools/memory-tuning/semantic-probe.cjs --dataset holdout --dry-run` 审查输入；
+真实执行须另行明确 `--out tools/memory-tuning/results/<新批次>.json`，仍最多一次models与一次chat。
+`--dataset`只接受baseline或holdout，默认baseline，旧模型输入保持不变。
+
+Codex独立真实结果 `results/semantic-holdout-codex-live-v2.json`：14 PASS、2 FAIL、0 ERROR，
+两次错误equivalent、无正例遗漏。未知“我们”与“她”的指代被误合并；因此本候选策略不能直接驱动
+生产纠正、删除或自动关联。失败Expected保持不变，后续须补主体/时间证据核验，不能凭相同正文或
+模型equivalent直接执行破坏性传播。本批1models+1chat，总约1.61秒，仅构造输入，无产品数据库。

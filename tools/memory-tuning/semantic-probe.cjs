@@ -10,7 +10,10 @@ const { parseEnv } = require("node:util");
 const { parseBaseUrl, requestChatCompletion } = require("../../app/model.cjs");
 
 const REPO_ROOT = path.resolve(__dirname, "../..");
-const PAIRS_FILE = path.join(__dirname, "semantic-pairs.json");
+const DATASETS = Object.freeze({
+  baseline: path.join(__dirname, "semantic-pairs.json"),
+  holdout: path.join(__dirname, "semantic-holdout.json"),
+});
 const MODEL_NAME = "deepseek-flash";
 const POLICY_VERSION = "s03l-semantic-probe-v2";
 const RELATIONS = Object.freeze(["equivalent", "different", "uncertain"]);
@@ -33,7 +36,8 @@ const SYSTEM_PROMPT = [
 ].join("\n");
 
 function parseArgs(argv) {
-  const options = { dryRun: false, out: null };
+  const options = { dryRun: false, out: null, dataset: "baseline" };
+  let datasetSeen = false;
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === "--dry-run" && !options.dryRun) {
       options.dryRun = true;
@@ -41,6 +45,12 @@ function parseArgs(argv) {
       const value = argv[index + 1];
       if (!value || value.startsWith("--")) throw new Error("--out 需要一个文件路径。");
       options.out = path.resolve(process.cwd(), value);
+      index += 1;
+    } else if (argv[index] === "--dataset" && !datasetSeen) {
+      const value = argv[index + 1];
+      if (!Object.hasOwn(DATASETS, value)) throw new Error("--dataset 只支持 baseline 或 holdout。");
+      options.dataset = value;
+      datasetSeen = true;
       index += 1;
     } else {
       throw new Error(`参数无效或重复：${argv[index]}`);
@@ -79,14 +89,14 @@ function normalizeExpected(expected, id) {
   return values;
 }
 
-function readPairs() {
-  const text = fs.readFileSync(PAIRS_FILE, "utf8");
+function readPairs(filePath) {
+  const text = fs.readFileSync(filePath, "utf8");
   const data = JSON.parse(text);
   if (
     !data || typeof data !== "object" || Array.isArray(data) ||
     !Array.isArray(data.pairs) || typeof data.version !== "string" || !data.version.trim()
   ) {
-    throw new Error("semantic-pairs.json 必须包含 version 与 pairs 数组。");
+    throw new Error(`${path.basename(filePath)} 必须包含 version 与 pairs 数组。`);
   }
   if (data.pairs.length !== PAIR_IDS.length) throw new Error(`必须包含 ${PAIR_IDS.length} 对事实。`);
   const ids = new Set();
@@ -242,13 +252,14 @@ function writeResult(filePath, payload) {
   }
 }
 
-function baseRecord(options, data, pairsText, messages) {
+function baseRecord(options, datasetPath, data, pairsText, messages) {
   return {
     generatedAt: new Date().toISOString(),
     mode: options.dryRun ? "dry-run" : "live",
     policyVersion: POLICY_VERSION,
     input: {
-      path: path.relative(REPO_ROOT, PAIRS_FILE),
+      dataset: options.dataset,
+      path: path.relative(REPO_ROOT, datasetPath),
       version: data.version,
       pairCount: data.pairs.length,
       sha256: sha256(pairsText),
@@ -341,8 +352,9 @@ async function main() {
   const outPath = options.out;
   if (!options.dryRun && !outPath) throw new Error("live 模式必须显式提供 --out。");
   if (outPath && fs.existsSync(outPath)) throw new Error(`拒绝覆盖已有结果：${outPath}`);
-  const { data, text } = readPairs();
-  const record = baseRecord(options, data, text, buildMessages(data.pairs));
+  const datasetPath = DATASETS[options.dataset];
+  const { data, text } = readPairs(datasetPath);
+  const record = baseRecord(options, datasetPath, data, text, buildMessages(data.pairs));
 
   if (options.dryRun) {
     Object.assign(record, { network: false, credentialsRead: false, calls: { models: 0, chat: 0, total: 0 } });

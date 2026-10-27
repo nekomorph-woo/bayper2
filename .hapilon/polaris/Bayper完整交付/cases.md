@@ -121,3 +121,7 @@ S05b传输模块：POL-TRANSPORT-001～004由tests/acceptance/herdr-transport.sp
 POL-FACTID-001～006：唯一业务与技术Contract见[s03l-identity-plan.md](s03l-identity-plan.md)，2026-10-27 v1由Codex受托确认，P0必需；正式memory管理服务及真实SQLite/迁移/派生/控制/回滚，Runner tests/acceptance/memory-fact-identity.spec.cjs。本片PASS，独立16身份场景、合计119领域tests、19unit与10GUI tests通过；逐Case观察、证据及边界见[s03l-identity-review.md](s03l-identity-review.md)。SEM-003/004/008原Expected复验PASS；不同措辞SEM-001/002/005/006/007仍FAIL并保留为下一语义关联必需范围，不将本片视为完整S03l。
 
 S03l-b语义判定前置对照：固定16对Contract见[s03l-semantic-probe-plan.md](s03l-semantic-probe-plan.md)，对应tools/memory-tuning/semantic-pairs.json的01～16；Runner semantic-probe.cjs只验证构造输入→真实模型关系建议→独立评分，不替代产品SEM。两策略各15PASS1FAIL，均0ERROR/0错误合并/0同义正例遗漏；完整结果、失败和后续条件见[s03l-semantic-probe-review.md](s03l-semantic-probe-review.md)。
+
+## S03l-b 独立留出补充
+
+POL-SEM-HOLD-001及01～16子项见[s03l-holdout-plan.md](s03l-holdout-plan.md)，真实Runner为tools/memory-tuning/semantic-probe.cjs --dataset holdout；Expected调用前冻结。结果与边界见[s03l-holdout-review.md](s03l-holdout-review.md)：14PASS2FAIL、总体FAIL；不得替代原SEM产品Case。

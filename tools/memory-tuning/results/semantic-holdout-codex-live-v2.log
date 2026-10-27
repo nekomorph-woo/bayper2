@@ -1,0 +1,13 @@
+{
+  "status": "FAIL",
+  "summary": {
+    "total": 16,
+    "pass": 14,
+    "fail": 2,
+    "error": 0,
+    "falseMerge": 2,
+    "missedEquivalent": 0,
+    "uncertain": 1
+  },
+  "output": "/Volumes/Under_M2/morphiiouo/bayper/tools/memory-tuning/results/semantic-holdout-codex-live-v2.json"
+}
