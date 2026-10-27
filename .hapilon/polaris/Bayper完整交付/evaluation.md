@@ -349,3 +349,8 @@ Codex独立窗口回归18/18通过（s03b-codex-window-r2.log）：含8项真实
 ## POL-LIVE-CLARIFY-001：删除目标两轮澄清（2026-10-28）
 
 正式Given/When/Expected/Oracle与边界见[s03o-live-clarification-plan.md](s03o-live-clarification-plan.md)，工具数据C12，入口`node tools/memory-tuning/chat-operation-probe.cjs --mode l1|l2 --case C12 --out <新文件>`。独立结果见[s03o-live-clarification-review.md](s03o-live-clarification-review.md)：L1构造聊天＋真实关系两轮PASS；L2真实模型直删，完整两轮NOT_COVERED。不得由L1推断全真实两轮或完整S03通过。
+
+
+## 凛困倦候选（2026-10-28）
+
+按[s07-drowsy-plan.md](s07-drowsy-plan.md)：POL-DROWSY-ASSET-001/002导出与独立播放器范围PASS；003静态比较完成，跨动作连续播放、正式触发/中断NOT_COVERED。源/导出/提示词和master证据详[制作记录](../../../assets/characters/rin/source/drowsy-pixel-notes.md)。不代表S07或正式资源全库通过。

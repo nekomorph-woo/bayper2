@@ -1,0 +1,430 @@
+{
+  "tool": "sprite-pipeline",
+  "source": {
+    "path": "assets/characters/rin/source/drowsy-pixel-v2.png",
+    "sha256": "4942b685e1e334cd2b4e8ca30c9ae3e31d8664d839b5241aa81e2f5354a87db0",
+    "size": {
+      "width": 1536,
+      "height": 1024
+    }
+  },
+  "spec": {
+    "columns": 4,
+    "rows": 2,
+    "frame_size": {
+      "width": 256,
+      "height": 384
+    },
+    "alpha_threshold": 16,
+    "scale": 0.70347,
+    "neutral_height": 223,
+    "resample": "nearest",
+    "alignment": "explicit-region-anchor",
+    "padding": 8,
+    "anchor_mode": "explicit-region-anchor",
+    "anchor_note": "按配置的每帧源区域与区域内anchor统一缩放；输出地面锚固定，anchor以下像素保留",
+    "output_ground_anchor": {
+      "x": 128,
+      "y": 376
+    },
+    "regions_config": {
+      "path": "tools/sprite-pipeline/data/rin-drowsy-v2-regions.json",
+      "sha256": "106937dbea835a982673544c181a5867cac1575e5a4e3a48e0344b42b2ce3f0c",
+      "content": {
+        "schemaVersion": 1,
+        "sourceSha256": "4942b685e1e334cd2b4e8ca30c9ae3e31d8664d839b5241aa81e2f5354a87db0",
+        "columns": 4,
+        "rows": 2,
+        "note": "drowsy-pixel-v2 显式区域：按实际排布上行 y100..470、下行 y600..980，不沿用提示词网格地面。anchor.x 取每帧顶部 40% 轮廓带（头/耳/发顶）水平中点，避免右侧尾巴伸缩带动整体 bbox 中点；anchor.y 取该帧最低 alpha>16 像素的下边界（上行 445、下行绝对 954），即实际接地。导出统一地面 128,376，padding 8。",
+        "regions": [
+          {
+            "x": 40,
+            "y": 100,
+            "width": 328,
+            "height": 370,
+            "anchor": {
+              "x": 161,
+              "y": 345
+            }
+          },
+          {
+            "x": 424,
+            "y": 100,
+            "width": 328,
+            "height": 370,
+            "anchor": {
+              "x": 160,
+              "y": 345
+            }
+          },
+          {
+            "x": 808,
+            "y": 100,
+            "width": 328,
+            "height": 370,
+            "anchor": {
+              "x": 160,
+              "y": 345
+            }
+          },
+          {
+            "x": 1192,
+            "y": 100,
+            "width": 328,
+            "height": 370,
+            "anchor": {
+              "x": 159,
+              "y": 345
+            }
+          },
+          {
+            "x": 40,
+            "y": 600,
+            "width": 328,
+            "height": 380,
+            "anchor": {
+              "x": 161,
+              "y": 354
+            }
+          },
+          {
+            "x": 424,
+            "y": 600,
+            "width": 328,
+            "height": 380,
+            "anchor": {
+              "x": 160,
+              "y": 354
+            }
+          },
+          {
+            "x": 808,
+            "y": 600,
+            "width": 328,
+            "height": 380,
+            "anchor": {
+              "x": 160,
+              "y": 354
+            }
+          },
+          {
+            "x": 1192,
+            "y": 600,
+            "width": 328,
+            "height": 380,
+            "anchor": {
+              "x": 160,
+              "y": 354
+            }
+          }
+        ]
+      }
+    }
+  },
+  "loop": false,
+  "frame_durations_ms": [
+    400,
+    240,
+    220,
+    420,
+    300,
+    240,
+    300,
+    500
+  ],
+  "atlas": {
+    "file": "atlas.png",
+    "columns": 4,
+    "rows": 2,
+    "frame_size": {
+      "width": 256,
+      "height": 384
+    }
+  },
+  "contact_sheets": {
+    "light": "contact-sheet-light.png",
+    "dark": "contact-sheet-dark.png"
+  },
+  "frames": [
+    {
+      "index": 0,
+      "row": 0,
+      "column": 0,
+      "file": "frame-00.png",
+      "duration_ms": 400,
+      "source_region": {
+        "x": 40,
+        "y": 100,
+        "width": 328,
+        "height": 370
+      },
+      "source_bbox": {
+        "x": 73,
+        "y": 128,
+        "width": 268,
+        "height": 317
+      },
+      "source_anchor": {
+        "x": 201,
+        "y": 445
+      },
+      "output_ground_anchor": {
+        "x": 128,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 189,
+        "height": 223
+      },
+      "paste": {
+        "x": 38,
+        "y": 153
+      }
+    },
+    {
+      "index": 1,
+      "row": 0,
+      "column": 1,
+      "file": "frame-01.png",
+      "duration_ms": 240,
+      "source_region": {
+        "x": 424,
+        "y": 100,
+        "width": 328,
+        "height": 370
+      },
+      "source_bbox": {
+        "x": 457,
+        "y": 128,
+        "width": 268,
+        "height": 317
+      },
+      "source_anchor": {
+        "x": 584,
+        "y": 445
+      },
+      "output_ground_anchor": {
+        "x": 128,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 189,
+        "height": 223
+      },
+      "paste": {
+        "x": 39,
+        "y": 153
+      }
+    },
+    {
+      "index": 2,
+      "row": 0,
+      "column": 2,
+      "file": "frame-02.png",
+      "duration_ms": 220,
+      "source_region": {
+        "x": 808,
+        "y": 100,
+        "width": 328,
+        "height": 370
+      },
+      "source_bbox": {
+        "x": 841,
+        "y": 128,
+        "width": 268,
+        "height": 317
+      },
+      "source_anchor": {
+        "x": 968,
+        "y": 445
+      },
+      "output_ground_anchor": {
+        "x": 128,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 189,
+        "height": 223
+      },
+      "paste": {
+        "x": 39,
+        "y": 153
+      }
+    },
+    {
+      "index": 3,
+      "row": 0,
+      "column": 3,
+      "file": "frame-03.png",
+      "duration_ms": 420,
+      "source_region": {
+        "x": 1192,
+        "y": 100,
+        "width": 328,
+        "height": 370
+      },
+      "source_bbox": {
+        "x": 1225,
+        "y": 128,
+        "width": 268,
+        "height": 317
+      },
+      "source_anchor": {
+        "x": 1351,
+        "y": 445
+      },
+      "output_ground_anchor": {
+        "x": 128,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 189,
+        "height": 223
+      },
+      "paste": {
+        "x": 39,
+        "y": 153
+      }
+    },
+    {
+      "index": 4,
+      "row": 1,
+      "column": 0,
+      "file": "frame-04.png",
+      "duration_ms": 300,
+      "source_region": {
+        "x": 40,
+        "y": 600,
+        "width": 328,
+        "height": 380
+      },
+      "source_bbox": {
+        "x": 73,
+        "y": 633,
+        "width": 270,
+        "height": 321
+      },
+      "source_anchor": {
+        "x": 201,
+        "y": 954
+      },
+      "output_ground_anchor": {
+        "x": 128,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 190,
+        "height": 226
+      },
+      "paste": {
+        "x": 38,
+        "y": 150
+      }
+    },
+    {
+      "index": 5,
+      "row": 1,
+      "column": 1,
+      "file": "frame-05.png",
+      "duration_ms": 240,
+      "source_region": {
+        "x": 424,
+        "y": 600,
+        "width": 328,
+        "height": 380
+      },
+      "source_bbox": {
+        "x": 457,
+        "y": 633,
+        "width": 269,
+        "height": 321
+      },
+      "source_anchor": {
+        "x": 584,
+        "y": 954
+      },
+      "output_ground_anchor": {
+        "x": 128,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 189,
+        "height": 226
+      },
+      "paste": {
+        "x": 39,
+        "y": 150
+      }
+    },
+    {
+      "index": 6,
+      "row": 1,
+      "column": 2,
+      "file": "frame-06.png",
+      "duration_ms": 300,
+      "source_region": {
+        "x": 808,
+        "y": 600,
+        "width": 328,
+        "height": 380
+      },
+      "source_bbox": {
+        "x": 841,
+        "y": 633,
+        "width": 269,
+        "height": 321
+      },
+      "source_anchor": {
+        "x": 968,
+        "y": 954
+      },
+      "output_ground_anchor": {
+        "x": 128,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 189,
+        "height": 226
+      },
+      "paste": {
+        "x": 39,
+        "y": 150
+      }
+    },
+    {
+      "index": 7,
+      "row": 1,
+      "column": 3,
+      "file": "frame-07.png",
+      "duration_ms": 500,
+      "source_region": {
+        "x": 1192,
+        "y": 600,
+        "width": 328,
+        "height": 380
+      },
+      "source_bbox": {
+        "x": 1225,
+        "y": 633,
+        "width": 268,
+        "height": 321
+      },
+      "source_anchor": {
+        "x": 1352,
+        "y": 954
+      },
+      "output_ground_anchor": {
+        "x": 128,
+        "y": 376
+      },
+      "scaled_size": {
+        "width": 189,
+        "height": 226
+      },
+      "paste": {
+        "x": 39,
+        "y": 150
+      }
+    }
+  ]
+}
