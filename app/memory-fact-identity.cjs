@@ -1,9 +1,9 @@
 /* S03l 事实身份的纯计算部分：不接触数据库，也不保存正文或模型解释。
-   factKey 只是模型给出的主题定位提示，不能跨角色当作同一事实。这里只定义
-   无需模型即可确认的极窄同一性：用户明确说出的 identity/preference，其余
-   条件（正文、类别、可信性质、来源种类、有效期限）全部严格相同。
+   factKey 只是模型给出的主题定位提示，不能跨角色当作同一事实。这里定义的
+   严格指纹只服务别名与控制覆盖：正文相同不能证明主体相同，事实身份由各来源
+   独立建立，只有明确派生或经核验的 associateFacts 才建立关联。
    正文只做 trim/NFC，不去否定、不替换词、不删标点；experience/detail
-   即使同文也不自动合并（“我们一起”可能是不同的共同经历）。 */
+   即使同文也不会自动合并（“我们一起”可能是不同的共同经历）。 */
 const crypto = require("node:crypto");
 
 const REUSABLE_KINDS = new Set(["identity", "preference"]);
@@ -36,8 +36,9 @@ function strictFactFingerprint({ kind, trust, sourceKind, expiresAt, body }) {
   return crypto.createHash("sha256").update(payload, "utf8").digest("hex");
 }
 
-/* 可复用身份的指纹只覆盖用户明确说出的 identity/preference；
-   其余事实没有可安全跨角色复用的身份证据。 */
+/* 可登记为别名的正文指纹：只覆盖用户明确说出的 identity/preference，用于
+   删除/禁分享控制覆盖。它不含主体或语境，不能证明两条事实是同一身份，
+   新来源与缺身份迁移都不再据此复用或归组。 */
 function identityFingerprint({ kind, trust, sourceKind, expiresAt, body }) {
   const source = sourceKind ?? "user";
   if (!REUSABLE_KINDS.has(kind) || trust !== "stated" || source !== "user") {

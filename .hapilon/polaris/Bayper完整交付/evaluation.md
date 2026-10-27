@@ -5,9 +5,9 @@
 本文件是当前唯一逐 Case 结果入口。各 review 保留原始判断、失败过程和长证据说明，本文只登记可定位的结果，不复制全文。状态仅用 execution.md 的五种：PASS、FAIL、ERROR、INCONCLUSIVE、NOT_COVERED；不使用 PARTIAL，也不把多个 Case 压成平均分或“最差状态”。
 
 - 分组：仅当版本、状态、证据和执行边界相同时，一个精确 ID 范围可共用一行；任一 Case 或必需子项有差异即拆行。`001～003` 只表示这些 ID 满足本行，不覆盖范围外或未执行项。
-- 版本：历史行以对应 review/evidence 的验收基线与源摘要定位，未记录 commit 的不补猜。已提交快照为 `fdf7144`（当时 VERSION `0.1.181`，领先 origin/main 133，未推送）；本批拟 snap VERSION `0.1.182`，未产生新 hash。工作区另有 5 个未提交 memory 源码/测试文件，SHA 见 [process-freeze.json](evidence/process-freeze.json)。
-- master 已受托验收 7 个最终 Contract v1/Part A-B，GAP-14 流程补齐通过；GAP-01～14 流程处置完成（GAP-06 仅流程记录、产品修复未完成；GAP-08 原证据未找回限制保留）。本批 snap 前暂不改产品，提交后接回 S03；产品未交付。
-- 历史 PASS 只证明该验收基线，不证明当前未提交工作区。受 memory/chat 身份链改动影响的组在“当前适用”列标“待回归”；没有重跑就不写当前 PASS。反之，当前工作区未验收也不能推断所有历史产品从未通过。
+- 版本：历史行以对应 review/evidence 的验收基线与源摘要定位，未记录 commit 的不补猜。已提交快照为 `4597953`（当时 VERSION `0.1.183`）；本批准备 VERSION `0.1.184` 待 master snap。工作区未提交 memory 源码/测试的当前 SHA 见各 attempt 的 `code-sha256.txt`；[process-freeze.json](evidence/process-freeze.json) 仅保留流程补齐时点，不再作为当前实现基线。
+- master 已受托验收 7 个最终 Contract v1/Part A-B，GAP-14 流程补齐通过；GAP-01～14 流程处置完成（GAP-06 仅流程记录、产品修复未完成；GAP-08 原证据未找回限制保留）。master 另于 2026-10-27 受托接受**来源身份 v2 有限能力**，非 S03/Goal 完成；产品未交付。
+- 历史 PASS 只证明该验收基线，不证明当前未提交工作区。2026-10-27 master 最终 17 套件 163/163 已重跑对应领域/服务 Runner；未在该批执行的 UI、真实模型、holdout/source-live/pro 组保持历史状态与各自未覆盖边界，不写成当前通过。没有重跑就不写当前 PASS；当前工作区未验收也不能推断历史产品从未通过。
 - Runner 退出码、编译成功、开发报告全绿或 review 中的切片受托接受，均不自动升级为父级或整 Case 通过。体验记录已标明实际操作者、方法与局限；Codex 受托体验不是人类亲自体验，已有授权不要求真人重新批准。
 
 - Runner 入口统一相对仓库根；本表不逐行重复参数。领域默认 `node --test tests/acceptance/<file>.spec.cjs`；GUI/隔离串行默认 `node --test --test-concurrency=1 tests/acceptance/<file>.spec.cjs`；工具 `node <tools能力入口> --out <新文件>` 或 `python3 <工具脚本>`；真实服务/隔离 Herdr/环境变量按 [acceptance-plan.md](acceptance-plan.md) 对应父级行。历史未记录逐字参数的不补造。
@@ -72,10 +72,10 @@
 | SEM-003、004、008（v1） | PASS | 2026-10-27 s03l identity r4；当前未重跑 | `tools/memory-tuning/semantic-baseline.cjs` | [semantic-baseline-codex-identity-r4.json](tools/memory-tuning/results/semantic-baseline-codex-identity-r4.json) | 构造场景；不等于通用语义理解 |
 | SEM-001、002、005、006、007（v1） | FAIL | 同上 r4；当前未重跑 | 同上 | 同上（3 PASS/5 FAIL，50/75 检查） | 五处失败为后续必做缺口，不能以其他切片变绿抵销 |
 | POL-FACTID-001、003（v1） | PASS | 2026-10-27 s03l-a r4；当前待回归 | `memory-fact-identity.spec.cjs`、领域回归 | [s03l-domain-codex-r4.log](evidence/s03l-domain-codex-r4.log) 119/119 | 构造 HTTP/fixture；真实模型语义未验 |
-| POL-FACTID-002（v2） | INCONCLUSIVE | v1 PASS 已失效；v2 只有开发报告 2/2，未独立验收 | `memory-fact-identity.spec.cjs`、`memory-source-identity.spec.cjs` | [claude-s03l-source-identity.json](evidence/claude-s03l-source-identity.json) | 需 master 独立执行与旧机制断言迁移决定 |
-| POL-FACTID-004～006（v1） | INCONCLUSIVE | v1 业务 Expected 仍有效，r4 历史 PASS；当前 v2 实现使 5 项同文复用机制 fixture FAIL，fixture 待迁移 | 同 FACTID 套件 | [claude-s03l-source-identity.json](evidence/claude-s03l-source-identity.json) | 不把该组称为 v2 Case；不得据机制未迁移改写 v1 业务约束，待独立回归 |
+| POL-FACTID-002（v2） | PASS（有限能力） | 2026-10-27 master 17 套件最终批 163/163；v2 实现独立验收，真实模型语义未覆盖 | `memory-fact-identity.spec.cjs` 16/16；见上方来源身份矩阵 | [master-source-final-aYYduWmG/run.log](evidence/master-source-final-aYYduWmG/run.log) | 真实模型语义未完成；存量已有误合组未迁移；v1 同文复用机制 PASS 仍失效 |
+| POL-FACTID-004～006（v1） | PASS | v1 业务 Expected 在 v2 实现下由 master 17 套件最终批通过；不称为 v2 Case | `memory-fact-identity.spec.cjs` 16/16 | [master-source-final-aYYduWmG/run.log](evidence/master-source-final-aYYduWmG/run.log) | 构造 HTTP/fixture；不改变 v1 业务约束；真实模型语义未验 |
 | POL-ASSOC-001、003、004、005（v1） | PASS | 2026-10-27 s03l-b r3；当前待回归 | `memory-association.spec.cjs` 及 12 领域文件 | [s03l-association-codex-r3.log](evidence/s03l-association-codex-r3.log) | 模型语义核验/资格预算接线未完成 |
-| POL-ASSOC-002（v1） | INCONCLUSIVE | r3 历史 PASS；当前 v2 实现使 1 项同文复用机制 fixture FAIL，v1 业务 Expected 不变 | 同上 | [claude-s03l-source-identity.json](evidence/claude-s03l-source-identity.json) | 待显式 associateFacts fixture 迁移与独立回归，不改写 Expected |
+| POL-ASSOC-002（v1） | PASS | 2026-10-27 master 17 套件最终批；显式 associateFacts fixture 已迁移，v1 业务 Expected 不变 | `memory-association.spec.cjs` 9/9 | [master-source-final-aYYduWmG/run.log](evidence/master-source-final-aYYduWmG/run.log) | 构造等价 Fixture；模型语义核验/资格预算接线未完成 |
 | POL-SEM-HOLD-001（01～16） | FAIL | 2026-10-27 holdout 真实模型单批；当前未重跑 | `semantic-probe.cjs --dataset holdout` | [semantic-holdout-codex-live-v2.json](tools/memory-tuning/results/semantic-holdout-codex-live-v2.json) | 14 PASS/2 FAIL（11、12）；falseMerge=2；固定样本不证明泛化 |
 | POL-REL-001～003（v1） | PASS | 2026-10-27 grounding；构造输出边界 | `memory-relation-protocol.spec.cjs` | [s03l-grounding-codex-r2.log](evidence/s03l-grounding-codex-r2.log) | 不写库、不调模型；引用存在不等于解释正确 |
 | POL-REL-004（baseline 子项） | PASS | 真实模型单批 16/16 | `semantic-probe.cjs` grounded | [grounding-baseline-live-codex-v1.json](tools/memory-tuning/results/grounding-baseline-live-codex-v1.json) | 单次构造真实模型；不证明生产可靠 |
@@ -84,7 +84,21 @@
 | POL-SOURCECTX-001～006（v1） | PASS | 2026-10-27 source-context r2；当前待回归 | `memory-source-context.spec.cjs` 及 6 领域文件 | [s03l-source-context-codex-r2.log](evidence/s03l-source-context-codex-r2.log) 74/74 | 只读模块；未接角色回复上下文 |
 | POL-SOURCE-REL-001～004（v1） | PASS | 2026-10-27 source-grounding r3；当前待回归 | `memory-source-relation.spec.cjs`、`memory-relation-protocol.spec.cjs` | [s03l-source-grounding-codex.log](evidence/s03l-source-grounding-codex.log) 18/18 | 构造模型输出；抗注入/主体推断未验 |
 | POL-SOURCE-LIVE-001（01～12） | FAIL | 2026-10-27 真实 DeepSeek 单批；当前未重跑 | `tools/memory-tuning/source-probe.cjs` | [source-live-codex-v1.json](tools/memory-tuning/results/source-live-codex-v1.json) | 10 PASS/2 FAIL（06、11）；falseMerge=0、missedEquivalent=0；不证明泛化/抗注入 |
-| POL-SOURCE-ID-001～004（v1 计划） | INCONCLUSIVE | 开发报告 4/4，master 未独立验收；当前待回归 | `memory-source-identity.spec.cjs` | [claude-s03l-source-identity.json](evidence/claude-s03l-source-identity.json)、[s03l-source-identity-before.log](evidence/s03l-source-identity-before.log) | 存量误合组未迁移；实现未独立验收 |
+| POL-SOURCE-ID-001～004（v1 计划） | PASS（有限能力） | 2026-10-27 master 17 套件最终批 163/163；真实 store/chat 核心、模型 HTTP 构造 | `memory-source-identity.spec.cjs` 4/4；见上方来源身份矩阵 | [master-source-final-aYYduWmG/run.log](evidence/master-source-final-aYYduWmG/run.log) | 存量已有误合组未迁移；UI/真实模型/live未验 |
+
+#### 来源身份 v2 有限能力验收矩阵（2026-10-27 master 最终批）
+
+master 最终运行 **17 套件 163/163 PASS、0 skipped、真实 exit 0**，原始记录 [master-source-final-aYYduWmG](evidence/master-source-final-aYYduWmG/run.log)；命令/摘要见 [source-identity-v2-acceptance-20261027](evidence/source-identity-v2-acceptance-20261027/master-final-summary.md)。本组只证明真实 SQLite/chat 核心、缺身份迁移与显式关联传播；聊天模型 HTTP 为构造，未取得 UI/真实模型/live 证据。
+
+| Case | 结果 | Given / When / Expected 摘要 | 实际观察与证据 | 未覆盖边界 |
+|---|---|---|---|---|
+| POL-SOURCE-ID-001 | PASS | 同角色两个独立 chat 会话含同片段、不同 key；各建条目/身份，管理一个不改另一个，重启保持 | `memory-source-identity.spec.cjs` 4/4，master 17 套件批次 | 构造 HTTP；真实模型/GUI未验 |
+| POL-SOURCE-ID-002 | PASS | 两角色独立 chat 分别谈姐姐/同事，同片段不同 key；未显式关联时管理 A 不改 B 正文/版本/来源/FTS | 同上 | 构造 HTTP；不证明通用语义 |
+| POL-SOURCE-ID-003 | PASS | b 来源为同一姐姐的等价表述；先显式 `associateFacts`，随后 correct/share/relay 传播；未知角色不新增 | 同上 | 等价由 Fixture 明确提供，不冒称模型判断 |
+| POL-SOURCE-ID-004 | PASS | 缺身份旧库同文独立来源各自建身份；明确派生链保留；旧控制与正文保留 | 同上 | 已持久化旧误合组未拆解；迁移另批 |
+| POL-FACTID-002（v2） | PASS（有限能力） | 独立同文来源不自动同组；显式核实后同步/删除/未知 C 保护按身份传播；v1 同文复用机制 PASS 仍失效 | `memory-fact-identity.spec.cjs` 16/16，master 17 套件批次 | 真实模型语义核验未完成；旧误合组未迁移 |
+
+本次实际运行范围（17 文件，163 项）：`chat-exclusive` 6、`chat-memory-operations` 23、`chat-relay` 12、`chat-sharing-setting` 4、`chat` 18、`memory-association` 9、`memory-auto-share` 5、`memory-exclusive` 5、`memory-fact-identity` 16、`memory-relation-protocol` 8、`memory-sharing` 8、`memory-source-context` 6、`memory-source-identity` 4、`memory-source-relation` 4、`memory` 15、`source-analysis` 11、`theme-memory-sharing` 9。表中这些文件的领域/服务行以该批为当前执行证据；历史基线保留，但“当前待回归”对这些实际运行的领域/服务范围不再适用；其 UI/live/真实模型子项未在本次执行，仍以各行未覆盖边界为准。
 
 说明：s03b-review 是首版服务退回记录，不作为 CHAT 最终状态来源；上表以最终服务/窗口日志及后续切片 Runner 定位。CHAT-001～007 的 v1 业务 Expected 仍有效，缺证只限各行“未覆盖边界”所列子项。
 
@@ -143,16 +157,16 @@
 | POL-FINAL-E2E-001（v1） | NOT_COVERED | 只登记；内层 Case 原样引用，无单条最终链 | 待实施 | 历史 CHAT-008/HERDR-LIVE 等仅边界 | 真实模型＋隔离 Herdr、突发/重连、断模型、撤权在途与跨重启未合并验收 |
 | POL-FINAL-DELIVERY-001（v1） | NOT_COVERED | 只登记；交付文档/snap/清理由 master 主持 | 待实施 | 无最终交付证据 | 启动/配置/数据说明、全需求映射、环境清理与工具抽查未验 |
 
-下一最小切片（只记录、不实施）：来源身份 v2 的 6 处旧同文 fixture 适配及独立回归；随后立即处理存量错误身份组迁移，并接回 S03 语义纠正/删除/共享闭环。
+下一最小步骤（只设计、不编码）：存量误合身份组安全迁移——区分可证明派生与无持久关联证据的旧组，控制不得丢失，不臆测旧关联来源；随后接回 S03 语义纠正/删除/共享闭环。
 
 ## 当前失败、未验证与待回归（不得写成通过）
 
-- **来源身份 v2（当前未提交工作区）**：开发报告四套件 35 项为 29 PASS/6 FAIL，master 未独立验收。POL-FACTID-002 v1 的“严格同文可复用身份”PASS 已失效；6 个 FAIL 分别位于 FACTID-004 禁分享/独属、FACTID-005 迁移/回滚、FACTID-006 跨键同文、ASSOC-002 精确正文复用（见 [claude-s03l-source-identity.json](evidence/claude-s03l-source-identity.json)）。已持久旧身份组未拆解，存量误合组未迁移；修复/补验在流程补齐后另派。
+- **来源身份 v2（有限能力已受托接受，2026-10-27）**：master 最终 17 套件 **163/163 PASS、0 skipped、exit 0**，接受新独立来源同文不归组、缺身份迁移按明确派生、显式 `associateFacts` 传播、相关回归通过。历史开发报告 35 项 29 PASS/6 FAIL、首次独立 35/35 与前次 128/125/3 均保留为时点记录，失败原件未覆盖。POL-FACTID-002 v1 机制 PASS 仍失效；存量已有误合组未迁移；语义模型闭环、正式主题自动分享 GUI 与正式资源未完成；不得据此宣称 S03/Goal 通过。
 - **语义与真实模型（分层）**：SEM 是真实 SQLite/正式 memory 的本地构造 Runner，不使用真实模型，r4 为 3 PASS/5 FAIL；holdout、source-live、REL-004 与 pro 对照才是真实模型工具层，使用构造数据（holdout 2 FAIL：11、12；source-live 2 FAIL：06、11；pro FAIL）。SEM 本地失败不能由模型 probe 变绿抵销；单次 probe 也不证明生产语义。
 - **正式内容**：`app/content/maid-stories.json` 四个故事 `maid.meet.rin`、`maid.meet.hu`、`maid.meet.cheng`、`maid.outfit.rin-warm-tea` 的 `assetAvailable` 均为 `false`；CONTENT 领域 PASS 不等于正式发布、可见故事或动画完成。
 - **素材候选**：ASSET-002 仍 INCONCLUSIVE；ASSET3-001 透明命中 NOT_COVERED；Hu/Cheng 仍为候选；36 动作、正式服装、过渡与中断、其他角色日常未完成。
 - **原生边界**：DESKTOP-003（Spaces/全屏）与 DESKTOP-006 真实锁屏/休眠 NOT_COVERED；托盘原生点击 NOT_COVERED；HIT 仅 scaleFactor=1。测试截图、受控 powerMonitor 事件不能冒充物理操作或 Retina 硬件证据。
-- **当前工作区回归**：5 个未提交产品文件为 `app/memory.cjs`、`app/memory-store.cjs`、`app/memory-fact-identity.cjs`、`tests/acceptance/memory-fact-identity.spec.cjs`、`tests/acceptance/memory-source-identity.spec.cjs`（另有本轮流程文档改动，不属产品）。凡执行 memory/chat/source/story-sharing 身份链的历史组均未在当前工作区重跑，保持历史 PASS 但标“待回归”；旧 commit 的测试结果不证明新工作区通过。
+- **当前工作区回归**：未提交实现含 `app/memory.cjs`、`app/memory-store.cjs`、`app/memory-fact-identity.cjs` 与 `memory.spec.cjs`、`memory-fact-identity.spec.cjs`、`memory-association.spec.cjs`、`memory-source-identity.spec.cjs`。master 2026-10-27 最终 17 套件 163/163 已重跑对应领域/服务 Runner；未在该批执行的 UI、真实模型、holdout/source-live/pro 与 story GUI 组仍保持历史状态和未覆盖边界，旧 commit 结果不证明这些未重跑组。
 
 ---
 

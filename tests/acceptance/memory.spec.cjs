@@ -137,6 +137,12 @@ test("POL-MEMORY-003 已定位纠正更新原始与派生持有者并保留来�
     kind: "experience",
     sourceId: "a-sea",
   });
+  // a 与 d 的正文是同一用户偏好，但独立来源不会自动同组：先显式核实关联。
+  const associated = ctx.service.associateFacts({
+    left: { entryId: original.entry.id, expectedVersion: original.entry.version },
+    right: { entryId: independent.entry.id, expectedVersion: independent.entry.version },
+  });
+  assert.equal(associated.associated, true);
   const versionsBefore = {
     a: ctx.service.getContextVersion("a"),
     b: ctx.service.getContextVersion("b"),
@@ -472,17 +478,23 @@ test("上下文版本、回滚与错误边界", (t) => {
     body: "用户喜欢旧理解",
     sourceId: "a-one",
   });
-  const versionAfterRemember = ctx.service.getContextVersion("a");
-  assert.ok(versionAfterRemember > before);
-  assert.equal(ctx.service.isContextCurrent("a", versionAfterRemember), true);
-
   const independent = remember(ctx.service, {
     characterId: "d",
     factKey: "pref.rollback",
     body: "用户喜欢旧理解",
     sourceId: "d-one",
   });
+  // a 与 d 是同一用户偏好，但独立来源不会自动同组：先显式核实关联。
+  const associated = ctx.service.associateFacts({
+    left: { entryId: first.entry.id, expectedVersion: first.entry.version },
+    right: { entryId: independent.entry.id, expectedVersion: independent.entry.version },
+  });
+  assert.equal(associated.associated, true);
+  const versionAfterRemember = ctx.service.getContextVersion("a");
   const dVersionAfterRemember = ctx.service.getContextVersion("d");
+  assert.ok(versionAfterRemember > before);
+  assert.equal(ctx.service.isContextCurrent("a", versionAfterRemember), true);
+
   ctx.db.exec(`
     CREATE TRIGGER fail_d_update BEFORE UPDATE ON memory_entries
     WHEN NEW.character_id = 'd'
@@ -595,6 +607,12 @@ test("REVIEW-1 correct 排除原始与独立持有者旧来源并保留新纠正
     body: "用户喜欢甜咖啡",
     sourceId: "d-old-source",
   });
+  // a 与 d 是同一用户偏好，但独立来源不会自动同组：先显式核实关联。
+  const associated = ctx.service.associateFacts({
+    left: { entryId: aEntry.entry.id, expectedVersion: aEntry.entry.version },
+    right: { entryId: dEntry.entry.id, expectedVersion: dEntry.entry.version },
+  });
+  assert.equal(associated.associated, true);
   const shared = ctx.service.share({
     fromCharacterId: "a",
     toCharacterId: "b",

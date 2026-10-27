@@ -291,7 +291,7 @@ test("POL-FACTID-001 同键不同主体或性质：纠正删除只触达实际�
   assert.equal(entryOf(ctx.service, "d", "pref.weekend").id, dHistory.entry.id);
 });
 
-test("POL-FACTID-002 严格相同明确偏好可跨键复用身份；旧库迁移后同样生效", (t) => {
+test("POL-FACTID-002 独立同文来源各自建身份，已核实同步须显式 associateFacts", (t) => {
   const ctx = makeContext(t);
   const aEntry = ctx.service.remember({
     characterId: "a",
@@ -300,29 +300,47 @@ test("POL-FACTID-002 严格相同明确偏好可跨键复用身份；旧库迁�
     kind: "preference",
     sourceId: "a-coffee",
   });
-  ctx.service.remember({
+  const bEntry = ctx.service.remember({
     characterId: "b",
     factKey: "pref.b.coffee",
     body: "用户喜欢无糖咖啡",
     kind: "preference",
     sourceId: "b-coffee",
   });
-  assert.equal(identityOf(ctx.db, "a", "pref.a.coffee"), identityOf(ctx.db, "b", "pref.b.coffee"));
+  // 正文相同不能证明主体相同：独立来源各自建身份，不同键也不返回首次条目。
+  assert.notEqual(
+    identityOf(ctx.db, "a", "pref.a.coffee"),
+    identityOf(ctx.db, "b", "pref.b.coffee"),
+  );
   const bHeld = entryOf(ctx.service, "b", "pref.b.coffee");
+  assert.equal(bHeld.id, bEntry.entry.id);
   assert.equal(bHeld.originCharacterId, "b");
   assert.equal(bHeld.derived, false);
   assert.equal(countRows(ctx.db, "memory_derivations"), 0);
 
+  // 已核实的等价由调用方显式关联；同步、删除等业务断言经此路径保留。
+  const associated = ctx.service.associateFacts({
+    left: { entryId: aEntry.entry.id, expectedVersion: 1 },
+    right: { entryId: bEntry.entry.id, expectedVersion: 1 },
+  });
+  assert.equal(associated.associated, true);
+  assert.equal(
+    identityOf(ctx.db, "a", "pref.a.coffee"),
+    identityOf(ctx.db, "b", "pref.b.coffee"),
+  );
+  const versionAfterAssociation = entryOf(ctx.service, "b", "pref.b.coffee").version;
+  assert.equal(versionAfterAssociation, 2);
+
   ctx.service.correct({
     characterId: "a",
     entryId: aEntry.entry.id,
-    expectedVersion: 1,
+    expectedVersion: versionAfterAssociation,
     body: "用户只喝纯黑咖啡",
     sourceId: "a-coffee-new",
   });
   const bCorrected = entryOf(ctx.service, "b", "pref.b.coffee");
   assert.equal(bCorrected.body, "用户只喝纯黑咖啡");
-  assert.equal(bCorrected.version, 2);
+  assert.equal(bCorrected.version, versionAfterAssociation + 1);
   assert.equal(bCorrected.derived, false);
   assert.equal(bCorrected.originCharacterId, "b");
   assert.deepEqual(ctx.service.listMemories("c"), []);
@@ -362,14 +380,24 @@ test("POL-FACTID-002 严格相同明确偏好可跨键复用身份；旧库迁�
   assert.equal(entryOf(ctx.service, "d", "exp.d.rain").body, "我们一起在雨夜走过桥");
   assert.equal(entryOf(ctx.service, "d", "exp.d.rain").id, dHistory.entry.id);
 
-  // 正文比较只做 trim/NFC：组合与分解形式视为同一正文，不额外删词或改否定。
-  ctx.service.remember({
+  // 正文比较只做 trim/NFC：同键的组合与分解形式仍是同一正文（幂等），
+  // 但跨角色同文依然各自独立，不因归一化而共享身份。
+  const cafe = ctx.service.remember({
     characterId: "a",
     factKey: "pref.cafe",
     body: "用户喜欢 café",
     kind: "preference",
     sourceId: "a-cafe",
   });
+  const cafeAgain = ctx.service.remember({
+    characterId: "a",
+    factKey: "pref.cafe",
+    body: "用户喜欢 café",
+    kind: "preference",
+    sourceId: "a-cafe-again",
+  });
+  assert.equal(cafeAgain.created, false);
+  assert.equal(cafeAgain.entry.id, cafe.entry.id);
   ctx.service.remember({
     characterId: "b",
     factKey: "pref.cafe.other",
@@ -377,10 +405,13 @@ test("POL-FACTID-002 严格相同明确偏好可跨键复用身份；旧库迁�
     kind: "preference",
     sourceId: "b-cafe",
   });
-  assert.equal(identityOf(ctx.db, "a", "pref.cafe"), identityOf(ctx.db, "b", "pref.cafe.other"));
+  assert.notEqual(
+    identityOf(ctx.db, "a", "pref.cafe"),
+    identityOf(ctx.db, "b", "pref.cafe.other"),
+  );
 });
 
-test("POL-FACTID-002 旧库迁移：严格同文不同键同组，同键不同正文不合并", (t) => {
+test("POL-FACTID-002 旧库迁移：缺身份同文各自独立，已核实同步须显式关联", (t) => {
   const ctx = makeLegacyContext(t, (db) => {
     insertLegacyEntry(db, {
       id: "legacy-a-coffee",
@@ -416,8 +447,25 @@ test("POL-FACTID-002 旧库迁移：严格同文不同键同组，同键不同�
     });
   });
 
-  assert.equal(identityOf(ctx.db, "a", "pref.a.coffee"), identityOf(ctx.db, "b", "pref.b.coffee"));
+  // 缺身份的旧记录迁移时不按同文归组；同键不同正文同样不合并。
+  assert.notEqual(
+    identityOf(ctx.db, "a", "pref.a.coffee"),
+    identityOf(ctx.db, "b", "pref.b.coffee"),
+  );
   assert.notEqual(identityOf(ctx.db, "a", "pref.same"), identityOf(ctx.db, "b", "pref.same"));
+
+  // 已核实的等价由调用方显式关联；之后的纠正、删除业务断言保持不变。
+  const aLegacy = entryOf(ctx.service, "a", "pref.a.coffee");
+  const bLegacy = entryOf(ctx.service, "b", "pref.b.coffee");
+  const associated = ctx.service.associateFacts({
+    left: { entryId: aLegacy.id, expectedVersion: aLegacy.version },
+    right: { entryId: bLegacy.id, expectedVersion: bLegacy.version },
+  });
+  assert.equal(associated.associated, true);
+  assert.equal(
+    identityOf(ctx.db, "a", "pref.a.coffee"),
+    identityOf(ctx.db, "b", "pref.b.coffee"),
+  );
 
   const corrected = ctx.service.correct({
     characterId: "a",
@@ -430,7 +478,10 @@ test("POL-FACTID-002 旧库迁移：严格同文不同键同组，同键不同�
   assert.equal(entryOf(ctx.service, "b", "pref.b.coffee").body, "用户只喝纯黑咖啡");
 
   ctx.reopen();
-  assert.equal(identityOf(ctx.db, "a", "pref.a.coffee"), identityOf(ctx.db, "b", "pref.b.coffee"));
+  assert.equal(
+    identityOf(ctx.db, "a", "pref.a.coffee"),
+    identityOf(ctx.db, "b", "pref.b.coffee"),
+  );
   assert.equal(entryOf(ctx.service, "a", "pref.same").body, "用户喜欢甜咖啡");
   assert.equal(entryOf(ctx.service, "b", "pref.same").body, "用户的姐姐喜欢甜咖啡");
 
@@ -535,13 +586,20 @@ test("POL-FACTID-004 禁分享与解除按身份生效；同键不同主体不�
     kind: "preference",
     sourceId: "c-sister",
   });
-  assert.equal(identityOf(ctx.db, "a", "pref.share"), identityOf(ctx.db, "b", "pref.share.other"));
+  // 独立来源的同文不构成同一事实；先由调用者显式核实等价，再测试身份级控制。
+  assert.notEqual(identityOf(ctx.db, "a", "pref.share"), identityOf(ctx.db, "b", "pref.share.other"));
   assert.notEqual(identityOf(ctx.db, "a", "pref.share"), identityOf(ctx.db, "c", "pref.share"));
+  ctx.service.associateFacts({
+    left: { entryId: aEntry.entry.id, expectedVersion: 1 },
+    right: { entryId: bEntry.entry.id, expectedVersion: 1 },
+    nowMs: ctx.nowMs(),
+  });
+  assert.equal(identityOf(ctx.db, "a", "pref.share"), identityOf(ctx.db, "b", "pref.share.other"));
 
   const restricted = ctx.service.restrictSharing({
     characterId: "a",
     entryId: aEntry.entry.id,
-    expectedVersion: 1,
+    expectedVersion: 2,
   });
   assert.deepEqual(restricted.holders, ["a", "b"]);
   assert.throws(
@@ -549,7 +607,7 @@ test("POL-FACTID-004 禁分享与解除按身份生效；同键不同主体不�
       ctx.service.relay({
         fromCharacterId: "b",
         toCharacterId: "d",
-        entries: [{ entryId: bEntry.entry.id, expectedVersion: 1 }],
+        entries: [{ entryId: bEntry.entry.id, expectedVersion: 2 }],
       }),
     hasCode("SHARE_BLOCKED"),
   );
@@ -568,14 +626,14 @@ test("POL-FACTID-004 禁分享与解除按身份生效；同键不同主体不�
   const lifted = ctx.service.allowSharing({
     characterId: "b",
     entryId: bCurrent.id,
-    expectedVersion: 1,
+    expectedVersion: 2,
   });
   assert.equal(lifted.lifted, true);
   assert.deepEqual(lifted.holders, ["a", "b"]);
   ctx.service.relay({
     fromCharacterId: "b",
     toCharacterId: "d",
-    entries: [{ entryId: bEntry.entry.id, expectedVersion: 1 }],
+    entries: [{ entryId: bEntry.entry.id, expectedVersion: 2 }],
   });
   assert.equal(entryOf(ctx.service, "d", "pref.share.other").body, "用户喜欢冷萃咖啡");
 });
@@ -918,14 +976,40 @@ test("POL-FACTID-004 独属按身份清除其他持有者，未关联主体保�
     sourceId: "c-exclusive-sister",
   });
 
+  // 独立来源的同文先保留独立身份；由调用者显式核实 a/b/d 等价后再测独属。
+  assert.equal(
+    new Set([
+      identityOf(ctx.db, "a", "pref.exclusive"),
+      identityOf(ctx.db, "b", "pref.exclusive.b"),
+      identityOf(ctx.db, "d", "pref.exclusive.d"),
+    ]).size,
+    3,
+  );
+  ctx.service.associateFacts({
+    left: { entryId: aEntry.entry.id, expectedVersion: 1 },
+    right: { entryId: entryOf(ctx.service, "b", "pref.exclusive.b").id, expectedVersion: 1 },
+    nowMs: ctx.nowMs(),
+  });
+  // 第二次关联会重新写出整组条目，a 的版本因此再 +1。
+  ctx.service.associateFacts({
+    left: { entryId: aEntry.entry.id, expectedVersion: 2 },
+    right: { entryId: entryOf(ctx.service, "d", "pref.exclusive.d").id, expectedVersion: 1 },
+    nowMs: ctx.nowMs(),
+  });
+  assert.equal(
+    identityOf(ctx.db, "a", "pref.exclusive"),
+    identityOf(ctx.db, "b", "pref.exclusive.b"),
+  );
+  assert.notEqual(identityOf(ctx.db, "a", "pref.exclusive"), identityOf(ctx.db, "c", "pref.exclusive"));
+
   const result = ctx.service.keepExclusive({
     characterId: "a",
     entryId: aEntry.entry.id,
-    expectedVersion: 1,
+    expectedVersion: 3,
   });
   assert.equal(result.cleared, 2);
   assert.deepEqual(result.clearedCharacters, ["b", "d"]);
-  assert.equal(result.version, 2);
+  assert.equal(result.version, 4);
   assert.deepEqual(ctx.service.listMemories("b"), []);
   assert.deepEqual(ctx.service.listMemories("d"), []);
   assert.deepEqual(ctx.service.listMemories("c").map((entry) => entry.id), [cEntry.entry.id]);
@@ -1212,7 +1296,8 @@ test("POL-FACTID-005 旧库迁移保留派生链、正文与旧控制，且可�
     kind: "preference",
     sourceId: "b-secret-copy",
   });
-  assert.equal(identityOf(ctx.db, "b", "pref.secret.copy"), identityOf(ctx.db, "a", "pref.secret"));
+  // 新来源的同文副本保留独立身份；旧禁分享控制仍须按正文别名阻断转告。
+  assert.notEqual(identityOf(ctx.db, "b", "pref.secret.copy"), identityOf(ctx.db, "a", "pref.secret"));
   assert.throws(
     () =>
       ctx.service.relay({
@@ -1242,9 +1327,14 @@ test("POL-FACTID-005 旧库迁移保留派生链、正文与旧控制，且可�
     sourceId: "kept-new-source",
   });
   assert.equal(keptRecall.created, false);
+  assert.equal(keptRecall.blocked, "forget");
   assert.equal(keptRecall.conflict, undefined);
-  assert.equal(keptRecall.entry.id, keptEntry.id);
+  assert.equal(keptRecall.entry, null);
   assert.equal(entryOf(ctx.service, "a", "pref.kept.new"), null);
+  // 旧控制拒绝新来源重学，但不得删除或改写已存在的 kept 记录。
+  assert.equal(entryOf(ctx.service, "a", "pref.kept").id, keptEntry.id);
+  assert.equal(entryOf(ctx.service, "a", "pref.kept").body, "用户记得旧暗号是青石");
+  assert.equal(entryOf(ctx.service, "a", "pref.kept").version, keptEntry.version);
 
   // 该条目真正删除后，同正文换键重学仍被身份控制与删除指纹阻断。
   ctx.service.forget({
@@ -1440,7 +1530,8 @@ test("POL-FACTID-005 迁移中途失败完整回滚 DDL 与业务行，调用者
 
   const service = createMemoryService({ db, now: () => START });
   assert.ok(identityOf(db, "a", "pref.a"));
-  assert.equal(identityOf(db, "a", "pref.a"), identityOf(db, "b", "pref.b"));
+  // 旧库中无派生关系的同文条目不再自动归组，各自保留独立身份。
+  assert.notEqual(identityOf(db, "a", "pref.a"), identityOf(db, "b", "pref.b"));
   assert.equal(service.listMemories("a")[0].body, "用户喜欢旧茶");
   db.close();
 });
@@ -1651,7 +1742,7 @@ test("POL-FACTID-006 同键冲突明确且零覆盖，同身份异键幂等不�
   assert.equal(entryOf(ctx.service, "b", "pref.dup").body, "用户的姐姐喜欢玫瑰花茶");
   assert.equal(entryOf(ctx.service, "b", "pref.dup").version, 1);
 
-  // 同角色同身份不同 key 的新 remember/extraction 复用已有条目，不重复插入。
+  // 同角色跨键同文来自不同来源：各自保留条目与独立身份，不能返回首条。
   const second = ctx.service.remember({
     characterId: "a",
     factKey: "pref.dup.two",
@@ -1659,10 +1750,11 @@ test("POL-FACTID-006 同键冲突明确且零覆盖，同身份异键幂等不�
     kind: "preference",
     sourceId: "a-dup-two",
   });
-  assert.equal(second.created, false);
+  assert.equal(second.created, true);
   assert.equal(second.conflict, undefined);
-  assert.equal(second.entry.id, aEntry.entry.id);
-  assert.equal(entryOf(ctx.service, "a", "pref.dup.two"), null);
+  assert.notEqual(second.entry.id, aEntry.entry.id);
+  assert.equal(entryOf(ctx.service, "a", "pref.dup.two").body, "用户喜欢桂花茶");
+  assert.notEqual(identityOf(ctx.db, "a", "pref.dup.two"), identityOf(ctx.db, "a", "pref.dup"));
   const duplicateBatch = ctx.service.applyExtractionBatch({
     characterId: "a",
     sourceId: "a-dup-batch",
@@ -1672,10 +1764,11 @@ test("POL-FACTID-006 同键冲突明确且零覆盖，同身份异键幂等不�
     ],
   });
   assert.equal(duplicateBatch.applied, true);
-  assert.equal(duplicateBatch.facts[0].created, false);
-  assert.equal(entryOf(ctx.service, "a", "pref.dup.three"), null);
+  assert.equal(duplicateBatch.facts[0].created, true);
+  assert.equal(entryOf(ctx.service, "a", "pref.dup.three").body, "用户喜欢桂花茶");
+  assert.notEqual(identityOf(ctx.db, "a", "pref.dup.three"), identityOf(ctx.db, "a", "pref.dup"));
 
-  // 接收者已在异键持有同一身份：复用已有副本，不重复插入。
+  // 接收者先在异键持有同文独立身份；显式核实关联后才复用已有副本。
   const cEntry = ctx.service.remember({
     characterId: "c",
     factKey: "pref.dup.other",
@@ -1684,7 +1777,14 @@ test("POL-FACTID-006 同键冲突明确且零覆盖，同身份异键幂等不�
     sourceId: "c-dup",
   });
   assert.equal(cEntry.created, true);
+  assert.notEqual(identityOf(ctx.db, "a", "pref.dup"), identityOf(ctx.db, "c", "pref.dup.other"));
+  ctx.service.associateFacts({
+    left: { entryId: aEntry.entry.id, expectedVersion: 1 },
+    right: { entryId: cEntry.entry.id, expectedVersion: 1 },
+    nowMs: ctx.nowMs(),
+  });
   assert.equal(identityOf(ctx.db, "a", "pref.dup"), identityOf(ctx.db, "c", "pref.dup.other"));
+  assert.equal(entryOf(ctx.service, "c", "pref.dup.other").version, 2);
   const shared = ctx.service.share({
     fromCharacterId: "a",
     toCharacterId: "c",

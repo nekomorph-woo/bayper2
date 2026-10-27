@@ -341,9 +341,6 @@ function createMemoryStore(db) {
       SELECT identity_id FROM memory_fact_alias_conflicts WHERE fingerprint = ?
       ORDER BY identity_id ASC
     `),
-    hasAliasConflict: db.prepare(
-      "SELECT 1 AS found FROM memory_fact_alias_conflicts WHERE fingerprint = ? LIMIT 1",
-    ),
     insertAlias: db.prepare(`
       INSERT OR IGNORE INTO memory_fact_aliases (fingerprint, identity_id, created_at)
       VALUES (?, ?, ?)
@@ -628,14 +625,6 @@ function createMemoryStore(db) {
     statements.insertFactIdentity.run(identityId, createdAt);
   }
 
-  /* 指纹存在歧义（指向多个身份）时返回 null，调用方只能新建身份。 */
-  function getAliasIdentity(fingerprint) {
-    if (statements.hasAliasConflict.get(fingerprint)) {
-      return null;
-    }
-    return statements.getAliasIdentity.get(fingerprint)?.identity_id ?? null;
-  }
-
   /* 与某指纹相关的全部身份（含歧义组）；控制检查必须逐个覆盖。 */
   function listAliasIdentityIds(fingerprint) {
     return statements.listAliasIdentityIds
@@ -807,7 +796,6 @@ function createMemoryStore(db) {
     reassignEntryIdentity,
     mergeFactIdentities,
     insertFactIdentity,
-    getAliasIdentity,
     listAliasIdentityIds,
     registerAlias,
     listActiveEntries,
@@ -891,10 +879,11 @@ function ensureFactIdentityColumns(db) {
 }
 
 /* 幂等身份迁移：
-   1. 可证明的派生链继承父条目身份（父条目已删则退回严格同文或新身份）；
-   2. 其余条目只在严格同文条件满足时复用已有身份，同键不同正文不合并；
+   1. 可证明的派生链继承父条目身份（父条目已删则退回共同缺失父标识或新身份）；
+   2. 其余缺身份条目一律新建独立身份，同文也不归组；正文指纹只登记为歧义
+      别名，供删除/禁分享控制覆盖，不用于推断事实身份；
    3. 能把旧 factKey 控制定位到现存身份时补写身份级控制，孤儿旧控制保留。
-   同一指纹指向不同身份时只记录歧义，不覆盖、不合并。 */
+   已持久化的身份（含旧版本按同文建立的组）保持原样，不在本批拆解。 */
 function migrateFactIdentities(db) {
   const rows = db.prepare(`
     SELECT e.id, e.fact_key, e.kind, e.body, e.trust, e.source_kind,
@@ -908,10 +897,6 @@ function migrateFactIdentities(db) {
   const aliases = new Map(
     db.prepare("SELECT fingerprint, identity_id FROM memory_fact_aliases").all()
       .map((row) => [row.fingerprint, row.identity_id]),
-  );
-  const conflicts = new Set(
-    db.prepare("SELECT DISTINCT fingerprint FROM memory_fact_alias_conflicts").all()
-      .map((row) => row.fingerprint),
   );
   const insertIdentity = db.prepare(`
     INSERT OR IGNORE INTO memory_fact_identities (identity_id, created_at)
@@ -949,7 +934,6 @@ function migrateFactIdentities(db) {
     // 逃过该组的忘记/禁分享检查。
     insertConflict.run(fingerprint, existing, createdAt);
     insertConflict.run(fingerprint, identityId, createdAt);
-    conflicts.add(fingerprint);
   }
 
   function resolve(entry, stack) {
@@ -959,7 +943,7 @@ function migrateFactIdentities(db) {
     if (memo.has(entry.id)) {
       return memo.get(entry.id);
     }
-    // 派生链异常成环时不猜测身份，退回严格同文或新建。
+    // 派生链异常成环时不猜测身份，返回 null 交由调用方新建独立身份。
     if (stack.has(entry.id)) {
       return null;
     }
@@ -970,6 +954,11 @@ function migrateFactIdentities(db) {
     let identityId = parent ? resolve(parent, stack) : null;
     stack.delete(entry.id);
 
+    // 没有明确派生父来源时不按正文归组：同一句话可能来自不同主体。
+    if (!identityId) {
+      identityId = crypto.randomUUID();
+      insertIdentity.run(identityId, entry.created_at);
+    }
     const fingerprint = identityFingerprint({
       kind: entry.kind,
       trust: entry.trust,
@@ -977,13 +966,6 @@ function migrateFactIdentities(db) {
       expiresAt: entry.expires_at ?? null,
       body: entry.body,
     });
-    if (!identityId && fingerprint && !conflicts.has(fingerprint)) {
-      identityId = aliases.get(fingerprint) ?? null;
-    }
-    if (!identityId) {
-      identityId = crypto.randomUUID();
-      insertIdentity.run(identityId, entry.created_at);
-    }
     registerAlias(fingerprint, identityId, entry.created_at);
     setEntryIdentity.run(identityId, entry.id);
     memo.set(entry.id, identityId);

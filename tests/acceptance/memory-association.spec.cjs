@@ -394,17 +394,36 @@ test("POL-ASSOC-002 仅清理本次合并消除的歧义，精确正文别名仍
     canonical,
   );
 
-  // 正式 remember 用精确同文重新学入，必须复用已确认的 canonical 身份。
-  const reused = remember(
+  // 合并只覆盖已核实的 a/b；来自新来源的同文 c 仍是独立身份。
+  const independent = remember(
     ctx.service,
     "c",
     "pref.assoc.alias.c",
     mergedEntry.body,
     "c-alias",
   );
-  assert.equal(reused.created, true);
-  assert.equal(reused.entry.factIdentityId, canonical);
-  assert.equal(countRows(ctx.db, "memory_fact_identities"), identitiesBefore);
+  assert.equal(independent.created, true);
+  assert.notEqual(independent.entry.factIdentityId, canonical);
+  assert.equal(countRows(ctx.db, "memory_fact_identities"), identitiesBefore + 1);
+
+  // 显式核实 c 与 a 等价后才归并，并清理本次合并消除的正文歧义。
+  associate(ctx, aEntry.entry.id, independent.entry.id, 2, 1);
+  // 关联重新选择两身份的字典序最小值，不保证仍是第一次合并的 canonical。
+  const mergedWithC = identityOf(ctx.db, "a", "pref.assoc.alias.a");
+  assert.equal(identityOf(ctx.db, "c", "pref.assoc.alias.c"), mergedWithC);
+  assert.equal(countRows(ctx.db, "memory_fact_identities"), identitiesBefore + 1);
+  assert.equal(
+    ctx.db
+      .prepare("SELECT COUNT(*) AS count FROM memory_fact_alias_conflicts WHERE fingerprint = ?")
+      .get(fingerprint).count,
+    0,
+  );
+  assert.equal(
+    ctx.db
+      .prepare("SELECT identity_id FROM memory_fact_aliases WHERE fingerprint = ?")
+      .get(fingerprint)?.identity_id,
+    mergedWithC,
+  );
 });
 
 test("POL-ASSOC-003 关联后独属清除其他持有者，原文换键重学受限且重启保持", (t) => {

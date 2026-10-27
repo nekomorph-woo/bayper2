@@ -230,16 +230,9 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
   }
 
   /* 事实身份：factKey 只定位当前角色条目，传播范围由不透明身份决定。
-     新用户事实仅在严格同文条件满足时复用身份；分享/转告等真实派生直接
-     继承来源身份。旧条目若无身份，先在本次事务内补齐再按身份展开。 */
-  function reusableIdentityOf(fact) {
-    const fingerprint = identityFingerprint(fact);
-    if (!fingerprint) {
-      return { fingerprint: null, identityId: null };
-    }
-    return { fingerprint, identityId: store.getAliasIdentity(fingerprint) };
-  }
-
+     独立来源即使正文相同也各自新建身份；正文指纹只登记为别名，用于删除/
+     禁分享等控制覆盖，不能当作同一事实的证明。分享/转告等真实派生才继承
+     来源身份。旧条目若无身份，先在本次事务内补建独立身份再按身份展开。 */
   function createIdentity(fact, fingerprint) {
     const identityId = newEntryId();
     store.insertFactIdentity(identityId, fact.createdAt);
@@ -253,9 +246,10 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     if (entry.factIdentityId) {
       return entry.factIdentityId;
     }
-    const reusable = reusableIdentityOf(entry);
-    const identityId =
-      reusable.identityId ?? createIdentity({ ...entry, createdAt: at }, reusable.fingerprint);
+    const identityId = createIdentity(
+      { ...entry, createdAt: at },
+      identityFingerprint(entry),
+    );
     store.setEntryIdentity(entry.id, identityId);
     entry.factIdentityId = identityId;
     return identityId;
@@ -428,8 +422,8 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
 
   /* 在已有事务内写入一条事实；调用方负责提交/回滚与上下文版本递增。
      同角色同键但正文不同不再静默当作已持有：保留旧条目并返回明确冲突，
-     不覆盖；相同身份的新事实复用身份，使后续纠正、删除与禁分享按同一个
-     事实传播。 */
+     不覆盖。每条新事实都建立独立身份，正文相同也不跨键复用；正文指纹只
+     用于登记别名和删除/禁分享控制，避免同一句话被当成同一主体。 */
   function insertFactIfAllowed(fact) {
     // 旧来源重扫永远不是新许可；即使显式同意也不能用被控制过的旧来源回填。
     if (store.hasSourceControl(fact.characterId, sourceIdHash(fact.sourceId))) {
@@ -456,28 +450,17 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       return { created: false, blocked: null, entry: existing };
     }
 
-    const reusable = reusableIdentityOf(fact);
-    // 同一角色已在另一个键下持有同一身份：复用该条目，不制造跨键副本。
-    if (reusable.identityId) {
-      const heldSameIdentity = store.getEntryByCharacterIdentity(
-        fact.characterId,
-        reusable.identityId,
-      );
-      if (heldSameIdentity) {
-        return { created: false, blocked: null, entry: heldSameIdentity };
-      }
-    }
+    const fingerprint = identityFingerprint(fact);
     const deletedFingerprint = deletedFingerprintOf(fact);
     if (!fact.explicitConsent && insertForgetBlocked(
       fact.characterId,
-      reusable.fingerprint ? store.listAliasIdentityIds(reusable.fingerprint) : [],
+      fingerprint ? store.listAliasIdentityIds(fingerprint) : [],
       deletedFingerprint,
       fact.factKey,
     )) {
       return { created: false, blocked: "forget", entry: null };
     }
-    const identityId =
-      reusable.identityId ?? createIdentity(fact, reusable.fingerprint);
+    const identityId = createIdentity(fact, fingerprint);
 
     const entry = {
       id: newEntryId(),
