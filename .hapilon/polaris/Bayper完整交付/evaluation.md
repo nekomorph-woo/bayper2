@@ -397,3 +397,8 @@ master独立POL-SLEEPUI-001/002/003/004A/004B/005/005B/005C/006/007共10/10 PASS
 | POL-DETAIL-005 | PASS | 字符预算、重开稳定、读取无请求、后续可保存 |
 
 均为真实SQLite/正式服务＋本地HTTP fixture；未验GUI/真实模型表达。不能将importance保护当作自然语言“请记住”已实现。父级自动整理、实际活动使用及MEMORY-006整体仍未完成，见[s03q-master-review.md](s03q-master-review.md)。
+
+
+## S03r 明确要求记住：NOT_COVERED
+
+POL-REMEMBER-001～005 v1均尚未执行，不能把S03q的重要性字段保护当作自然语言接线通过。见[s03r-explicit-remember-plan.md](s03r-explicit-remember-plan.md)。

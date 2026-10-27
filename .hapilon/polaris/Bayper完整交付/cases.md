@@ -204,3 +204,8 @@ POL-NOTIFY-UI-012 v1及回执稳定布局修订的完整契约见[s05k-notificat
 ## S03q 普通细节上下文与淡化
 
 POL-DETAIL-001～005 v1由master受托确认，Given/When/Expected/Oracle与边界见[s03q-detail-recall-plan.md](s03q-detail-recall-plan.md)。Runner `tests/acceptance/memory-detail-context.spec.cjs` 已实现；001～005（含003竞争与004b来源变异）经master独立通过，见[s03q-master-review.md](s03q-master-review.md)。真实模型及父级后续范围不在此结论内。
+
+
+## S03r 明确要求记住
+
+POL-REMEMBER-001～005 v1由master受托确认，见[s03r-explicit-remember-plan.md](s03r-explicit-remember-plan.md)；Runner拟用tests/acceptance/memory-explicit-remember.spec.cjs，尚未执行。
