@@ -231,12 +231,21 @@ function startApplication() {
     isBlocked: () => Boolean(activeChat) || systemPaused || quitting,
   });
 
-  // S06i 只消费已完成活动并保存作者故事；不启动新活动、不推送窗口。
+  // S06i 只消费已完成活动并保存作者故事；S03j 在同一事务内做定向主题分享。
   storyRuntime = createStoryRuntime({
     db: store.db,
     store,
     storyProgress: store.storyProgress,
     discoveryOutcomes: store.discoveryOutcomes,
+    themeMemorySharing: store.themeMemorySharing,
+    // 快照会写库并在内部开启事务，必须在故事事务外读取；
+    // 用户聊天、系统暂停/锁屏/休眠或退出期间直接标记阻断。
+    getShareContext: () => {
+      if (activeChat || systemPaused || quitting) {
+        return { blocked: true, snapshot: null };
+      }
+      return { blocked: false, snapshot: companionship.getSnapshot() };
+    },
   });
 
   // S06j 故事回看与正式故事进度共用同一目录和 SQLite 连接，只读生成展示数据。
@@ -714,6 +723,7 @@ function memoryEntryForRenderer(entry) {
     body: entry.body,
     kind: entry.kind,
     trust: entry.trust,
+    sourceKind: entry.sourceKind ?? "user",
     originCharacterId: entry.originCharacterId,
     narratorCharacterId: entry.narratorCharacterId ?? null,
     derived: entry.derived,

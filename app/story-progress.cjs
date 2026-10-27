@@ -83,6 +83,19 @@ function normalizeCatalog(catalog) {
     if (typeof story.assetAvailable !== "boolean") {
       throw new AppError("STORY_CATALOG_INVALID", `素材状态无效：${storyId}`);
     }
+    // 作者显式关联的分享对象：省略表示没有自然对象，不按整份主题推断。
+    const rawShareWith = story.shareWithCharacterIds ?? [];
+    if (!Array.isArray(rawShareWith)) {
+      throw new AppError("STORY_CATALOG_INVALID", `分享关联格式无效：${storyId}`);
+    }
+    const shareWithCharacterIds = [];
+    for (const rawCharacterId of rawShareWith) {
+      const characterId = text(rawCharacterId, "shareWithCharacterId");
+      if (shareWithCharacterIds.includes(characterId)) {
+        throw new AppError("STORY_CATALOG_INVALID", `分享关联重复：${storyId}`);
+      }
+      shareWithCharacterIds.push(characterId);
+    }
     const ownerCharacterId =
       story.type === "outfit"
         ? text(story.ownerCharacterId, "ownerCharacterId")
@@ -117,6 +130,7 @@ function normalizeCatalog(catalog) {
       ownerCharacterId,
       themeId,
       assetAvailable: story.assetAvailable,
+      shareWithCharacterIds: Object.freeze(shareWithCharacterIds),
       nodes: Object.freeze(nodes),
       nodeIndex: new Map(nodes.map((node, index) => [node.nodeId, index])),
     });
@@ -257,6 +271,8 @@ function createStoryProgress({ db, catalog, now = () => new Date() }) {
       return null;
     }
     const progress = statements.getProgress.get(row.story_id);
+    const story = content.byId.get(row.story_id);
+    const node = story?.nodes.find((item) => item.nodeId === row.node_id) ?? null;
     return {
       activityId: row.activity_id,
       narratorId: row.narrator_id,
@@ -272,6 +288,10 @@ function createStoryProgress({ db, catalog, now = () => new Date() }) {
       merged: row.outcome === "merged",
       storyStatus: progress?.status ?? null,
       mature: progress?.status === "mature",
+      // 只读节点描述供同事务的主题分享使用；正文始终来自当前作者目录。
+      themeId: story?.themeId ?? null,
+      shareWithCharacterIds: story?.shareWithCharacterIds ?? [],
+      body: node?.body ?? null,
     };
   }
 

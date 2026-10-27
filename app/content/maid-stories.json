@@ -13,6 +13,7 @@
       "ownerCharacterId": null,
       "themeId": "maid.quiet-house",
       "assetAvailable": false,
+      "shareWithCharacterIds": ["cheng", "hu"],
       "nodes": [
         {
           "nodeId": "window",
@@ -33,6 +34,7 @@
       "ownerCharacterId": null,
       "themeId": "maid.quiet-house",
       "assetAvailable": false,
+      "shareWithCharacterIds": ["rin", "cheng"],
       "nodes": [
         {
           "nodeId": "pocket",
@@ -53,6 +55,7 @@
       "ownerCharacterId": null,
       "themeId": "maid.quiet-house",
       "assetAvailable": false,
+      "shareWithCharacterIds": ["rin"],
       "nodes": [
         {
           "nodeId": "cushion",
@@ -73,6 +76,7 @@
       "ownerCharacterId": "rin",
       "themeId": "maid.quiet-house",
       "assetAvailable": false,
+      "shareWithCharacterIds": ["hu", "cheng"],
       "nodes": [
         {
           "nodeId": "pocket-plan",

@@ -8,6 +8,7 @@ const { createCompanionStore } = require("./companion-store.cjs");
 const { createConnectorLedger } = require("./connector-ledger.cjs");
 const { createNotificationPresentation } = require("./notification-presentation.cjs");
 const { createMemoryService } = require("./memory.cjs");
+const { createThemeMemorySharing } = require("./theme-memory-sharing.cjs");
 const { createChatService } = require("./chat.cjs");
 const { createExternalSources } = require("./external-sources.cjs");
 const { createAutomaticBudget } = require("./automatic-budget.cjs");
@@ -89,6 +90,8 @@ function createStore(dataDir, options = {}) {
   const discoveryOutcomes = createDiscoveryOutcomes({ db, storyProgress, now });
   // S03 记忆与聊天共用同一连接；不另建生产数据库。
   const memory = createMemoryService({ db, now });
+  // S03j 主题活动分享复用同一连接与记忆服务，只在故事结果事务内写入。
+  const themeMemorySharing = createThemeMemorySharing({ db, memory });
   const chat = createChatService({
     db,
     memory,
@@ -251,6 +254,7 @@ function createStore(dataDir, options = {}) {
     storyProgress,
     discoveryOutcomes,
     memory,
+    themeMemorySharing,
     chat,
     externalSources,
     automaticBudget,

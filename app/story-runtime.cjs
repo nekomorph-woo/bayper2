@@ -26,6 +26,8 @@ function createStoryRuntime({
   store,
   storyProgress,
   discoveryOutcomes,
+  themeMemorySharing = null,
+  getShareContext = null,
   now = () => new Date(),
 } = {}) {
   if (!db || typeof db.prepare !== "function") {
@@ -46,6 +48,15 @@ function createStoryRuntime({
     typeof discoveryOutcomes.getStorySelectionFilters !== "function"
   ) {
     throw new AppError("DISCOVERY_REQUIRED", "故事运行需要发现结果入口。");
+  }
+  if (
+    themeMemorySharing !== null &&
+    typeof themeMemorySharing.shareActivityResult !== "function"
+  ) {
+    throw new AppError("THEME_SHARING_REQUIRED", "主题分享入口无效。");
+  }
+  if (getShareContext !== null && typeof getShareContext !== "function") {
+    throw new AppError("THEME_SHARING_REQUIRED", "分享快照入口无效。");
   }
 
   db.exec("PRAGMA foreign_keys = ON");
@@ -123,7 +134,19 @@ function createStoryRuntime({
     return publicResult(activityId, result, at);
   }
 
+  /* 快照由主进程在故事事务外读取；随后同步进入 recordNode，中间没有 await。
+     读取失败属于基础设施错误，原样上抛，下一次心跳再评估同一活动。 */
+  function readShareContext() {
+    if (!themeMemorySharing || typeof getShareContext !== "function") {
+      return null;
+    }
+    return getShareContext();
+  }
+
   function evaluateActivity(activity, at) {
+    // 显式阶段标记：只有进入 recordNode 后的 AppError 才是可确定的领域拒绝。
+    // 读取快照失败属于暂时基础设施错误，不能写评估结果消费活动。
+    let phase = "candidate";
     try {
       const candidates = storyProgress.selectNextStories(
         discoveryOutcomes.getStorySelectionFilters(),
@@ -145,16 +168,34 @@ function createStoryRuntime({
         );
       }
 
+      phase = "share-context";
+      const shareContext = readShareContext();
+      phase = "record";
       const result = storyProgress.recordNode({
         activityId: activity.activityId,
         narratorId: activity.characterId,
         storyId: candidate.storyId,
         nodeId: candidate.nodeId,
-        // 运行结果与故事进度同一事务：最后一笔写入失败时整笔回滚，重试仍选中同一故事。
-        onResult: (recorded) => insertEvaluation(activity.activityId, recorded, at),
+        // 运行结果、主题分享与故事进度同一事务：最后一笔写入失败时整笔回滚。
+        onResult: (recorded) => {
+          insertEvaluation(activity.activityId, recorded, at);
+          // 只处理本次新 applied 节点；merged、skipped 与重复 activity 不分享。
+          if (recorded.outcome === "applied" && recorded.duplicate !== true) {
+            themeMemorySharing?.shareActivityResult({
+              activity,
+              result: recorded,
+              context: shareContext,
+              at,
+            });
+          }
+        },
       });
       return publicResult(activity.activityId, result, at);
     } catch (error) {
+      // 快照暂时不可读：不写任何故事/运行/分享结果，下一次心跳重试同一活动。
+      if (phase === "share-context") {
+        throw error;
+      }
       // 领域拒绝是可确定的本次评估结果：记下跳过，避免同活动无限重试；
       // SQLite/事务故障不写评估，保留活动供下一次心跳安全重试。
       if (error instanceof AppError) {

@@ -128,6 +128,16 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     return trust;
   }
 
+  /* 来源种类只允许 user/theme；用户直接入口默认 user，主题分享是唯一生产写入方。
+     模型候选批次在 applyExtractionBatch 中强制 user，不能凭正文自我声明为主题。 */
+  function sourceKindOf(value) {
+    const kind = value ?? "user";
+    if (kind !== "user" && kind !== "theme") {
+      throw new MemoryError("INVALID_INPUT", "来源种类无效。");
+    }
+    return kind;
+  }
+
   function importanceOf(value, kind) {
     if (value === undefined) {
       return DEFAULT_IMPORTANCE[kind];
@@ -226,6 +236,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       body: bodyOf(input.body),
       kind,
       trust: trustOf(input.trust),
+      sourceKind: overrides.sourceKind ?? sourceKindOf(input.sourceKind),
       importance: importanceOf(input.importance, kind),
       sourceId: overrides.sourceId ?? cleanText(input.sourceId, "来源ID", LIMITS.sourceId),
       sourceVersion: overrides.sourceVersion ?? sourceVersionOf(input.sourceVersion),
@@ -262,6 +273,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       kind: fact.kind,
       body: fact.body,
       trust: fact.trust,
+      sourceKind: fact.sourceKind,
       importance: fact.importance,
       expiresAt: fact.expiresAt,
       sourceId: fact.sourceId,
@@ -316,6 +328,8 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
         originCharacterId,
         createdAt,
         explicitConsent,
+        // 模型候选属于用户本轮明确说出的内容；不允许自带 theme 来源种类。
+        sourceKind: "user",
       });
       if (factKeys.has(fact.factKey)) {
         throw new MemoryError("INVALID_INPUT", "同一批次不能包含重复事实键。");
@@ -542,6 +556,8 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
           ...entry,
           body,
           trust: trustProvided ? trust : entry.trust,
+          // 用户明确纠正后的正文归用户来源；旧主题见闻不再冒充作者原文。
+          sourceKind: "user",
           importance: importanceProvided ? importance : entry.importance,
           expiresAt: expiresProvided ? expiresAt : entry.expiresAt,
           sourceId: nextSourceId,
@@ -733,11 +749,16 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     if (new Set(entryIds).size !== entryIds.length) {
       throw new MemoryError("INVALID_INPUT", "分享条目不能重复。");
     }
-    if (!isAutoShareEnabled()) {
-      throw new MemoryError("AUTO_SHARE_DISABLED", "角色之间的自动分享已关闭。");
-    }
-
-    return store.transaction(() => {
+    /* 全局开关必须和实际写入在同一事务内判定，避免读取与提交之间的状态窗口。
+       默认仍由这里开启事务；聊天/主题活动等已有事务可传 inTransaction 复用。 */
+    const applyShare = () => {
+      if (!isAutoShareEnabled()) {
+        throw new MemoryError("AUTO_SHARE_DISABLED", "角色之间的自动分享已关闭。");
+      }
+      // 接收者已排除的显式来源不能靠换 factKey 重新投递；普通 relay 仍按独立授权规则。
+      if (sourceId !== null && store.hasSourceControl(toCharacterId, sourceIdHash(sourceId))) {
+        throw new MemoryError("SHARE_BLOCKED", "接收者已排除该来源。");
+      }
       const originals = entryIds.map((id) => {
         const entry = store.getEntryById(id);
         if (!entry || entry.characterId !== fromCharacterId) {
@@ -777,6 +798,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
           kind: original.kind,
           body: original.body,
           trust: original.trust,
+          sourceKind: original.sourceKind,
           importance: original.importance,
           expiresAt: original.expiresAt,
           sourceId: sourceId ?? `share:${original.id}:${toCharacterId}`,
@@ -792,7 +814,8 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
 
       const contextVersion = created > 0 ? store.bumpContextVersion(toCharacterId, nowMs) : null;
       return { toCharacterId, shared, contextVersion };
-    });
+    };
+    return input.inTransaction === true ? applyShare() : store.transaction(applyShare);
   }
 
   function currentHolders(factKey) {
@@ -876,6 +899,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
           kind: original.kind,
           body: original.body,
           trust: original.trust,
+          sourceKind: original.sourceKind,
           importance: original.importance,
           expiresAt: original.expiresAt,
           sourceId: `relay:${original.id}:${toCharacterId}`,

@@ -2146,3 +2146,92 @@ test("POL-CHATMEM-006 删除失败时命令来源排除与记忆一起回滚", a
   assert.ok(store.memory.listExcludedSources("a").includes(sha256(commandSource)));
   assert.equal(requestRow(store, "forget-source-rollback").status, "completed");
 });
+
+test("POL-THEME-SHARE-004E 主题见闻不冒充用户明确告知，模型候选不能自声明主题", async (t) => {
+  const ctx = await setupContext(t, "theme-attribution");
+  const { store, server } = ctx;
+  const created = store.memory.remember({
+    characterId: "a",
+    factKey: "theme.rin.window",
+    body: "主题故事见闻：凛把窗边那张椅子空着。",
+    kind: "experience",
+    sourceId: "theme:test",
+    sourceKind: "theme",
+  });
+  assert.equal(created.created, true);
+
+  const fakeBody = "主题故事见闻：模型候选伪装的作者见闻";
+  const conversation = openConversation(store);
+  server.enqueue(({ res }) =>
+    sendEnvelope(res, {
+      reply: "嗯。",
+      memoryCandidates: [
+        {
+          factKey: "theme.fake",
+          body: fakeBody,
+          kind: "experience",
+          trust: "stated",
+          evidence: fakeBody,
+          sourceKind: "theme",
+        },
+      ],
+    }),
+  );
+  const result = await store.chat.sendMessage({
+    characterId: "a",
+    conversationId: conversation.id,
+    text: `窗边怎么样？${fakeBody}`,
+    requestId: "theme-attribution",
+  });
+  assert.equal(result.status, "completed");
+
+  const systemText = server.requests
+    .at(-1)
+    .messages.filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n");
+  const themeLine = systemText
+    .split("\n")
+    .find((item) => item.includes("主题故事见闻：凛把窗边那张椅子空着。"));
+  assert.ok(themeLine);
+  assert.ok(themeLine.includes("来源:主题故事见闻，不是用户亲历或用户原话"));
+  assert.equal(themeLine.includes("用户明确告知"), false);
+  assert.ok(systemText.includes("标注“主题故事见闻”的内容是版本虚构角色背景"));
+
+  // 模型候选自带 sourceKind: theme 也只是用户本轮明确陈述，不获得作者可信属性。
+  const fake = store.memory
+    .listMemories("a")
+    .find((entry) => entry.factKey === "theme.fake");
+  assert.ok(fake);
+  assert.equal(fake.sourceKind, "user");
+
+  // B 听到的主题见闻保留“听 A 说”的性质，不冒充用户直接告知。
+  store.memory.share({
+    fromCharacterId: "a",
+    toCharacterId: "b",
+    entryIds: [created.entry.id],
+    sourceId: "theme:test",
+  });
+  const bConversation = openConversation(store, "b");
+  server.enqueue(({ res }) =>
+    sendEnvelope(res, { reply: "嗯。", memoryCandidates: [] }),
+  );
+  const bResult = await store.chat.sendMessage({
+    characterId: "b",
+    conversationId: bConversation.id,
+    text: "你知道窗边的事吗？",
+    requestId: "theme-attribution-b",
+  });
+  assert.equal(bResult.status, "completed");
+  const bSystemText = server.requests
+    .at(-1)
+    .messages.filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n");
+  const bThemeLine = bSystemText
+    .split("\n")
+    .find((item) => item.includes("主题故事见闻：凛把窗边那张椅子空着。"));
+  assert.ok(bThemeLine);
+  assert.ok(bThemeLine.includes("来源:转述，听a说的主题故事见闻"));
+  assert.equal(bThemeLine.includes("用户明确告知"), false);
+});

@@ -429,6 +429,14 @@ test("POL-MEMUI-001 GUI 角色归属、200+分页与两尺寸操作", { timeout:
         kind: "preference",
         sourceId: "seed:white-tea",
       });
+      store.memory.remember({
+        characterId: "rin",
+        factKey: "theme.rin.window",
+        body: "主题故事见闻：凛把窗边那张椅子空着。",
+        kind: "experience",
+        sourceId: "seed:theme",
+        sourceKind: "theme",
+      });
       const heard = store.memory.remember({
         characterId: "hu",
         factKey: "pref.heard-old",
@@ -493,6 +501,7 @@ test("POL-MEMUI-001 GUI 角色归属、200+分页与两尺寸操作", { timeout:
       "narratorCharacterId",
       "originCharacterId",
       "sharingRestricted",
+      "sourceKind",
       "trust",
       "version",
     ]);
@@ -500,6 +509,19 @@ test("POL-MEMUI-001 GUI 角色归属、200+分页与两尺寸操作", { timeout:
     assert.equal(firstCards.length, 30);
     assert.ok(firstCards.some((card) => card.body === "用户喜欢白茶" && card.meta.includes("本人直接告知")));
     assert.ok(firstCards.some((card) => card.body === "用户喜欢旧茶" && card.meta.includes("听琥珀说过")));
+    // 可信主题见闻不能标成用户直接告知；固定 GUI 片段供 Codex 独立运行。
+    assert.ok(
+      firstCards.some(
+        (card) =>
+          card.body.startsWith("主题故事见闻：") &&
+          card.meta.includes("主题故事见闻，不是用户亲历"),
+      ),
+    );
+
+    // 单独截取主题见闻条目，供 Codex 实际查看来源标签；随后继续原白茶流程。
+    await selectMemoryByBody(page, "主题故事见闻：凛把窗边那张椅子空着。");
+    await setWindowSize(app, 1200, 800);
+    await capture(page, "memory-theme-source-1200x800.png");
 
     await selectMemoryByBody(page, "用户喜欢白茶");
     await setWindowSize(app, 1200, 800);

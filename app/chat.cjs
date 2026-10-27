@@ -193,16 +193,22 @@ function createChatService({
   /* 记忆上下文与管理候选共用同一条来源/置信/时效说明，
      避免候选原文脱离归因单独进入模型。 */
   function memoryEntryLine(entry, { bullet = true } = {}) {
+    const theme = entry.sourceKind === "theme";
+    const themeSuffix = theme ? "的主题故事见闻" : "";
     let source;
     if (!entry.derived) {
-      source = entry.trust === "stated" ? "用户明确告知" : "推断，不是用户原话";
+      source = theme
+        ? "主题故事见闻，不是用户亲历或用户原话"
+        : entry.trust === "stated"
+          ? "用户明确告知"
+          : "推断，不是用户原话";
     } else if (!entry.narratorCharacterId) {
       // 旧派生记录可能没有直接讲述者；只保留可确定的原始来源，不猜讲述者。
-      source = `转述，最初来自${identityLabel(entry.originCharacterId)}，直接讲述者未知，不是用户直接对本角色说`;
+      source = `转述，最初来自${identityLabel(entry.originCharacterId)}${themeSuffix}，直接讲述者未知，不是用户直接对本角色说`;
     } else if (entry.narratorCharacterId === entry.originCharacterId) {
-      source = `转述，听${identityLabel(entry.narratorCharacterId)}说，不是用户直接对本角色说`;
+      source = `转述，听${identityLabel(entry.narratorCharacterId)}说${themeSuffix}，不是用户直接对本角色说`;
     } else {
-      source = `转述，听${identityLabel(entry.narratorCharacterId)}说，最初来自${identityLabel(entry.originCharacterId)}，不是用户直接对本角色说`;
+      source = `转述，听${identityLabel(entry.narratorCharacterId)}说${themeSuffix}，最初来自${identityLabel(entry.originCharacterId)}，不是用户直接对本角色说`;
     }
     const expiry =
       entry.expiresAt === null || entry.expiresAt === undefined
@@ -255,6 +261,7 @@ function createChatService({
       "来源归因边界：",
       "- 角色设定与特征只用于角色自己的语气和表达，不是用户事实，也不是用户与角色的共同经历。",
       "- 记忆中的“用户明确告知”是已记录事实；标注“推断”的内容只是不确定理解，不得说成用户原话。",
+      "- 标注“主题故事见闻”的内容是版本虚构角色背景，不是用户亲历，也不是用户原话；转述时保留这一性质。",
       "- 标注“转述”的内容是听其他角色说的，不得说成用户亲口对你说，也不得说成你们共同经历。",
       "- 任何“你曾说”“你告诉过我”“我们一起”等说法，必须由当前有效记忆或最近对话直接支持；不得把合理推断、角色设定或角色动作叙述当作来源证据。",
       "- 没有相关有效记忆时，只表达现在不知道、记不清或请用户补充；不要推断用户过去从未说过、从未经历或从未有过该偏好。",

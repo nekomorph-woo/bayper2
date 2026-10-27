@@ -108,15 +108,20 @@
     }
 
     function sourceLabel(entry) {
+      const theme = entry.sourceKind === "theme";
+      const themeSuffix = theme ? "的主题故事见闻" : "";
       if (entry.derived || entry.originCharacterId !== state.characterId) {
         const origin = characterName(entry.originCharacterId);
         if (!entry.narratorCharacterId) {
-          return `转述，最初来自${origin}`;
+          return `转述，最初来自${origin}${themeSuffix}`;
         }
         const narrator = characterName(entry.narratorCharacterId);
         return entry.narratorCharacterId === entry.originCharacterId
-          ? `听${narrator}说过`
-          : `听${narrator}说过，最初来自${origin}`;
+          ? `听${narrator}说过${themeSuffix}`
+          : `听${narrator}说过${themeSuffix}，最初来自${origin}`;
+      }
+      if (theme) {
+        return "主题故事见闻，不是用户亲历";
       }
       return entry.trust === "inferred" ? "初步了解" : "本人直接告知";
     }

@@ -15,6 +15,8 @@ const SCHEMA = `
     kind TEXT NOT NULL CHECK (kind IN ('identity', 'preference', 'experience', 'detail')),
     body TEXT NOT NULL CHECK (length(body) > 0),
     trust TEXT NOT NULL CHECK (trust IN ('stated', 'inferred')),
+    -- 来源种类用于区分用户事实与可信作者主题见闻；旧记录和新用户路径默认 user。
+    source_kind TEXT NOT NULL DEFAULT 'user' CHECK (source_kind IN ('user', 'theme')),
     importance INTEGER NOT NULL CHECK (importance BETWEEN 0 AND 100),
     expires_at INTEGER,
     source_id TEXT NOT NULL,
@@ -116,6 +118,7 @@ function mapEntry(row) {
     kind: row.kind,
     body: row.body,
     trust: row.trust,
+    sourceKind: row.source_kind ?? "user",
     importance: row.importance,
     expiresAt: row.expires_at ?? null,
     sourceId: row.source_id,
@@ -129,6 +132,7 @@ function mapEntry(row) {
 function createMemoryStore(db) {
   db.exec("PRAGMA foreign_keys = ON");
   db.exec(SCHEMA);
+  ensureSourceKindColumn(db);
   ensureDerivationColumns(db);
   // 兼容首版关系表：补齐派生关系与可直接判定的来源/讲述者，不猜测已删除父条目的身份。
   db.exec(`
@@ -172,9 +176,9 @@ function createMemoryStore(db) {
     insertEntry: db.prepare(`
       INSERT INTO memory_entries (
         id, character_id, fact_key, origin_character_id, derived_from_entry_id,
-        kind, body, trust, importance, expires_at,
+        kind, body, trust, source_kind, importance, expires_at,
         source_id, source_version, version, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     insertDerivation: db.prepare(`
       INSERT INTO memory_derivations (
@@ -184,7 +188,7 @@ function createMemoryStore(db) {
     `),
     updateEntry: db.prepare(`
       UPDATE memory_entries SET
-        body = ?, trust = ?, importance = ?, expires_at = ?,
+        body = ?, trust = ?, source_kind = ?, importance = ?, expires_at = ?,
         source_id = ?, source_version = ?, version = ?, updated_at = ?
       WHERE id = ?
     `),
@@ -339,6 +343,7 @@ function createMemoryStore(db) {
       entry.kind,
       entry.body,
       entry.trust,
+      entry.sourceKind ?? "user",
       entry.importance,
       entry.expiresAt,
       entry.sourceId,
@@ -370,6 +375,7 @@ function createMemoryStore(db) {
     statements.updateEntry.run(
       entry.body,
       entry.trust,
+      entry.sourceKind ?? "user",
       entry.importance,
       entry.expiresAt,
       entry.sourceId,
@@ -551,6 +557,14 @@ function createMemoryStore(db) {
 }
 
 module.exports = { createMemoryStore, SCHEMA };
+
+function ensureSourceKindColumn(db) {
+  const columns = db.prepare("PRAGMA table_info(memory_entries)").all();
+  if (!columns.some((column) => column.name === "source_kind")) {
+    // 旧库没有可信主题标识；已有记录保守按用户来源处理。
+    db.exec("ALTER TABLE memory_entries ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'user'");
+  }
+}
 
 function ensureDerivationColumns(db) {
   const columns = db.prepare("PRAGMA table_info(memory_derivations)").all();
