@@ -10,6 +10,7 @@ const path = require("node:path");
 const { test } = require("node:test");
 const { DatabaseSync } = require("node:sqlite");
 const { createStore } = require("../../app/store.cjs");
+const { createAutomaticBudget } = require("../../app/automatic-budget.cjs");
 
 const START = Date.UTC(2026, 9, 27, 10, 0, 0);
 const MODEL_NAME = "fixture-semantic-operations";
@@ -234,6 +235,113 @@ function seedCoffeeA(ctx, conversation) {
   ]);
 }
 
+function forgetEnvelope(body, { needle, evidence, modelScope = "all" }) {
+  return {
+    reply: "好的。",
+    memoryCandidates: [],
+    memoryOperation: {
+      action: "forget",
+      target: targetFromRequest(body, needle),
+      scope: modelScope,
+      evidence,
+    },
+  };
+}
+
+async function sendForget(ctx, conversation, text, options, {
+  verification, modelScope = "all",
+} = {}) {
+  ctx.server.enqueue(({ body, res }) =>
+    sendEnvelope(res, forgetEnvelope(body, { ...options, modelScope })));
+  if (verification) ctx.server.enqueue(verification);
+  return ctx.store.chat.sendMessage({
+    characterId: "a", conversationId: conversation.id, text, requestId: crypto.randomUUID(),
+  });
+}
+
+async function seedCoffeeB(ctx, conversation) {
+  return chatTurn(ctx, conversation, "我也爱喝咖啡。", [
+    { factKey: "pref.coffeeB", body: "用户也爱喝咖啡", kind: "preference", trust: "stated", evidence: "我也爱喝咖啡" },
+  ], "b");
+}
+
+async function seedCoffeeC(ctx, conversation) {
+  return chatTurn(ctx, conversation, "我偏爱咖啡。", [
+    { factKey: "pref.coffeeC", body: "用户偏爱咖啡", kind: "preference", trust: "stated", evidence: "我偏爱咖啡" },
+  ], "c");
+}
+
+/* A 独立第二咖啡 identity，relay 给 B 形成同 identity 的 A/B 双持有者候选。
+   B 副本来源为 relay:，没有可直接解析的来源快照；forget 模式必须仍能处理。
+   候选正文用 coffee 与目标“咖啡”错开命令 token，避免聊天目标歧义。 */
+async function seedSharedCoffeeCandidate(ctx, aConversation) {
+  await chatTurn(ctx, aConversation, "我特别喜欢 coffee。", [
+    { factKey: "pref.coffeeA2", body: "用户特别喜欢 coffee", kind: "preference", trust: "stated", evidence: "我特别喜欢 coffee" },
+  ]);
+  const entry = entryOf(ctx.store, "a", "pref.coffeeA2");
+  ctx.store.memory.relay({
+    fromCharacterId: "a",
+    toCharacterId: "b",
+    entries: [{ entryId: entry.id, expectedVersion: entry.version }],
+  });
+  return {
+    aEntry: entryOf(ctx.store, "a", "pref.coffeeA2"),
+    bEntry: entryOf(ctx.store, "b", "pref.coffeeA2"),
+  };
+}
+
+function lastAssistant(ctx, conversation, characterId = "a") {
+  return ctx.store.chat.getConversation({
+    characterId, conversationId: conversation.id,
+  }).messages.filter((message) => message.role === "assistant").at(-1);
+}
+
+function proofOf(ctx, requestId) {
+  return withDatabase(ctx.store.dbPath, (db) => db.prepare(
+    "SELECT operation_proof, verification_status FROM chat_requests WHERE id = ?",
+  ).get(requestId));
+}
+
+function budgetSnapshot(ctx) {
+  createAutomaticBudget({ db: ctx.store.db, now: ctx.nowMs });
+  return withDatabase(ctx.store.dbPath, (db) => ({
+    attempts: db.prepare("SELECT * FROM automatic_budget_attempts ORDER BY id").all(),
+    state: db.prepare("SELECT * FROM automatic_budget_state ORDER BY key").all(),
+  }));
+}
+
+const sha256 = (value) => crypto.createHash("sha256").update(value, "utf8").digest("hex");
+async function setupForgetPair(t) {
+  const ctx = await setupContext(t);
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  await seedCoffeeA(ctx, aConversation);
+  await seedCoffeeB(ctx, bConversation);
+  return { ctx, aConversation, bConversation };
+}
+function gatedVerification(t) {
+  let release;
+  let started = false;
+  const gate = {
+    waitStarted: () => waitFor(() => started),
+    release: () => release?.(),
+    responder: ({ body, res }) => {
+      const pairs = pairsOf(body);
+      started = true;
+      return new Promise((resolve) => {
+        release = () => {
+          if (!res.destroyed && !res.writableEnded) {
+            sendEnvelope(res, { results: pairs.map((pair) => relationResult(pair, "equivalent")) });
+          }
+          resolve();
+        };
+      });
+    },
+  };
+  // 无论测试在哪一步失败，都释放自己持有的 HTTP 核验响应，避免悬挂。
+  t.after(() => gate.release());
+  return gate;
+}
 test("POL-SEMOP-001a/b/c 旧事实核验：left 是 A 旧事实，B 旧事实确认后才传播", async (t) => {
   const ctx = await setupContext(t);
   const aConversation = openConversation(ctx.store);
@@ -1294,4 +1402,546 @@ test("POL-SEMOP-003b 凭据等待期间候选被改或新增限制：不发第�
     assert.equal(verificationRequests(ctx).length, 0);
     assert.equal(entryOf(ctx.store, "b", "pref.coffeeB").body, bOld.body);
   }
+});
+
+async function awaitVerificationSettled(ctx, result) {
+  await waitFor(() => ctx.store.chat.getRequest({
+    characterId: "a", requestId: result.requestId,
+  }).verificationStatus !== "pending");
+}
+
+test("POL-SEMOP-002a forget all 删除 A 本地锚与 B 独立同义候选，单消息原位收口", async (t) => {
+  const { ctx, aConversation, bConversation } = await setupForgetPair(t);
+  const aOld = entryOf(ctx.store, "a", "pref.coffee");
+  const bOld = entryOf(ctx.store, "b", "pref.coffeeB");
+
+  const result = await sendForget(ctx, aConversation, "请忘记我喜欢咖啡这件事。", {
+    needle: "我喜欢咖啡", evidence: "请忘记我喜欢咖啡这件事",
+  }, {
+    verification: relationResponder((pairs) => pairs.map((pair) => relationResult(pair, "equivalent"))),
+  });
+
+  assert.equal(result.status, "completed");
+  assert.equal(result.verificationStatus, "pending");
+  assert.match(result.reply, /正在核对/u);
+  await waitFor(() => verificationRequests(ctx).length === 1);
+  const pair = pairsOf(verificationRequests(ctx)[0])[0];
+  assert.equal(pair.left.text, aOld.body);
+  assert.equal(pair.right.text, bOld.body);
+  await awaitVerificationSettled(ctx, result);
+
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+  assert.equal(entryOf(ctx.store, "b", "pref.coffeeB"), null);
+  assert.equal(entryOf(ctx.store, "c", "pref.coffeeB"), null);
+  const request = ctx.store.chat.getRequest({ characterId: "a", requestId: result.requestId });
+  assert.equal(request.verificationStatus, "completed");
+  const assistant = lastAssistant(ctx, aConversation);
+  assert.equal(assistant.id, result.assistantMessageId);
+  assert.match(assistant.content, /一并删除了/u);
+  assert.equal(assistant.content.includes("更正"), false);
+  const proofRow = proofOf(ctx, result.requestId);
+  const proof = JSON.parse(proofRow.operation_proof);
+  assert.equal(proof.action, "forget");
+  assert.equal(proof.scope, "all");
+  assert.equal(JSON.stringify(proof).includes(aOld.body), false);
+  assert.equal(JSON.stringify(proof).includes(bOld.body), false);
+  assert.equal(typeof proof.initiatorContextVersion, "number");
+  assert.ok(proof.sourceControls.a.includes(sha256(aOld.sourceId)));
+  assert.ok(proof.sourceControls.a.includes(sha256(`chat:${ctx.store.chat.getConversation({
+    characterId: "a", conversationId: aConversation.id,
+  }).messages.find((message) => message.role === "user" && message.content.startsWith("请忘记")).id}`)));
+  assert.deepEqual(ctx.store.memory.searchMemories({ characterId: "a", query: "咖啡" }), []);
+  assert.deepEqual(ctx.store.memory.searchMemories({ characterId: "b", query: "咖啡" }), []);
+});
+test("POL-SEMOP-002a forget all 同候选 identity 有 A/B 成员时一次清除全部持有者", async (t) => {
+  const ctx = await setupContext(t);
+  const aConversation = openConversation(ctx.store);
+  await seedCoffeeA(ctx, aConversation);
+  const candidate = await seedSharedCoffeeCandidate(ctx, aConversation);
+  assert.ok(candidate.aEntry && candidate.bEntry);
+
+  const result = await sendForget(ctx, aConversation, "请忘记咖啡这件事。", {
+    needle: "我喜欢咖啡", evidence: "请忘记咖啡这件事",
+  }, {
+    verification: relationResponder((pairs) => pairs.map((pair) => relationResult(pair, "equivalent"))),
+  });
+  assert.equal(result.verificationStatus, "pending");
+  await waitFor(() => verificationRequests(ctx).length === 1);
+  assert.equal(pairsOf(verificationRequests(ctx)[0]).length, 1, "同一 identity 只核验一次");
+  await awaitVerificationSettled(ctx, result);
+
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+  assert.equal(entryOf(ctx.store, "a", "pref.coffeeA2"), null);
+  assert.equal(entryOf(ctx.store, "b", "pref.coffeeA2"), null);
+  const assistant = lastAssistant(ctx, aConversation);
+  assert.match(assistant.content, /1 条/u);
+  assert.match(assistant.content, /一并删除了/u);
+});
+test("POL-SEMOP-002b forget self 只删 A 候选成员，B 成员与 B 独有候选保持不变", async (t) => {
+  const ctx = await setupContext(t);
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  await seedCoffeeA(ctx, aConversation);
+  const candidate = await seedSharedCoffeeCandidate(ctx, aConversation);
+  await seedCoffeeB(ctx, bConversation);
+  const bCandidateBefore = candidate.bEntry;
+  const bOnlyBefore = entryOf(ctx.store, "b", "pref.coffeeB");
+  const bContextBefore = ctx.store.memory.getContextVersion("b");
+
+  const result = await sendForget(ctx, aConversation, "只你忘记咖啡这件事。", {
+    needle: "我喜欢咖啡", evidence: "只你忘记咖啡这件事", modelScope: "all",
+  }, {
+    verification: relationResponder((pairs) => pairs.map((pair) => relationResult(pair, "equivalent"))),
+  });
+  assert.equal(result.verificationStatus, "pending");
+  await waitFor(() => verificationRequests(ctx).length === 1);
+  assert.equal(pairsOf(verificationRequests(ctx)[0]).length, 1, "self 只核验 A 持有的候选");
+  await awaitVerificationSettled(ctx, result);
+
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+  assert.equal(entryOf(ctx.store, "a", "pref.coffeeA2"), null);
+  const bCandidateAfter = entryOf(ctx.store, "b", "pref.coffeeA2");
+  assert.equal(bCandidateAfter.body, bCandidateBefore.body);
+  assert.equal(bCandidateAfter.version, bCandidateBefore.version);
+  assert.equal(bCandidateAfter.sourceId, bCandidateBefore.sourceId);
+  const bOnlyAfter = entryOf(ctx.store, "b", "pref.coffeeB");
+  assert.equal(bOnlyAfter.body, bOnlyBefore.body);
+  assert.equal(bOnlyAfter.version, bOnlyBefore.version);
+  assert.equal(ctx.store.memory.getContextVersion("b"), bContextBefore);
+  assert.equal(entryOf(ctx.store, "c", "pref.coffeeB"), null);
+});
+test("POL-SEMOP-002c forget 关系未确认/截断不删候选，如实说明未确认范围", async (t) => {
+  const ctx = await setupContext(t);
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  await seedCoffeeA(ctx, aConversation);
+  for (const [factKey, body, text] of [
+    ["pref.coffeeB1", "用户也爱喝咖啡", "我也爱喝咖啡"],
+    ["pref.coffeeB2", "用户偏爱咖啡", "我偏爱咖啡"],
+    ["pref.coffeeB3", "用户每天喝咖啡", "我每天喝咖啡"],
+  ]) {
+    await chatTurn(ctx, bConversation, `${text}。`, [
+      { factKey, body, kind: "preference", trust: "stated", evidence: text },
+    ], "b");
+  }
+  const bBefore = ["pref.coffeeB1", "pref.coffeeB2", "pref.coffeeB3"]
+    .map((factKey) => entryOf(ctx.store, "b", factKey));
+
+  const result = await sendForget(ctx, aConversation, "请忘记我喜欢咖啡这件事。", {
+    needle: "我喜欢咖啡", evidence: "请忘记我喜欢咖啡这件事",
+  }, {
+    verification: relationResponder((pairs) => pairs.map((pair) => relationResult(pair, "different"))),
+  });
+  assert.equal(result.verificationStatus, "pending");
+  await waitFor(() => verificationRequests(ctx).length === 1);
+  await awaitVerificationSettled(ctx, result);
+
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+  for (const before of bBefore) {
+    const after = entryOf(ctx.store, "b", before.factKey);
+    assert.equal(after.body, before.body);
+    assert.equal(after.version, before.version);
+  }
+  const assistant = lastAssistant(ctx, aConversation);
+  assert.match(assistant.content, /没有确认到可以一起删除的部分/u);
+  assert.match(assistant.content, /请直接说出那条内容/u);
+  assert.equal(assistant.content.includes("一并删除了"), false);
+});
+test("POL-SEMOP-003a forget 阶段 1 提前返回，阶段 2 同一 assistant 原位更新", async (t) => {
+  const { ctx, aConversation, bConversation } = await setupForgetPair(t);
+  const assistantsBefore = ctx.store.chat.getConversation({
+    characterId: "a", conversationId: aConversation.id,
+  }).messages.filter((message) => message.role === "assistant").length;
+  const gate = gatedVerification(t);
+  const result = await sendForget(ctx, aConversation, "请忘记我喜欢咖啡这件事。", {
+    needle: "我喜欢咖啡", evidence: "请忘记我喜欢咖啡这件事",
+  }, { verification: gate.responder });
+  assert.equal(result.status, "completed");
+  assert.equal(result.verificationStatus, "pending");
+  assert.equal(result.assistantMessageId, lastAssistant(ctx, aConversation).id);
+  assert.equal(ctx.store.chat.getConversation({
+    characterId: "a", conversationId: aConversation.id,
+  }).messages.filter((message) => message.role === "assistant").length, assistantsBefore + 1);
+  await gate.waitStarted();
+  gate.release();
+  await awaitVerificationSettled(ctx, result);
+  const messages = ctx.store.chat.getConversation({
+    characterId: "a", conversationId: aConversation.id,
+  }).messages.filter((message) => message.role === "assistant");
+  assert.equal(messages.length, assistantsBefore + 1);
+  assert.equal(messages.at(-1).id, result.assistantMessageId);
+  assert.match(messages.at(-1).content, /一并删除了/u);
+});
+
+test("POL-SEMOP-003b forget 阶段 1 前取消零写，阶段 1 后取消保留本地删除", async (t) => {
+  await t.test("阶段 1 前取消", async (t2) => {
+    const { ctx, aConversation, bConversation } = await setupForgetPair(t2);
+    const aOld = entryOf(ctx.store, "a", "pref.coffee");
+    const bOld = entryOf(ctx.store, "b", "pref.coffeeB");
+    let release;
+    let modelStarted = false;
+    ctx.server.enqueue(() => {
+      modelStarted = true;
+      return new Promise((resolve) => { release = resolve; });
+    });
+    t2.after(() => release?.());
+    const requestId = "forget-phase1-cancel";
+    const pending = ctx.store.chat.sendMessage({
+      characterId: "a", conversationId: aConversation.id,
+      text: "请忘记我喜欢咖啡这件事。", requestId,
+    });
+    await waitFor(() => modelStarted);
+    const cancelled = ctx.store.chat.cancelRequest({ characterId: "a", requestId });
+    assert.equal(cancelled.cancelled, true);
+    release();
+    const result = await pending;
+    assert.equal(result.status, "cancelled");
+    assert.equal(entryOf(ctx.store, "a", "pref.coffee").body, aOld.body);
+    assert.equal(entryOf(ctx.store, "b", "pref.coffeeB").body, bOld.body);
+    assert.equal(verificationRequests(ctx).length, 0);
+  });
+
+  await t.test("阶段 1 后取消", async (t2) => {
+    const { ctx, aConversation, bConversation } = await setupForgetPair(t2);
+    const bOld = entryOf(ctx.store, "b", "pref.coffeeB");
+    const gate = gatedVerification(t2);
+    const result = await sendForget(ctx, aConversation, "请忘记我喜欢咖啡这件事。", {
+      needle: "我喜欢咖啡", evidence: "请忘记我喜欢咖啡这件事",
+    }, { verification: gate.responder });
+    assert.equal(result.verificationStatus, "pending");
+    await gate.waitStarted();
+    const cancelled = ctx.store.chat.cancelRequest({ characterId: "a", requestId: result.requestId });
+    assert.equal(cancelled.verificationStatus, "cancelled");
+    gate.release();
+    await waitFor(() => {
+      const request = ctx.store.chat.getRequest({ characterId: "a", requestId: result.requestId });
+      return request.verificationStatus === "cancelled";
+    });
+    assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+    assert.equal(entryOf(ctx.store, "b", "pref.coffeeB").body, bOld.body);
+    const assistant = lastAssistant(ctx, aConversation);
+    assert.match(assistant.content, /本地这次删除已完成/u);
+    assert.equal(assistant.content.includes("更正"), false);
+  });
+});
+
+test("POL-SEMOP-003c forget dispose/close/重启均不删候选并原位删除收口", async (t) => {
+  for (const mode of ["dispose", "close", "restart"]) {
+    await t.test(mode, async (t2) => {
+      const { ctx, aConversation, bConversation } = await setupForgetPair(t2);
+      const bOld = entryOf(ctx.store, "b", "pref.coffeeB");
+      const gate = gatedVerification(t2);
+      const result = await sendForget(ctx, aConversation, "请忘记我喜欢咖啡这件事。", {
+        needle: "我喜欢咖啡", evidence: "请忘记我喜欢咖啡这件事",
+      }, { verification: gate.responder });
+      assert.equal(result.verificationStatus, "pending");
+      await gate.waitStarted();
+      const pendingAssistant = lastAssistant(ctx, aConversation);
+      if (mode === "dispose") {
+        await ctx.store.chat.dispose();
+      } else if (mode === "close") {
+        ctx.store.chat.closeConversation({ characterId: "a", conversationId: aConversation.id });
+      } else {
+        await ctx.store.chat.dispose();
+        withDatabase(ctx.store.dbPath, (db) => {
+          db.prepare("UPDATE chat_messages SET content = ? WHERE id = ?")
+            .run(pendingAssistant.content, result.assistantMessageId);
+          db.prepare("UPDATE chat_requests SET verification_status = 'pending' WHERE id = ?")
+            .run(result.requestId);
+        });
+        ctx.reopenWithRecover();
+      }
+      await awaitVerificationSettled(ctx, result);
+      const request = ctx.store.chat.getRequest({ characterId: "a", requestId: result.requestId });
+      assert.equal(request.verificationStatus, mode === "restart" ? "interrupted" : "cancelled");
+      assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+      assert.equal(entryOf(ctx.store, "b", "pref.coffeeB").body, bOld.body);
+      const assistant = ctx.store.chat.getConversation({
+        characterId: "a", conversationId: aConversation.id,
+      }).messages.find((message) => message.id === result.assistantMessageId);
+      assert.match(assistant.content, /本地这次删除已完成/u);
+      assert.equal(assistant.content.includes("更正"), false);
+    });
+  }
+});
+
+test("POL-SEMOP-004b forget 自增控制不误拒候选，等待期间 B 权限变化则拒绝该候选", async (t) => {
+  const ctx = await setupContext(t);
+  const aConversation = openConversation(ctx.store);
+  await seedCoffeeA(ctx, aConversation);
+  const candidate = await seedSharedCoffeeCandidate(ctx, aConversation);
+  const bMember = candidate.bEntry;
+  const gate = gatedVerification(t);
+  const result = await sendForget(ctx, aConversation, "只你忘记咖啡这件事。", {
+    needle: "我喜欢咖啡", evidence: "只你忘记咖啡这件事",
+  }, { verification: gate.responder });
+  assert.equal(result.verificationStatus, "pending");
+  await gate.waitStarted();
+  withDatabase(ctx.store.dbPath, (db) => {
+    db.prepare("INSERT OR IGNORE INTO memory_source_controls (character_id, source_id_hash, created_at) VALUES (?, ?, ?)")
+      .run("b", sha256(bMember.sourceId), ctx.nowMs());
+  });
+  gate.release();
+  await awaitVerificationSettled(ctx, result);
+
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+  assert.equal(entryOf(ctx.store, "a", "pref.coffeeA2").body, candidate.aEntry.body);
+  assert.equal(entryOf(ctx.store, "b", "pref.coffeeA2").body, bMember.body);
+  const assistant = lastAssistant(ctx, aConversation);
+  assert.equal(assistant.content.includes("一并删除了"), false);
+});
+
+test("POL-SEMOP-004c forget 第二候选删除故障：阶段 2 逐表全回滚，阶段 1 保留", async (t) => {
+  const ctx = await setupContext(t);
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  const cConversation = openConversation(ctx.store, "c");
+  await seedCoffeeA(ctx, aConversation);
+  await seedCoffeeB(ctx, bConversation);
+  await seedCoffeeC(ctx, cConversation);
+  const bOld = entryOf(ctx.store, "b", "pref.coffeeB");
+  const cOld = entryOf(ctx.store, "c", "pref.coffeeC");
+  withDatabase(ctx.store.dbPath, (db) => {
+    db.exec(`
+      CREATE TRIGGER fail_second_forget
+      BEFORE DELETE ON memory_entries
+      WHEN OLD.id = '${cOld.id}'
+      BEGIN SELECT RAISE(ABORT, 'fixture second forget fault'); END;
+    `);
+  });
+
+  const result = await sendForget(ctx, aConversation, "请忘记我喜欢咖啡这件事。", {
+    needle: "我喜欢咖啡", evidence: "请忘记我喜欢咖啡这件事",
+  }, {
+    verification: relationResponder((pairs) => pairs.map((pair) => relationResult(pair, "equivalent"))),
+  });
+  const afterStage1 = memorySnapshot(ctx.store.dbPath);
+  await waitFor(() => verificationRequests(ctx).length === 1 ||
+    ctx.store.chat.getRequest({ characterId: "a", requestId: result.requestId }).verificationStatus !== "pending");
+  assert.equal(verificationRequests(ctx).length, 1, "应发出一次候选核验");
+  await awaitVerificationSettled(ctx, result);
+
+  assert.deepEqual(memorySnapshot(ctx.store.dbPath), afterStage1, "阶段 2 删除必须逐表回滚");
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+  assert.equal(entryOf(ctx.store, "b", "pref.coffeeB").body, bOld.body);
+  assert.equal(entryOf(ctx.store, "c", "pref.coffeeC").body, cOld.body);
+  const request = ctx.store.chat.getRequest({ characterId: "a", requestId: result.requestId });
+  assert.equal(request.status, "completed");
+  assert.equal(request.verificationStatus, "failed");
+  const assistant = lastAssistant(ctx, aConversation);
+  assert.match(assistant.content, /本地这次删除已完成/u);
+  assert.equal(assistant.content.includes("一并删除了"), false);
+});
+
+test("POL-SEMOP-004a/007c forget 删除锚后旧消息被改或新 identity 重学，旧核验失效", async (t) => {
+  for (const mode of ["message", "new-identity"]) {
+    await t.test(mode, async (t2) => {
+      const { ctx, aConversation, bConversation } = await setupForgetPair(t2);
+      const aOld = entryOf(ctx.store, "a", "pref.coffee");
+      const bOld = entryOf(ctx.store, "b", "pref.coffeeB");
+      const aMessageId = aOld.sourceId.slice("chat:".length);
+      const gate = gatedVerification(t2);
+      const result = await sendForget(ctx, aConversation, "请忘记我喜欢咖啡这件事。", {
+        needle: "我喜欢咖啡", evidence: "请忘记我喜欢咖啡这件事",
+      }, { verification: gate.responder });
+      assert.equal(result.verificationStatus, "pending");
+      await gate.waitStarted();
+      const stage1Context = ctx.store.memory.getContextVersion("a");
+      if (mode === "message") {
+        withDatabase(ctx.store.dbPath, (db) => {
+          db.prepare("UPDATE chat_messages SET content = ? WHERE id = ?")
+            .run("被改掉的旧咖啡原话", aMessageId);
+        });
+      } else {
+        const created = ctx.store.memory.remember({
+          characterId: "a",
+          factKey: "pref.coffee.new",
+          body: aOld.body,
+          kind: "preference",
+          sourceId: "a-new-permission",
+          explicitConsent: true,
+        });
+        assert.equal(created.created, true);
+        assert.ok(ctx.store.memory.getContextVersion("a") > stage1Context);
+        assert.notEqual(created.entry.factIdentityId, aOld.factIdentityId);
+        const proof = JSON.parse(proofOf(ctx, result.requestId).operation_proof);
+        assert.notEqual(created.entry.factIdentityId, proof.anchorIdentityId);
+      }
+      gate.release();
+      await awaitVerificationSettled(ctx, result);
+
+      const request = ctx.store.chat.getRequest({ characterId: "a", requestId: result.requestId });
+      assert.equal(request.verificationStatus, "stale");
+      assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+      assert.equal(entryOf(ctx.store, "b", "pref.coffeeB").body, bOld.body);
+      if (mode === "new-identity") {
+        assert.equal(entryOf(ctx.store, "a", "pref.coffee.new").body, aOld.body);
+      }
+      assert.equal(lastAssistant(ctx, aConversation).content.includes("一并删除了"), false);
+    });
+  }
+});
+
+test("POL-SEMOP-006 forget 无候选 0 次核验且不写 proof；有候选最多一次；超时失败", { timeout: 60000 }, async (t) => {
+  await t.test("无候选", async (t2) => {
+    const ctx = await setupContext(t2);
+    const aConversation = openConversation(ctx.store);
+    await seedCoffeeA(ctx, aConversation);
+    const budgetBefore = budgetSnapshot(ctx);
+    const result = await sendForget(ctx, aConversation, "请忘记我喜欢咖啡这件事。", {
+      needle: "我喜欢咖啡", evidence: "请忘记我喜欢咖啡这件事",
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(result.verificationStatus, "none");
+    assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+    assert.equal(verificationRequests(ctx).length, 0);
+    assert.equal(proofOf(ctx, result.requestId).operation_proof, null);
+    assert.deepEqual(budgetSnapshot(ctx), budgetBefore);
+    assert.deepEqual(budgetSnapshot(ctx).attempts, []);
+  });
+
+  await t.test("有候选一次", async (t2) => {
+    const { ctx, aConversation, bConversation } = await setupForgetPair(t2);
+    const budgetBefore = budgetSnapshot(ctx);
+    const result = await sendForget(ctx, aConversation, "请忘记我喜欢咖啡这件事。", {
+      needle: "我喜欢咖啡", evidence: "请忘记我喜欢咖啡这件事",
+    }, {
+      verification: relationResponder((pairs) => pairs.map((pair) => relationResult(pair, "equivalent"))),
+    });
+    await awaitVerificationSettled(ctx, result);
+    assert.equal(verificationRequests(ctx).length, 1);
+    assert.deepEqual(budgetSnapshot(ctx), budgetBefore);
+    assert.equal(entryOf(ctx.store, "b", "pref.coffeeB"), null);
+  });
+
+  await t.test("15s 超时", async (t2) => {
+    const { ctx, aConversation, bConversation } = await setupForgetPair(t2);
+    const bOld = entryOf(ctx.store, "b", "pref.coffeeB");
+    const budgetBefore = budgetSnapshot(ctx);
+    const result = await sendForget(ctx, aConversation, "请忘记我喜欢咖啡这件事。", {
+      needle: "我喜欢咖啡", evidence: "请忘记我喜欢咖啡这件事",
+    }, {
+      verification: () => new Promise(() => {}),
+    });
+    await waitFor(() => {
+      const request = ctx.store.chat.getRequest({ characterId: "a", requestId: result.requestId });
+      return request.verificationStatus !== "pending";
+    }, 20000);
+    const request = ctx.store.chat.getRequest({ characterId: "a", requestId: result.requestId });
+    assert.equal(request.verificationStatus, "failed");
+    assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+    assert.equal(entryOf(ctx.store, "b", "pref.coffeeB").body, bOld.body);
+    assert.deepEqual(budgetSnapshot(ctx), budgetBefore);
+    assert.match(lastAssistant(ctx, aConversation).content, /本地这次删除已完成/u);
+  });
+});
+
+test("POL-SEMOP-007a/b/c forget 删除后 FTS/旧来源/relay/share 不回流，明确新同意可新建", async (t) => {
+  const ctx = await setupContext(t);
+  seedRelationships(ctx.store.dbPath, ["d"]);
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  await seedCoffeeA(ctx, aConversation);
+  await seedCoffeeB(ctx, bConversation);
+  const aOld = entryOf(ctx.store, "a", "pref.coffee");
+  const bOld = entryOf(ctx.store, "b", "pref.coffeeB");
+  const cOldSource = "seed-d-coffee";
+  const dEntry = ctx.store.memory.remember({
+    characterId: "d",
+    factKey: "pref.coffeeD",
+    body: aOld.body,
+    kind: aOld.kind,
+    sourceId: cOldSource,
+  }).entry;
+
+  const result = await sendForget(ctx, aConversation, "请忘记我喜欢咖啡这件事。", {
+    needle: "我喜欢咖啡", evidence: "请忘记我喜欢咖啡这件事",
+  }, {
+    verification: relationResponder((pairs) => pairs.map((pair) => relationResult(pair, "equivalent"))),
+  });
+  await awaitVerificationSettled(ctx, result);
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+  assert.equal(entryOf(ctx.store, "b", "pref.coffeeB"), null);
+  assert.deepEqual(ctx.store.memory.searchMemories({ characterId: "a", query: "咖啡" }), []);
+  assert.deepEqual(ctx.store.memory.searchMemories({ characterId: "b", query: "咖啡" }), []);
+  ctx.store.memory.rebuildSearchIndex();
+  assert.deepEqual(ctx.store.memory.searchMemories({ characterId: "a", query: "咖啡" }), []);
+
+  for (const [characterId, old] of [["a", aOld], ["b", bOld]]) {
+    const reimport = ctx.store.memory.applyExtractionBatch({
+      characterId,
+      sourceId: old.sourceId,
+      sourceVersion: 1,
+      appliedAt: ctx.nowMs(),
+      facts: [{ factKey: old.factKey, body: old.body, kind: old.kind }],
+    });
+    assert.equal(reimport.applied, false);
+    assert.equal(reimport.reason, "blocked_source");
+  }
+  assert.throws(() => ctx.store.memory.relay({
+    fromCharacterId: "d", toCharacterId: "a",
+    entries: [{ entryId: dEntry.id, expectedVersion: dEntry.version }],
+  }), (error) => error?.code === "SHARE_BLOCKED");
+  assert.throws(() => ctx.store.memory.share({
+    fromCharacterId: "d", toCharacterId: "a",
+    entryIds: [dEntry.id],
+  }), (error) => error?.code === "SHARE_BLOCKED");
+
+  const controlText = withDatabase(ctx.store.dbPath, (db) => [
+    "memory_source_controls",
+    "memory_forget_identity_controls",
+    "memory_deleted_fact_fingerprints",
+    "memory_forget_controls",
+  ].map((table) => JSON.stringify(db.prepare(`SELECT * FROM ${table}`).all())).join("\n"));
+  assert.equal(controlText.includes(aOld.body), false);
+  assert.equal(controlText.includes(bOld.body), false);
+  const proofText = proofOf(ctx, result.requestId).operation_proof;
+  assert.equal(proofText.includes(aOld.body), false);
+  assert.equal(proofText.includes(bOld.body), false);
+
+  ctx.reopen();
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+  assert.equal(entryOf(ctx.store, "b", "pref.coffeeB"), null);
+  const reimportAfterRestart = ctx.store.memory.applyExtractionBatch({
+    characterId: "a",
+    sourceId: aOld.sourceId,
+    sourceVersion: 1,
+    appliedAt: ctx.nowMs(),
+    facts: [{ factKey: aOld.factKey, body: aOld.body, kind: aOld.kind }],
+  });
+  assert.equal(reimportAfterRestart.applied, false);
+
+  const newSource = "a-new-permission";
+  const blockedWithoutConsent = ctx.store.memory.remember({
+    characterId: "a",
+    factKey: "pref.coffee.renewed",
+    body: aOld.body,
+    kind: aOld.kind,
+    sourceId: newSource,
+  });
+  assert.equal(blockedWithoutConsent.created, false);
+  assert.equal(blockedWithoutConsent.blocked, "forget");
+
+  const reconsented = ctx.store.memory.remember({
+    characterId: "a",
+    factKey: "pref.coffee.renewed",
+    body: aOld.body,
+    kind: aOld.kind,
+    sourceId: newSource,
+    explicitConsent: true,
+  });
+  assert.equal(reconsented.created, true);
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee.renewed").body, aOld.body);
+  assert.notEqual(reconsented.entry.factIdentityId, aOld.factIdentityId);
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null, "旧 factKey 不因新来源复活");
+  const oldSourceAgain = ctx.store.memory.remember({
+    characterId: "a",
+    factKey: "pref.coffee.old",
+    body: aOld.body,
+    kind: aOld.kind,
+    sourceId: aOld.sourceId,
+    explicitConsent: true,
+  });
+  assert.equal(oldSourceAgain.created, false);
+  assert.equal(oldSourceAgain.blocked, "source");
 });

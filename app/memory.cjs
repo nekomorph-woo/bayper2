@@ -838,8 +838,34 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
 
       const entries = store.listEntriesByIdentity(identityId);
       const targets = scope === "all" ? entries : entries.filter((entry) => entry.characterId === characterId);
+      const targetIds = new Set(targets.map((entry) => entry.id));
+      const sourceControls = {};
+      const identityControls = {};
+      const deletedFingerprints = {};
+      const addControl = (holder, value) => {
+        if (!sourceControls[holder]) {
+          sourceControls[holder] = [];
+        }
+        if (!sourceControls[holder].includes(value)) {
+          sourceControls[holder].push(value);
+        }
+      };
+      const addFingerprint = (holder, value) => {
+        if (!value) {
+          return;
+        }
+        if (!deletedFingerprints[holder]) {
+          deletedFingerprints[holder] = [];
+        }
+        if (!deletedFingerprints[holder].includes(value)) {
+          deletedFingerprints[holder].push(value);
+        }
+      };
       const affected = new Set();
       for (const entry of targets) {
+        addControl(entry.characterId, sourceIdHash(entry.sourceId));
+        identityControls[entry.characterId] = identityId;
+        addFingerprint(entry.characterId, deletedFingerprintOf(entry));
         store.deleteEntry(entry.id);
         store.addSourceControl(entry.characterId, sourceIdHash(entry.sourceId), nowMs);
         store.addForgetIdentityControl(entry.characterId, identityId, nowMs);
@@ -851,6 +877,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
         affected.add(entry.characterId);
       }
       for (const sourceId of excludedSources) {
+        addControl(characterId, sourceIdHash(sourceId));
         store.addSourceControl(characterId, sourceIdHash(sourceId), nowMs);
       }
 
@@ -858,10 +885,35 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       for (const holder of affected) {
         contextVersions[holder] = store.bumpContextVersion(holder, nowMs);
       }
+      for (const holder of Object.keys(sourceControls)) {
+        sourceControls[holder].sort();
+      }
+      for (const holder of Object.keys(deletedFingerprints)) {
+        deletedFingerprints[holder].sort();
+      }
       return {
         deleted: targets.length,
         affectedCharacters: [...affected].sort(),
         contextVersions,
+        // 无正文删除证明：只含 id、版本、来源哈希、身份标识与删除指纹。
+        controlProof: {
+          identityId,
+          scope,
+          deletedEntryIds: targets.map((entry) => entry.id).sort(),
+          retainedEntries: entries
+            .filter((entry) => !targetIds.has(entry.id))
+            .map((entry) => ({
+              entryId: entry.id,
+              characterId: entry.characterId,
+              version: entry.version,
+              sourceIdHash: sourceIdHash(entry.sourceId),
+            }))
+            .sort((left, right) => left.entryId.localeCompare(right.entryId)),
+          deletedCount: targets.length,
+          sourceControls,
+          identityControls,
+          deletedFingerprints,
+        },
       };
     };
     return input.inTransaction === true ? applyForget() : store.transaction(applyForget);
@@ -1357,6 +1409,79 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     return store.listEntriesByIdentity(identityId);
   }
 
+  /* S03m 2b 只读 proof 核对：只读控制与身份/版本，不读正文。forget 证明已删
+     条目不在、目标 identity 现存成员等于应保留集合、控制键仍在，且发起角色
+     contextVersion 未变；任何新身份重学或后续记忆变动都会使旧 proof 失效。 */
+  function verifyOperationProof(input = {}) {
+    try {
+      if (input.action !== "forget") {
+        return false;
+      }
+      const identityId = cleanText(input.identityId, "身份ID", 200);
+      const initiatorCharacterId = cleanText(input.initiatorCharacterId, "角色ID", 200);
+      const proof = input.controlProof;
+      if (!proof || typeof proof !== "object" ||
+        !Number.isInteger(input.expectedContextVersion)) {
+        return false;
+      }
+      if (store.getContextVersion(initiatorCharacterId) !== input.expectedContextVersion) {
+        return false;
+      }
+      if (!Array.isArray(proof.deletedEntryIds) || !Array.isArray(proof.retainedEntries)) {
+        return false;
+      }
+      for (const entryId of proof.deletedEntryIds) {
+        if (store.getEntryById(cleanText(entryId, "记忆ID", 200))) {
+          return false;
+        }
+      }
+      const current = store.listEntriesByIdentity(identityId);
+      const retainedIds = proof.retainedEntries.map((entry) => entry.entryId);
+      if (current.length !== retainedIds.length ||
+        new Set(retainedIds).size !== retainedIds.length) {
+        return false;
+      }
+      const currentById = new Map(current.map((entry) => [entry.id, entry]));
+      for (const expected of proof.retainedEntries) {
+        const entry = currentById.get(expected.entryId);
+        if (!entry ||
+          entry.characterId !== expected.characterId ||
+          entry.version !== expected.version ||
+          sourceIdHash(entry.sourceId) !== expected.sourceIdHash) {
+          return false;
+        }
+      }
+      for (const [holder, value] of Object.entries(proof.identityControls ?? {})) {
+        if (value !== identityId || !store.hasForgetIdentityControl(holder, identityId)) {
+          return false;
+        }
+      }
+      for (const [holder, hashes] of Object.entries(proof.sourceControls ?? {})) {
+        if (!Array.isArray(hashes)) {
+          return false;
+        }
+        for (const hash of hashes) {
+          if (!store.hasSourceControl(holder, hash)) {
+            return false;
+          }
+        }
+      }
+      for (const [holder, fingerprints] of Object.entries(proof.deletedFingerprints ?? {})) {
+        if (!Array.isArray(fingerprints)) {
+          return false;
+        }
+        for (const fingerprint of fingerprints) {
+          if (!store.hasDeletedFactFingerprint(holder, fingerprint)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /* S03m 阶段 2 窄接口：只更新已核验候选 identity 的成员，不再次 correct
      锚、不接收调用者正文/来源。事务内重读锚与成员，使用当前版本。 */
   function applyConfirmedCorrectionToIdentityMembers(input = {}) {
@@ -1547,6 +1672,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     associateFacts,
     getHeldEntry,
     listIdentityEntries,
+    verifyOperationProof,
     applyConfirmedCorrectionToIdentityMembers,
     buildContext,
     getContextVersion,

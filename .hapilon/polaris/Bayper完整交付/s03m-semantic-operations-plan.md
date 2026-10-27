@@ -350,3 +350,13 @@ HEAD `88ff9c7`（VERSION `0.1.189`，已由 master snap）。master 已受托审
 9. **跨角色边界**：§10.6 的 `corrected_v2` 跨角色降级是如实边界，不声称覆盖全部传播来源。
 
 本批只改文档与版本，不写代码/测试、不 Git/API/GUI/子代理；下一次才实施 forget 切片。
+
+## 11. 2b forget 收口与下一批 temporary（2026-10-27）
+
+- master 独立运行 20 个相关套件 **235/235 PASS、0 skipped、exit 0**，before/after SHA 一致，证据 [master-forget-core-QlvxfnTU](evidence/master-forget-core-QlvxfnTU/stdout.log)；命令、真实退出码与前后 SHA 见同目录。受托接受 2b forget 确定性后端的**已测有限能力**，不是用户亲自确认，不是真实模型语义，也不是人类体验。
+- 接受范围：002a/b/c、003a/b/c、004a 的删除锚证据、004b、004c 的删除回滚、006a/b、007a/b/c 的 forget 分支；包括 self/all、单条 assistant 原位更新、取消/重启/超时文案、新来源+明确同意建立新 identity 使旧核验 stale、FTS/旧来源/relay/share 防回流。该范围只限已运行分支：002c 实际覆盖 different/截断，未单独覆盖 uncertain；网络失败只由共享 correct 回归间接覆盖，不称 forget 网络失败独立通过。
+- 未覆盖：temporary（001d）、真实模型 L1/L2、跨角色临时传播、忘记专属 GUI 与完整产品级 GUI 生命周期。现有 correct GUI 4/4 对应旧源码时点，本批未重跑，不能算 forget GUI 通过。
+- 聚合 POL-SEMOP-001～008 仍 NOT_COVERED，不得由 2b 后端有限接受自动升级为整组 PASS；不宣称 S03m/S03/Goal 完成。
+- 生产净增约 356 行已由 master 评估为职责必要；correct/forget 共用请求/凭据/取消/候选/异常编排，仅动作 proof、候选资格与第二事务分支不同，不构成通用策略框架。
+- 下一批 temporary：沿用本计划两阶段、取消/重启/单消息与无正文证明结构；proof 按当前事实条目/版本/`expiresAt` 设计，不直接套用删除 proof；继续不增加 GUI/main/preload 范围，除非 master 另行派发。
+- 本批仅文档与版本收口：VERSION `0.1.190` -> `0.1.191`（同一 10 文件 11 处字面量，无依赖变化），不改源码/测试，不重跑测试/API/GUI，不 Git/子代理。初版中止、夹具错误、FAIL 与部分通过记录保留，不覆盖。

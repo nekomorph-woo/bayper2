@@ -57,6 +57,8 @@ const VERIFICATION_PENDING_SUFFIX =
   "\n\n其他相近内容我正在核对，完成后会在同一条消息里更新。";
 const VERIFICATION_LOCAL_ONLY_SUFFIX =
   "\n\n其他相近内容未继续核对，本地这次更正已完成。";
+const VERIFICATION_LOCAL_ONLY_FORGET_SUFFIX =
+  "\n\n其他相近内容未继续核对，本地这次删除已完成。";
 const DEFAULT_CHARACTERS = require("./content/characters.json").candidates;
 
 function cleanText(value, field, max) {
@@ -675,23 +677,48 @@ function createChatService({
       request.verificationStatus === "pending" && request.assistantMessageId);
   }
 
-  function verificationReply(content, status, { applied = 0, unconfirmed = 0, truncated = false } = {}) {
+  function verificationReply(content, status, {
+    action = "correct", applied = 0, unconfirmed = 0, truncated = false,
+  } = {}) {
     let base = content;
     if (base.endsWith(VERIFICATION_PENDING_SUFFIX)) {
       base = base.slice(0, -VERIFICATION_PENDING_SUFFIX.length).trimEnd();
-    } else if (base.endsWith(VERIFICATION_LOCAL_ONLY_SUFFIX)) {
+    }
+    if (base.endsWith(VERIFICATION_LOCAL_ONLY_SUFFIX)) {
       base = base.slice(0, -VERIFICATION_LOCAL_ONLY_SUFFIX.length).trimEnd();
     }
-    if (status !== "completed") {
-      return `${base}${VERIFICATION_LOCAL_ONLY_SUFFIX}`;
+    if (base.endsWith(VERIFICATION_LOCAL_ONLY_FORGET_SUFFIX)) {
+      base = base.slice(0, -VERIFICATION_LOCAL_ONLY_FORGET_SUFFIX.length).trimEnd();
     }
-    let suffix = applied > 0
-      ? `\n\n另外把 ${applied} 条确认属于同一件事的内容一并更正了。`
-      : "\n\n其他相近内容没有确认到可以一起更正的部分，我没有改动。";
+    const localOnly = action === "forget"
+      ? VERIFICATION_LOCAL_ONLY_FORGET_SUFFIX
+      : VERIFICATION_LOCAL_ONLY_SUFFIX;
+    if (status !== "completed") {
+      return `${base}${localOnly}`;
+    }
+    let suffix;
+    if (action === "forget") {
+      suffix = applied > 0
+        ? `\n\n另外把 ${applied} 条确认属于同一件事的内容一并删除了。`
+        : "\n\n其他相近内容没有确认到可以一起删除的部分，我没有改动。";
+    } else {
+      suffix = applied > 0
+        ? `\n\n另外把 ${applied} 条确认属于同一件事的内容一并更正了。`
+        : "\n\n其他相近内容没有确认到可以一起更正的部分，我没有改动。";
+    }
     if (unconfirmed > 0 || truncated) {
       suffix += "\n如果也要一起处理，请直接说出那条内容。";
     }
     return `${base}${suffix}`;
+  }
+
+  function verificationAction(request) {
+    try {
+      const proof = JSON.parse(request?.operationProof ?? "null");
+      return proof?.action === "forget" ? "forget" : "correct";
+    } catch {
+      return "correct";
+    }
   }
 
   /* 原位更新同一 assistant 消息并写核验状态；调用方决定事务边界。 */
@@ -704,7 +731,10 @@ function createChatService({
       if (assistant) {
         store.updateMessageContent(
           assistant.id,
-          verificationReply(assistant.content, status, options),
+          verificationReply(assistant.content, status, {
+            ...options,
+            action: verificationAction(request),
+          }),
         );
       }
     }
@@ -808,6 +838,83 @@ function createChatService({
     });
   }
 
+  /* forget 候选整组复核：成员 id/版本/来源必须一致，来源控制按阶段 0 集合与
+     阶段 1 覆盖集合的并集精确比较；派生成员可无来源快照，但有快照时仍核验。 */
+  function forgetCandidateMembersMatch(candidate) {
+    const members = memory.listIdentityEntries(candidate.identityId);
+    if (members.length !== candidate.members.length) {
+      return false;
+    }
+    const byId = new Map(members.map((member) => [member.id, member]));
+    return candidate.members.every((expected) => {
+      const current = byId.get(expected.entryId);
+      if (!current ||
+        current.characterId !== expected.characterId ||
+        current.version !== expected.version ||
+        current.sourceId !== expected.sourceId ||
+        !sourceControlsMatch(
+          expected.characterId,
+          expected.excludedSourceHashes,
+          expected.sourceIncrements,
+        )) {
+        return false;
+      }
+      return expected.snapshot ? memberEvidenceCurrent(expected) : true;
+    });
+  }
+
+  function forgetCandidateEligible(candidate) {
+    const entry = memory.getHeldEntry({
+      characterId: candidate.characterId,
+      entryId: candidate.entryId,
+    });
+    return Boolean(
+      entry &&
+      entry.version === candidate.version &&
+      entry.factIdentityId === candidate.identityId &&
+      entry.trust === "stated" &&
+      (entry.sourceKind ?? "user") === "user" &&
+      entry.expiresAt === null &&
+      forgetCandidateMembersMatch(candidate) &&
+      candidateEvidenceCurrent(candidate),
+    );
+  }
+
+  /* 阶段 1 实际覆盖的来源控制（可能含预存键）作为候选允许增量；不推测差量。 */
+  function applyForgetControls({ targetEvidence, candidates, controlProof }) {
+    const controls = controlProof?.sourceControls ?? {};
+    const holder = targetEvidence.snapshot.holderCharacterId;
+    targetEvidence.allowedSourceHashes = controls[holder] ?? [];
+    for (const candidate of candidates) {
+      candidate.sourceIncrements = controls[candidate.characterId] ?? [];
+      for (const member of candidate.members) {
+        member.sourceIncrements = controls[member.characterId] ?? [];
+      }
+    }
+  }
+
+  function forgetProofCurrent(request, proof, targetEvidence) {
+    return Boolean(
+      proof &&
+      memory.verifyOperationProof({
+        action: "forget",
+        identityId: proof.anchorIdentityId,
+        controlProof: proof,
+        initiatorCharacterId: request.characterId,
+        expectedContextVersion: proof.initiatorContextVersion,
+        nowMs: currentMs(),
+      }) &&
+      targetEvidenceCurrent(request, targetEvidence),
+    );
+  }
+
+  function forgetSelection(candidate, characterId) {
+    const held = candidate.members.find((member) => member.characterId === characterId);
+    return held
+      ? { characterId, entryId: held.entryId, version: held.version }
+      : { characterId: candidate.characterId, entryId: candidate.entryId, version: candidate.version };
+  }
+
   function settleLatest(requestId, options = {}) {
     const latest = store.getRequest(requestId);
     if (!latest) {
@@ -822,58 +929,155 @@ function createChatService({
     return latest.verificationStatus;
   }
 
+  function correctCandidateEligible(candidate) {
+    const entry = memory.getHeldEntry({
+      characterId: candidate.characterId,
+      entryId: candidate.entryId,
+    });
+    return Boolean(
+      entry &&
+      entry.version === candidate.version &&
+      entry.factIdentityId === candidate.identityId &&
+      entry.trust === "stated" &&
+      (entry.sourceKind ?? "user") === "user" &&
+      entry.expiresAt === null &&
+      candidateMembersMatch(candidate) &&
+      candidateEvidenceCurrent(candidate),
+    );
+  }
+
+  function applyApprovedCorrection(inside, proof, targetEvidence, approved, nowMs) {
+    let currentAnchor = memory.getHeldEntry({
+      characterId: inside.characterId,
+      entryId: proof.anchorEntryId,
+    });
+    if (!proofMatches(currentAnchor, proof) ||
+      !targetEvidenceCurrent(inside, targetEvidence)) {
+      throw new AppError("VERIFICATION_STALE", "原操作已变化。");
+    }
+    // 所有候选证据必须在第一关联前复核；关联会改变 B 的来源控制与版本。
+    for (const candidate of approved) {
+      if (!correctCandidateEligible(candidate)) {
+        throw new AppError("VERIFICATION_STALE", "候选已变化。");
+      }
+    }
+    const memberIds = [];
+    for (const candidate of approved) {
+      const entry = memory.getHeldEntry({
+        characterId: candidate.characterId,
+        entryId: candidate.entryId,
+      });
+      if (!entry || entry.factIdentityId !== candidate.identityId) {
+        throw new AppError("VERIFICATION_STALE", "候选已变化。");
+      }
+      memory.associateFacts({
+        left: { entryId: currentAnchor.id, expectedVersion: currentAnchor.version },
+        right: { entryId: entry.id, expectedVersion: entry.version },
+        nowMs,
+        inTransaction: true,
+      });
+      currentAnchor = memory.getHeldEntry({
+        characterId: inside.characterId,
+        entryId: proof.anchorEntryId,
+      });
+      if (!currentAnchor) {
+        throw new AppError("VERIFICATION_STALE", "纠正锚已变化。");
+      }
+      memberIds.push(...candidate.members.map((member) => member.entryId));
+    }
+    const uniqueMembers = [...new Set(memberIds)].filter((id) => id !== currentAnchor.id);
+    memory.applyConfirmedCorrectionToIdentityMembers({
+      anchorEntryId: currentAnchor.id,
+      memberEntryIds: uniqueMembers,
+      nowMs,
+      inTransaction: true,
+    });
+    return currentAnchor;
+  }
+
+  function deleteApprovedCandidates(inside, proof, approved, nowMs) {
+    const userMessage = store.getMessage(inside.userMessageId);
+    if (!userMessage) {
+      throw new AppError("REQUEST_NOT_FOUND", "原消息不存在。");
+    }
+    // 所有候选必须在首删前完成精确复核；事务内后续删除自增的控制不再反过来拒候选。
+    const deletable = [];
+    let skipped = 0;
+    for (const candidate of approved) {
+      if (!forgetCandidateEligible(candidate)) {
+        skipped += 1;
+        continue;
+      }
+      deletable.push(candidate);
+    }
+    const results = [];
+    for (const candidate of deletable) {
+      const selection = forgetSelection(candidate, inside.characterId);
+      if (proof.scope === "self" && selection.characterId !== inside.characterId) {
+        skipped += 1;
+        continue;
+      }
+      const result = memory.forget({
+        characterId: selection.characterId,
+        entryId: selection.entryId,
+        expectedVersion: selection.version,
+        scope: proof.scope,
+        sourceIdsToExclude: selection.characterId === inside.characterId
+          ? [userMessage.sourceId]
+          : [],
+        nowMs,
+        inTransaction: true,
+      });
+      results.push({
+        identityId: candidate.identityId,
+        deleted: result.deleted,
+        affectedCharacters: result.affectedCharacters,
+        contextVersions: result.contextVersions,
+      });
+    }
+    return { results, skipped };
+  }
+
+  /* correct 与 forget 共用请求/凭据/取消/候选/异常编排；动作差异只在 proof
+     核对、候选资格与第二事务操作三处。 */
   async function runVerification({
-    request,
-    proof,
-    targetEvidence,
-    candidates,
-    truncated,
-    controller,
+    request, proof, targetEvidence, candidates, truncated, controller,
   }) {
+    const forget = proof.action === "forget";
     const requestId = request.id;
     const unconfirmedOptions = { unconfirmed: candidates.length, truncated };
-    const fail = (status = "failed") => finalizeVerification(requestId, status, {
-      unconfirmed: candidates.length,
-      truncated,
-    });
+    const fail = (status = "failed") => finalizeVerification(requestId, status, unconfirmedOptions);
+    const proofCurrent = (inside) => (forget
+      ? forgetProofCurrent(inside, proof, targetEvidence)
+      : proofMatches(memory.getHeldEntry({
+        characterId: inside.characterId,
+        entryId: proof.anchorEntryId,
+      }), proof) && targetEvidenceCurrent(inside, targetEvidence));
+    const candidateEligible = (candidate) => (forget
+      ? forgetCandidateEligible(candidate)
+      : correctCandidateEligible(candidate));
+    const filterActive = (list) => {
+      let unconfirmed = 0;
+      const active = list.filter((candidate) => {
+        if (candidateEligible(candidate)) {
+          return true;
+        }
+        unconfirmed += 1;
+        return false;
+      });
+      return { active, unconfirmed };
+    };
     try {
       const current = store.getRequest(requestId);
       if (!isVerificationPending(current)) {
         return settleLatest(requestId, unconfirmedOptions);
       }
-      const anchor = memory.getHeldEntry({
-        characterId: request.characterId,
-        entryId: proof.anchorEntryId,
-      });
-      if (!proofMatches(anchor, proof)) {
+      if (!proofCurrent(current)) {
         return fail("stale");
       }
-      if (!targetEvidenceCurrent(request, targetEvidence)) {
-        return fail("stale");
-      }
-
-      let active = [];
-      let unconfirmed = 0;
-      for (const candidate of candidates) {
-        const entry = memory.getHeldEntry({
-          characterId: candidate.characterId,
-          entryId: candidate.entryId,
-        });
-        if (
-          !entry ||
-          entry.version !== candidate.version ||
-          entry.factIdentityId !== candidate.identityId ||
-          entry.trust !== "stated" ||
-          (entry.sourceKind ?? "user") !== "user" ||
-          entry.expiresAt !== null ||
-          !candidateMembersMatch(candidate) ||
-          !candidateEvidenceCurrent(candidate)
-        ) {
-          unconfirmed += 1;
-          continue;
-        }
-        active.push(candidate);
-      }
+      const first = filterActive(candidates);
+      let unconfirmed = first.unconfirmed;
+      let active = first.active;
       if (active.length === 0) {
         return finalizeVerification(requestId, "completed", { unconfirmed, truncated });
       }
@@ -888,32 +1092,16 @@ function createChatService({
       }
       /* 等凭据期间可能取消或新增权限/来源限制；发送核验前再次复核，避免把旧
          source 内容发出。任一候选失效即从本批剔除，全部失效则不发请求。 */
-      const anchorAfterCredentials = memory.getHeldEntry({
-        characterId: request.characterId,
-        entryId: proof.anchorEntryId,
-      });
-      if (!proofMatches(anchorAfterCredentials, proof) ||
-        !targetEvidenceCurrent(request, targetEvidence)) {
+      if (!proofCurrent(afterCredentials)) {
         return fail("stale");
       }
-      const stillActive = active.filter((candidate) => {
-        const entry = memory.getHeldEntry({
-          characterId: candidate.characterId,
-          entryId: candidate.entryId,
-        });
-        return Boolean(
-          entry &&
-          entry.version === candidate.version &&
-          entry.factIdentityId === candidate.identityId &&
-          candidateMembersMatch(candidate) &&
-          candidateEvidenceCurrent(candidate),
-        );
-      });
-      unconfirmed += active.length - stillActive.length;
-      active = stillActive;
+      const recheck = filterActive(active);
+      unconfirmed += recheck.unconfirmed;
+      active = recheck.active;
       if (active.length === 0) {
         return finalizeVerification(requestId, "completed", { unconfirmed, truncated });
       }
+
       const verified = await verification.verify({
         targetSnapshot: targetEvidence.snapshot,
         candidates: active,
@@ -924,7 +1112,6 @@ function createChatService({
       if (!isVerificationPending(afterResponse)) {
         return settleLatest(requestId, { unconfirmed, truncated });
       }
-
       const approved = verified.results
         .filter((result) => result.effectiveRelation === "equivalent" && result.candidate)
         .map((result) => result.candidate);
@@ -942,64 +1129,25 @@ function createChatService({
         if (!isVerificationPending(inside)) {
           throw new AppError("VERIFICATION_CANCELLED", "核验已取消。");
         }
-        let currentAnchor = memory.getHeldEntry({
-          characterId: request.characterId,
-          entryId: proof.anchorEntryId,
-        });
-        if (!proofMatches(currentAnchor, proof) ||
-          !targetEvidenceCurrent(request, targetEvidence)) {
+        if (!proofCurrent(inside)) {
           throw new AppError("VERIFICATION_STALE", "原操作已变化。");
         }
-        // 所有候选证据必须在第一关联前复核；关联会改变 B 的来源控制与版本。
-        for (const candidate of approved) {
-          const entry = memory.getHeldEntry({
-            characterId: candidate.characterId,
-            entryId: candidate.entryId,
+        if (forget) {
+          const { results, skipped } = deleteApprovedCandidates(inside, proof, approved, nowMs);
+          writeVerificationResult(inside, "completed", {
+            applied: results.length,
+            unconfirmed: unresolved + skipped,
+            truncated,
           });
-          if (
-            !entry ||
-            entry.version !== candidate.version ||
-            entry.factIdentityId !== candidate.identityId ||
-            !candidateMembersMatch(candidate) ||
-            !candidateEvidenceCurrent(candidate)
-          ) {
-            throw new AppError("VERIFICATION_STALE", "候选已变化。");
-          }
+          store.setVerification(requestId, "completed", JSON.stringify({
+            ...proof,
+            verification: "completed",
+            candidateIdentityIds: results.map((result) => result.identityId),
+            candidateResults: results,
+          }));
+          return;
         }
-        const memberIds = [];
-        for (const candidate of approved) {
-          const entry = memory.getHeldEntry({
-            characterId: candidate.characterId,
-            entryId: candidate.entryId,
-          });
-          if (
-            !entry ||
-            entry.factIdentityId !== candidate.identityId
-          ) {
-            throw new AppError("VERIFICATION_STALE", "候选已变化。");
-          }
-          memory.associateFacts({
-            left: { entryId: currentAnchor.id, expectedVersion: currentAnchor.version },
-            right: { entryId: entry.id, expectedVersion: entry.version },
-            nowMs,
-            inTransaction: true,
-          });
-          currentAnchor = memory.getHeldEntry({
-            characterId: request.characterId,
-            entryId: proof.anchorEntryId,
-          });
-          if (!currentAnchor) {
-            throw new AppError("VERIFICATION_STALE", "纠正锚已变化。");
-          }
-          memberIds.push(...candidate.members.map((member) => member.entryId));
-        }
-        const uniqueMembers = [...new Set(memberIds)].filter((id) => id !== currentAnchor.id);
-        memory.applyConfirmedCorrectionToIdentityMembers({
-          anchorEntryId: currentAnchor.id,
-          memberEntryIds: uniqueMembers,
-          nowMs,
-          inTransaction: true,
-        });
+        const currentAnchor = applyApprovedCorrection(inside, proof, targetEvidence, approved, nowMs);
         writeVerificationResult(inside, "completed", {
           applied: approved.length,
           unconfirmed: unresolved,
@@ -1120,6 +1268,10 @@ function createChatService({
         operation?.action === "correct" &&
         operation?.mode === "replace" &&
         operation?.target?.entry;
+      const twoPhaseForget =
+        verification &&
+        operation?.action === "forget" &&
+        operation?.target?.entry;
       let targetEvidence = null;
       if (twoPhaseCorrect) {
         try {
@@ -1140,6 +1292,30 @@ function createChatService({
             : { candidates: [], truncated: false };
         } catch {
           // 候选核验是不可靠增强；捕获异常不得阻止已明确的本地 correct。
+          targetEvidence = null;
+          candidateScan = { candidates: [], truncated: false, captureFailed: true };
+        }
+      } else if (twoPhaseForget) {
+        try {
+          targetEvidence = verification.captureForgetTargetEvidence({
+            characterId: request.characterId,
+            targetEntry: operation.target.entry,
+            nowMs: currentMs(),
+          });
+          const holderCharacterIds = operation.scope === "self"
+            ? [request.characterId]
+            : knownCharacters().map((character) => character.characterId);
+          candidateScan = targetEvidence
+            ? verification.captureCandidates({
+              characterId: request.characterId,
+              holderCharacterIds,
+              targetEntry: operation.target.entry,
+              forgetMode: true,
+              nowMs: currentMs(),
+            })
+            : { candidates: [], truncated: false };
+        } catch {
+          // 与 correct 相同：候选核验失败只降级为本地删除，不回滚阶段 1。
           targetEvidence = null;
           candidateScan = { candidates: [], truncated: false, captureFailed: true };
         }
@@ -1175,8 +1351,9 @@ function createChatService({
         } else if (operationPlan.kind === "execute") {
           /* 操作、确认回复和请求完成同属这一事务；任何一步失败都整笔回滚。
              操作回合不把被删正文或命令再作为 memoryCandidates 学习。 */
+          let operationResult = null;
           try {
-            const operationResult = applyChatOperation({
+            operationResult = applyChatOperation({
               memory,
               characterId: request.characterId,
               operation: operationPlan.operation,
@@ -1194,6 +1371,7 @@ function createChatService({
             }
             reply = relayFailureReply(error.code);
           }
+          let proof = null;
           if (twoPhaseCorrect && targetEvidence && candidateScan.candidates.length > 0) {
             const anchor = memory.getHeldEntry({
               characterId: request.characterId,
@@ -1202,7 +1380,7 @@ function createChatService({
             if (!anchor || !anchor.factIdentityId) {
               throw new AppError("ENTRY_NOT_FOUND", "纠正锚不存在。");
             }
-            const proof = {
+            proof = {
               action: "correct",
               mode: "replace",
               anchorEntryId: anchor.id,
@@ -1211,6 +1389,32 @@ function createChatService({
               anchorSourceIdHash: sourceHash(anchor.sourceId),
               bodyHash: sourceHash(anchor.body),
             };
+          } else if (
+            twoPhaseForget &&
+            targetEvidence &&
+            candidateScan.candidates.length > 0 &&
+            operationResult?.controlProof
+          ) {
+            const control = operationResult.controlProof;
+            applyForgetControls({
+              targetEvidence,
+              candidates: candidateScan.candidates,
+              controlProof: control,
+            });
+            proof = {
+              version: 2,
+              action: "forget",
+              scope: operationPlan.operation.scope ?? "all",
+              anchorEntryId: operationPlan.operation.target.entry.id,
+              anchorIdentityId: control.identityId,
+              initiatorCharacterId: request.characterId,
+              initiatorContextVersion: memory.getContextVersion(request.characterId),
+              commandSourceHash: sourceHash(userMessage.sourceId),
+              verification: "pending",
+              ...control,
+            };
+          }
+          if (proof) {
             reply = `${reply}${VERIFICATION_PENDING_SUFFIX}`;
             verificationStart = {
               proof,

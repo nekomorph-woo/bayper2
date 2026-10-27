@@ -71,11 +71,37 @@ function createChatMemoryVerification({
     }
   }
 
+  function captureForgetTargetEvidence({ characterId, targetEntry, nowMs = clock() }) {
+    if (!targetEntry || !targetEntry.factIdentityId) {
+      return null;
+    }
+    try {
+      const snapshot = memorySourceContext.resolve({
+        characterId,
+        entryId: targetEntry.id,
+        expectedVersion: targetEntry.version,
+        nowMs,
+      });
+      if (snapshot.status !== "ok" || !snapshot.sourceMessage) {
+        return null;
+      }
+      return {
+        snapshot,
+        identityId: targetEntry.factIdentityId,
+        excludedSourceHashes: memory.listExcludedSources(characterId),
+        allowedSourceHashes: [],
+      };
+    } catch {
+      return null;
+    }
+  }
+
   function captureCandidates({
     characterId,
     holderCharacterIds,
     targetEntry,
     sourceIncrementsByHolder = {},
+    forgetMode = false,
     nowMs = clock(),
   }) {
     const incrementsFor = (holderId) =>
@@ -162,7 +188,7 @@ function createChatMemoryVerification({
             sourceIncrements: incrementsFor(member.characterId),
           };
         });
-        if (memberEvidence.some((member) => !member.snapshot)) {
+        if (!forgetMode && memberEvidence.some((member) => !member.snapshot)) {
           continue;
         }
         seenIdentity.add(entry.factIdentityId);
@@ -242,7 +268,7 @@ function createChatMemoryVerification({
     };
   }
 
-  return { captureTargetEvidence, captureCandidates, verify };
+  return { captureTargetEvidence, captureForgetTargetEvidence, captureCandidates, verify };
 }
 
 module.exports = { createChatMemoryVerification };
