@@ -233,11 +233,31 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
     }
     if (entry.source_id.startsWith("chat-correct:")) {
       const match = CORRECTED_SOURCE.exec(entry.source_id);
-      const revision = match ? revisionOf(match[2]) : null;
-      if (!match || match[1] !== entry.id || revision === null || revision > entry.version) {
-        return unavailable(revision === null || revision > entry.version
-          ? "source_revision_invalid"
-          : "source_mismatch");
+      if (!match) {
+        return unavailable("source_mismatch");
+      }
+      const anchor = statements.getEntry.get(match[1]);
+      const revision = revisionOf(match[2]);
+      if (!anchor || anchor.character_id !== characterId) {
+        return unavailable("source_mismatch");
+      }
+      if (revision === null || revision > anchor.version) {
+        return unavailable("source_revision_invalid");
+      }
+      /* 旧版同角色 identity 成员可能共享发起条目的 chat-correct 来源；本条自身
+         不是锚，必须核旧锚存在、stated/user、未过期、实际来源一致、同身份同正文。
+         新版 correct 已改为非锚成员使用 corrected:，这里只兼容旧数据。 */
+      const peer = anchor.id !== entry.id;
+      if (peer && (
+        anchor.source_id !== entry.source_id ||
+        anchor.trust !== "stated" ||
+        (anchor.source_kind ?? "user") !== "user" ||
+        (anchor.expires_at !== null && anchor.expires_at <= nowMs) ||
+        !anchor.fact_identity_id ||
+        anchor.fact_identity_id !== entry.fact_identity_id ||
+        anchor.body !== entry.body
+      )) {
+        return unavailable("source_mismatch");
       }
       const embeddedSourceId = match[3];
       const message = statements.getMessage.get(embeddedSourceId.slice("chat:".length));
@@ -245,8 +265,10 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
         return unavailable("source_mismatch");
       }
       return correctedSnapshot({
-        entry, characterId, nowMs, anchor: entry, message, embeddedSourceId,
-        sourceCharacterId: characterId, direct: true, via: "corrected_chat",
+        entry, characterId, nowMs, anchor, message, embeddedSourceId,
+        sourceCharacterId: characterId,
+        direct: !peer,
+        via: peer ? "identity_correction" : "corrected_chat",
       });
     }
 
@@ -460,7 +482,72 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
     );
   }
 
-  return { resolve, isCurrent };
+  /* S03m 阶段 2 窄证据复核：阶段 0 捕获的旧事实在本地正确后，entry version/source
+     必然变化，因此不能直接 isCurrent。这里只核对不应由本操作改变的证据：原 chat
+     消息与有限前文未改未删、segments 仍逐字可重算、来源控制集合只允许本操作新增
+     的旧 source 哈希。不是通用忽略权限开关。 */
+  function isEvidenceCurrent(snapshot, {
+    holderCharacterId,
+    expectedExcludedHashes = [],
+    allowedSourceHashes = [],
+  } = {}) {
+    if (!snapshot || snapshot.status !== "ok" ||
+      snapshot.holderCharacterId !== holderCharacterId ||
+      typeof snapshot.digest !== "string" || snapshot.digest !== digestOf(snapshot) ||
+      !snapshot.sourceMessage) {
+      return false;
+    }
+    const message = statements.getMessage.get(snapshot.sourceMessage.id);
+    if (!message ||
+      message.content !== snapshot.sourceMessage.content ||
+      message.created_at !== snapshot.sourceMessage.createdAt ||
+      message.seq !== snapshot.sourceMessage.seq ||
+      message.conversation_id !== snapshot.sourceMessage.conversationId ||
+      message.source_id !== `chat:${message.id}` ||
+      message.role !== "user" ||
+      message.character_id !== holderCharacterId ||
+      message.conversation_character_id !== holderCharacterId) {
+      return false;
+    }
+    for (const prior of snapshot.messages ?? []) {
+      const row = statements.getMessage.get(prior.id);
+      if (!row ||
+        row.content !== prior.content ||
+        row.created_at !== prior.createdAt ||
+        row.seq !== prior.seq ||
+        row.conversation_id !== prior.conversationId ||
+        row.source_id !== `chat:${row.id}` ||
+        row.role !== "user" ||
+        row.character_id !== holderCharacterId ||
+        row.conversation_character_id !== holderCharacterId) {
+        return false;
+      }
+    }
+    if (snapshot.format === "corrected_v2") {
+      const segments = locateCorrectionSegments(message.content, snapshot.excerpt);
+      if (!segments || segments.length !== snapshot.segments.length) {
+        return false;
+      }
+      for (let index = 0; index < segments.length; index += 1) {
+        const expected = snapshot.segments[index];
+        const actual = segments[index];
+        if (!expected || actual.start !== expected.start ||
+          actual.end !== expected.end || actual.text !== expected.text) {
+          return false;
+        }
+      }
+    } else if (!message.content.includes(snapshot.excerpt)) {
+      return false;
+    }
+    const expected = new Set([...expectedExcludedHashes, ...allowedSourceHashes]);
+    const current = memory.listExcludedSources(holderCharacterId);
+    if (current.length !== expected.size || current.some((hash) => !expected.has(hash))) {
+      return false;
+    }
+    return true;
+  }
+
+  return { resolve, isCurrent, isEvidenceCurrent };
 }
 
 module.exports = { createMemorySourceContext };

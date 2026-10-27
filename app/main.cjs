@@ -79,6 +79,9 @@ let cleanupStarted = false;
 let cleanupFinished = false;
 let quitting = false;
 let activeChat = null;
+// 阶段 2 事件可能早于 sendChatMessage 的 IPC 返回；先缓存，等阶段 1 返回后再发。
+const pendingChatUpdates = new Map();
+const chatUpdateReady = new Set();
 let connectorRuntime = null;
 let connectorRegistryDir = null;
 let lastConnectorSignature = null;
@@ -165,6 +168,7 @@ function startApplication() {
     chat: {
       // 只在应用启动边界恢复崩溃遗留请求；凭据按请求从安全存储解密。
       recoverInterrupted: true,
+      onVerificationSettled: handleChatVerificationSettled,
       getCredentials: () => readStoredModelCredentials({ store, safeStorage }),
     },
   });
@@ -1124,6 +1128,10 @@ function closeActiveChat({
   if ((conversationError || interactionError) && !bestEffort) {
     throw new AppError("CHAT_CLOSE_FAILED", "聊天没有完全关闭，请重试。");
   }
+  if (current.requestId) {
+    pendingChatUpdates.delete(current.requestId);
+    chatUpdateReady.delete(current.requestId);
+  }
   activeChat = null;
   const degraded = Boolean(conversationError || interactionError);
   if (
@@ -1188,6 +1196,41 @@ function ensureChatConversation() {
   return activeChat;
 }
 
+function flushChatUpdate(requestId) {
+  const payload = pendingChatUpdates.get(requestId);
+  if (!payload) {
+    // 阶段 2 尚未完成；保留 ready，等待 settled 回调补发。
+    return;
+  }
+  chatUpdateReady.delete(requestId);
+  pendingChatUpdates.delete(requestId);
+  if (activeChat?.requestId === requestId) {
+    activeChat.requestId = null;
+  }
+  if (
+    !mainWindow ||
+    mainWindow.isDestroyed() ||
+    mainWindow.webContents.isDestroyed()
+  ) {
+    return;
+  }
+  mainWindow.webContents.send("bayper:memory-changed", {
+    kind: "chat-updated",
+    ...payload,
+  });
+}
+
+/* 阶段 2 只发一次事件；若 IPC 尚未返回，先缓存，防止 renderer 漏刷新。 */
+function handleChatVerificationSettled(payload) {
+  if (!payload?.requestId) {
+    return;
+  }
+  pendingChatUpdates.set(payload.requestId, payload);
+  if (chatUpdateReady.has(payload.requestId)) {
+    setImmediate(() => flushChatUpdate(payload.requestId));
+  }
+}
+
 async function sendChatMessage({ characterId, text, requestId } = {}) {
   if (systemPaused) {
     throw new AppError("SYSTEM_PAUSED", "系统暂停中，暂时不能发送聊天消息。");
@@ -1218,7 +1261,15 @@ async function sendChatMessage({ characterId, text, requestId } = {}) {
     throw error;
   }
   if (activeChat === chat) {
-    chat.requestId = result.status === "failed" ? requestId : null;
+    const verificationPending =
+      result.status === "completed" && result.verificationStatus === "pending";
+    chat.requestId =
+      result.status === "failed" || verificationPending ? requestId : null;
+    if (verificationPending) {
+      chatUpdateReady.add(requestId);
+      // 让 IPC 结果先回到 renderer，再发阶段 2 事件；若阶段 2 已先完成，缓存会在下一 tick 补发。
+      setImmediate(() => flushChatUpdate(requestId));
+    }
   }
   return result;
 }
@@ -1227,7 +1278,11 @@ function cancelChatMessage({ characterId, requestId } = {}) {
   if (!activeChat || activeChat.characterId !== characterId || activeChat.requestId !== requestId) {
     throw new AppError("REQUEST_NOT_FOUND", "没有可取消的聊天请求。");
   }
-  return store.chat.cancelRequest({ characterId, requestId });
+  const result = store.chat.cancelRequest({ characterId, requestId });
+  if (result.cancelled && activeChat) {
+    activeChat.requestId = null;
+  }
+  return result;
 }
 
 async function retryChatMessage({ characterId, requestId } = {}) {

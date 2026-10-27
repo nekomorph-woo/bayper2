@@ -72,6 +72,7 @@
       displaySeq: 0,
       displayCutoffSeq: 0,
       lastMessageSeq: 0,
+      verificationSettledRequestId: null,
       trigger: null,
     };
 
@@ -461,6 +462,20 @@
         chat.conversationId = result.conversationId;
       }
       if (result.status === "completed") {
+        if (
+          result.verificationStatus === "pending" &&
+          chat.verificationSettledRequestId !== requestId
+        ) {
+          chat.mode = "waiting";
+          chat.requestId = requestId;
+          byId("chat-input").value = "";
+          setMemoryStatus(result.memoryApplied);
+          setStatus("已处理当前范围，正在核对其他相近内容…");
+          setSubtitle(`核对中 · ${chat.displayName}`);
+          applyMode();
+          await refreshConversation(token);
+          return;
+        }
         chat.mode = "open";
         chat.requestId = null;
         if (memoryChanged) {
@@ -539,6 +554,7 @@
       const displaySeq = chat.displaySeq;
       chat.mode = "waiting";
       chat.requestId = requestId;
+      chat.verificationSettledRequestId = null;
       showChatError(null);
       setMemoryStatus(0);
       setStatus("等待回复…");
@@ -623,6 +639,7 @@
       chat.displayName = null;
       chat.conversationId = null;
       chat.requestId = null;
+      chat.verificationSettledRequestId = null;
       chat.mode = "closed";
       chat.conversations = [];
       chat.closing = false;
@@ -785,7 +802,37 @@
     }
 
     /* 记忆只清理当前受影响的屏上旧显示；数据库原文与未发送草稿都不动。 */
+    async function handleChatUpdated(payload) {
+      if (!chat.open || chat.closing ||
+        payload?.characterId !== chat.characterId ||
+        payload?.conversationId !== chat.conversationId ||
+        payload.requestId !== chat.requestId) {
+        return;
+      }
+      chat.verificationSettledRequestId = payload.requestId;
+      chat.mode = "open";
+      chat.requestId = null;
+      setMemoryStatus(0);
+      if (payload.status === "completed") {
+        setStatus("");
+      } else {
+        setStatus("本地更正已完成；其他相近内容未继续核对");
+      }
+      setSubtitle(`对话中 · ${chat.displayName}`);
+      applyMode();
+      const token = viewGate.snapshot();
+      await refreshConversation(token);
+      if (!viewGate.current(token) || chat.closing) {
+        return;
+      }
+      byId("chat-input").focus();
+    }
+
     function handleMemoryChanged(payload) {
+      if (payload?.kind === "chat-updated") {
+        void handleChatUpdated(payload).catch(() => {});
+        return;
+      }
       const affected = payload?.affectedCharacters;
       if (!chat.open || !Array.isArray(affected) || !affected.includes(chat.characterId)) {
         return;

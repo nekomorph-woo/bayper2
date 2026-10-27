@@ -34,7 +34,11 @@ const SCHEMA = `
     completed_at INTEGER,
     assistant_message_id TEXT REFERENCES chat_messages(id),
     error_code TEXT,
-    memory_applied INTEGER NOT NULL DEFAULT 0
+    memory_applied INTEGER NOT NULL DEFAULT 0,
+    operation_proof TEXT,
+    verification_status TEXT NOT NULL DEFAULT 'none' CHECK (
+      verification_status IN ('none', 'pending', 'completed', 'cancelled', 'failed', 'interrupted', 'stale')
+    )
   );
 
   CREATE INDEX IF NOT EXISTS chat_requests_conversation
@@ -86,6 +90,8 @@ function mapRequest(row) {
     assistantMessageId: row.assistant_message_id ?? null,
     errorCode: row.error_code ?? null,
     memoryApplied: row.memory_applied,
+    operationProof: row.operation_proof ?? null,
+    verificationStatus: row.verification_status ?? "none",
   };
 }
 
@@ -93,6 +99,7 @@ function createChatStore(db) {
   db.exec("PRAGMA foreign_keys = ON");
   db.exec(SCHEMA);
   ensureMessageSeq(db);
+  ensureRequestVerificationColumns(db);
 
   const statements = {
     isKnownCharacter: db.prepare("SELECT 1 AS found FROM relationships WHERE character_id = ?"),
@@ -154,8 +161,27 @@ function createChatStore(db) {
     prepareRetry: db.prepare(`
       UPDATE chat_requests SET
         status = 'pending', context_version = ?, completed_at = NULL,
-        assistant_message_id = NULL, error_code = NULL, memory_applied = 0
+        assistant_message_id = NULL, error_code = NULL, memory_applied = 0,
+        operation_proof = NULL, verification_status = 'none'
       WHERE id = ?
+    `),
+    updateMessageContent: db.prepare(
+      "UPDATE chat_messages SET content = ? WHERE id = ?",
+    ),
+    setVerification: db.prepare(`
+      UPDATE chat_requests SET
+        operation_proof = COALESCE(?, operation_proof),
+        verification_status = ?
+      WHERE id = ?
+    `),
+    listPendingVerifications: db.prepare(`
+      SELECT * FROM chat_requests
+      WHERE status = 'completed' AND verification_status = 'pending'
+      ORDER BY completed_at ASC, id ASC
+    `),
+    recoverInterruptedVerifications: db.prepare(`
+      UPDATE chat_requests SET verification_status = 'interrupted'
+      WHERE status = 'completed' AND verification_status = 'pending'
     `),
     listPendingRequests: db.prepare(`
       SELECT * FROM chat_requests
@@ -286,6 +312,23 @@ function createChatStore(db) {
     return getRequest(id);
   }
 
+  function updateMessageContent(id, content) {
+    return statements.updateMessageContent.run(content, id).changes;
+  }
+
+  function setVerification(id, status, proof = null) {
+    statements.setVerification.run(proof, status, id);
+    return getRequest(id);
+  }
+
+  function listPendingVerifications() {
+    return statements.listPendingVerifications.all().map(mapRequest);
+  }
+
+  function recoverInterruptedVerifications() {
+    return statements.recoverInterruptedVerifications.run().changes;
+  }
+
   function listPendingRequests(conversationId) {
     return statements.listPendingRequests.all(conversationId).map(mapRequest);
   }
@@ -314,6 +357,10 @@ function createChatStore(db) {
     getRequest,
     updateRequest,
     prepareRetry,
+    updateMessageContent,
+    setVerification,
+    listPendingVerifications,
+    recoverInterruptedVerifications,
     listPendingRequests,
     cancelAllPendingRequests,
     recoverInterruptedRequests,
@@ -321,6 +368,19 @@ function createChatStore(db) {
 }
 
 module.exports = { createChatStore, SCHEMA };
+
+function ensureRequestVerificationColumns(db) {
+  const columns = db.prepare("PRAGMA table_info(chat_requests)").all();
+  const names = new Set(columns.map((column) => column.name));
+  if (!names.has("operation_proof")) {
+    db.exec("ALTER TABLE chat_requests ADD COLUMN operation_proof TEXT");
+  }
+  if (!names.has("verification_status")) {
+    db.exec(
+      "ALTER TABLE chat_requests ADD COLUMN verification_status TEXT NOT NULL DEFAULT 'none'",
+    );
+  }
+}
 
 function ensureMessageSeq(db) {
   const columns = db.prepare("PRAGMA table_info(chat_messages)").all();

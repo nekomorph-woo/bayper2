@@ -1,6 +1,6 @@
 # S03m 显式纠正/忘记的语义核验最小纵向切片（v1）
 
-2026-10-27，master 受托确认 POL-SEMOP-001～008 v1 及 Part A/B（不是用户亲自确认）。两阶段：阶段 1 本地已完成；阶段 2 系统核验独立候选，合格关联/操作在第二事务原子。阶段 2 失败不回滚阶段 1；只更新同一条 assistant 消息，不追加第二条。自动整理/定向共享/完整召回仍后续承接。本文件已并入 r3 审查的三处接口修正：关联后事务内版本重读、correct temporary 路径、corrected_v2 来源归属与 isCurrent。首批已按 §8 收口：master 19 套件 185/185 受托接受已测有限能力，008 聚合仍 NOT_COVERED（部分已验），下一批第 2 批两阶段。
+2026-10-27，master 受托确认 POL-SEMOP-001～008 v1 及 Part A/B（不是用户亲自确认）。两阶段：阶段 1 本地已完成；阶段 2 系统核验独立候选，合格关联/操作在第二事务原子。阶段 2 失败不回滚阶段 1；只更新同一条 assistant 消息，不追加第二条。自动整理/定向共享/完整召回仍后续承接。本文件已并入 r3 审查的三处接口修正：关联后事务内版本重读、correct temporary 路径、corrected_v2 来源归属与 isCurrent。首批已按 §8 收口：master 19 套件 185/185 受托接受来源追溯与协议的已测有限能力；2a 长期 correct 两阶段的确定性业务流程亦已由 master 独立 28/28、0 skipped、exit 0 与 GUI 14/14 受托接受为**已测有限能力**。008 聚合仍 NOT_COVERED（部分已验），下一批 2b。
 
 ## 1. 实际契约与调查事实
 
@@ -108,7 +108,7 @@
 - `chat_requests` 增：`operation_proof TEXT`、`verification_status TEXT NOT NULL DEFAULT 'none'`（none/pending/completed/cancelled/failed/interrupted/stale）。旧库 `ALTER TABLE` 兼容；不建队列表。
 - `chat-store.cjs`：读写上述字段；`updateMessageContent(id, content)`；`listPendingVerifications()`；`recoverInterruptedVerifications(at)`；`cancelVerifications(conversationId, at)`。
 - `chat.cjs`：`verifications` Map（requestId → {promise, controller}，与 `inFlight` 同类的在途跟踪，不是队列）；`onVerificationSettled({requestId, characterId, conversationId, status})` 回调；`sendMessage` 阶段 1 返回；阶段 2 后台执行；`cancelRequest`/`closeConversation`/`dispose`/recover 全部接入。
-- `main.cjs`/`preload.cjs`/`renderer/chat-panel.js`：send 返回 pending 时保留 `chat.requestId`；新 `bayper:chat-updated` 事件；renderer 收到后按当前会话 `refreshConversation` 并恢复模式；不新增页面。
+- `main.cjs`/`preload.cjs`/`renderer/chat-panel.js`：send 返回 pending 时保留 `chat.requestId`；复用既有 `bayper:memory-changed` 事件并带 `kind:"chat-updated"`，不新增 preload API；renderer 只对当前会话 `refreshConversation` 并恢复模式；不新增页面。
 
 ### 4.2 来源快照接口（兼容旧直接来源）
 
@@ -182,4 +182,21 @@
 - master 独立运行 **19 套件 185/185 PASS、0 skipped、exit 0**，before/after SHA 一致，证据 `evidence/master-corrected-source-TxA5THg1/`；受托接受首批来源追溯与协议的**已测有限能力**，不是用户亲自确认，不代表 S03m/S03 完成。
 - **008 聚合仍 NOT_COVERED（部分已验）**：已验 008a 连续/多分句、C++/C 逐字、重复歧义；008b 真实 relay 传播副本、锚版本/删除/正文/歧义/权限、revision 历史/未来/溢出；segments/digest 篡改、消息变动、旧 direct、跨片段引用；008c 当日到期与伪造跨角色 current。
 - 未覆盖：同角色派生实际路径、真实 association 后刷新（当前仅 SQL 增 version 兼容）、真实模型 L1/L2、跨角色临时传播、GUI。15 项全绿不等于 008 全部承诺通过。
-- 下一批按第 2 批推进真正两阶段接口（阶段 1/2、request 状态、取消/重启、最小 UI/IPC）；不继续无边界来源探针。本批只做文档与版本收口，VERSION `0.1.188` 待 master snap。
+- 2a 收口：master 独立新 Runner **28/28 PASS、0 skipped、exit 0**、前后 SHA 稳定，证据 `evidence/master-two-stage-closing-3k2ldAMG/`；逐文件比较先前 `master-two-stage-core-LUvtGeld` after SHA，生产文件与 19 旧套件未变，仅新 Runner 变化，故先前 20 套件 212/212 与 GUI 14/14 仍适用于其已测源码范围。受托接受 2a 确定性业务流程的**已测有限能力**，不是用户亲自确认，不是真实模型语义通过，也不是人类体验。
+- 聚合 POL-SEMOP-001～008 仍 NOT_COVERED：002 forget、001d temporary、真实模型 L1/L2、跨角色临时传播、完整产品级 GUI 生命周期未覆盖。下一批 2b 推进 forget/temporary 与真实模型/GUI 全链。本批只做文档与版本收口，VERSION `0.1.189` 待 master snap。
+
+## 9. 第 2 批拆分 2a/2b（master 受托决定，2026-10-27）
+
+为避免一次大批代码，第 2 批拆为两个最小纵向切片；2a 只做长期 correct，2b 再做 forget/temporary。现有本地 forget/temporary 功能保持，不因 2a 退化。
+
+- **2a（已受托接受已测有限能力）**：长期 `correct` 两阶段。阶段 0 仅内存捕获旧事实、目标 identity 与独立候选（3/角色、总 8）；阶段 1 同事务本地 correct/assistant/request/无正文 proof，`sendMessage` 提前返回；最多一次系统核验（15s、无重试、不占自动预算）；阶段 2 在同一事务逐个 `associateFacts(inTransaction)`，每轮重读当前锚/成员 version/identity，再用窄接口只更新候选成员；任何失败整笔回滚阶段 2，保留阶段 1；同一 assistant 原位更新；cancel/close/dispose/暂停/重启中断；`onVerificationSettled`→既有 `bayper:memory-changed`（kind=chat-updated）→当前会话刷新。
+- **2b（下一批）**：`forget` 的候选自身 identity 删除、`temporary` 的到期当前理解传播、对应来源/权限/版本语义、真实模型 L1/L2 与 GUI 全链；不在 2a 提前铺字段或实现。
+- **2a Case 映射**：001a correct 正链路、001b 隔离、001c 传播来源；003a 提前返回/单消息、003b 提交前取消/阶段 1 后取消、003c dispose/close/暂停/重启；004a correct 锚失效、004b 候选变化、004c 阶段 2 故障回滚、004d 多候选连合；005a/b/c/d 主体/时间/权限正负；006a/b 请求频率/超时/取消；008 同角色派生实际路径与真实 association 后来源重解析。002、001d、004a 的 forget 部分留给 2b。Case 聚合不因 2a 子项通过而标整组 PASS。
+
+### 9.1 2a 旧事实证据复核（master 中途审查修正）
+
+- 阶段 2 的模型输入必须是阶段 0 捕获的 A 旧事实 snapshot 与 B 旧事实 snapshot；阶段 1 的新正文只用于 proof 核对当前纠正结果，不能冒充旧事实。
+- 旧 target snapshot 在阶段 1 correct 后 entry version/source 必然变化，不能直接要求 `isCurrent`。新增窄检查只核对不应由本操作改变的证据：原 chat 消息与有限前文内容/归属/时间未变、segments 仍逐字可重算、来源控制集合等于阶段 0 捕获集合加上本操作新增的旧 source 哈希；不提供通用“忽略权限”开关。无法证明则本地完成并标注未核验。
+- 候选证据捕获整组成员 entryId/version/sourceId、每成员 source snapshot 与来源控制集合，并记录阶段 1 对每个 holder 的确切旧 source 增量；重核时只容许该增量，其他后续控制变化拒绝。第一关联前重核代表、全部成员、消息/context 与权限；凭据返回后、发送核验前再次复核并剔除失效候选，全部失效则不发 HTTP。网络等待期间任一变化 → 该候选未确认，不应用旧结果。
+- 同角色 identity 的非锚成员来源必须是 `corrected:`、`direct=false`、`via=identity_correction`，sourceAnchor 指向发起条目的 chat-correct 锚；仅选中 held 条目为直接来源。旧版 `chat-correct` 指向其他 id 时按同身份同正文、旧锚存在/stated/user/未过期/实际 source 一致兼容，不再冒充直接告知。
+- 证据复核同时核对原 chat 消息的 conversationId 与 `chat:<id>` 来源归属；候选仍 fresh 时优先用 `isCurrent`，只有阶段 1 造成的必要变化才走窄证据检查。

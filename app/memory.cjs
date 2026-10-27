@@ -749,11 +749,12 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       let updatedDerived = 0;
       for (const entry of entries) {
         const derived = store.isDerivedEntry(entry.id);
-        // 发起者使用本次明确用户来源；其他已知持有者使用传播来源，避免冒充用户亲口告诉。
-        const nextSourceId =
-          entry.characterId === characterId
-            ? (sourceId ?? `correct:${entry.id}:${entry.version + 1}`)
-            : `corrected:${entry.id}:${entry.version + 1}`;
+        // 只有本次选中的 held 条目是直接来源；同角色 identity 其他成员与其他角色
+        // 一样使用传播来源，避免把 identity 更新冒充成用户直接告诉该条目。
+        const direct = entry.id === held.id && entry.characterId === characterId;
+        const nextSourceId = direct
+          ? (sourceId ?? `correct:${entry.id}:${entry.version + 1}`)
+          : `corrected:${entry.id}:${entry.version + 1}`;
         if (entry.sourceId !== nextSourceId) {
           store.addSourceControl(entry.characterId, sourceIdHash(entry.sourceId), nowMs);
         }
@@ -766,10 +767,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
           importance: importanceProvided ? importance : entry.importance,
           expiresAt: expiresProvided ? expiresAt : entry.expiresAt,
           sourceId: nextSourceId,
-          sourceVersion:
-            entry.characterId === characterId && sourceVersion !== null
-              ? sourceVersion
-              : 1,
+          sourceVersion: direct && sourceVersion !== null ? sourceVersion : 1,
           version: entry.version + 1,
           updatedAt: nowMs,
         };
@@ -1342,7 +1340,99 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       };
     };
     // 身份、别名、禁分享限制与版本递增必须同一事务；任何失败整体回滚。
-    return store.transaction(applyAssociation);
+    return input.inTransaction === true ? applyAssociation() : store.transaction(applyAssociation);
+  }
+
+  /* 阶段 2 只读窄接口：以持有角色定位条目，供核验层重读版本与来源。 */
+  function getHeldEntry({ characterId: rawCharacterId, entryId: rawEntryId } = {}) {
+    const characterId = characterIdOf(rawCharacterId);
+    const entryId = cleanText(rawEntryId, "记忆ID", 200);
+    const entry = store.getEntryById(entryId);
+    return entry && entry.characterId === characterId ? entry : null;
+  }
+
+  /* 只读身份成员，供候选去重与阶段 2 成员集合重核；不暴露给 renderer。 */
+  function listIdentityEntries(identityIdValue) {
+    const identityId = cleanText(identityIdValue, "身份ID", 200);
+    return store.listEntriesByIdentity(identityId);
+  }
+
+  /* S03m 阶段 2 窄接口：只更新已核验候选 identity 的成员，不再次 correct
+     锚、不接收调用者正文/来源。事务内重读锚与成员，使用当前版本。 */
+  function applyConfirmedCorrectionToIdentityMembers(input = {}) {
+    const anchorEntryId = cleanText(input.anchorEntryId, "记忆ID", 200);
+    if (!Array.isArray(input.memberEntryIds) || input.memberEntryIds.length === 0 ||
+      input.memberEntryIds.length > 32) {
+      throw new MemoryError("INVALID_INPUT", "候选成员列表无效。");
+    }
+    const memberEntryIds = [...new Set(input.memberEntryIds.map((value) =>
+      cleanText(value, "记忆ID", 200)))].sort();
+    const nowMs = resolveNow(input.nowMs);
+
+    const applyCorrection = () => {
+      const anchor = store.getEntryById(anchorEntryId);
+      if (!anchor) {
+        throw new MemoryError("ENTRY_NOT_FOUND", "纠正锚不存在。");
+      }
+      const identityId = identityOfEntry(anchor, nowMs);
+      const members = memberEntryIds.map((entryId) => store.getEntryById(entryId));
+      if (members.some((entry) => !entry)) {
+        throw new MemoryError("ENTRY_NOT_FOUND", "候选成员不存在。");
+      }
+      if (members.some((entry) =>
+        entry.id === anchor.id ||
+        entry.factIdentityId !== identityId ||
+        (entry.expiresAt !== null && entry.expiresAt <= nowMs) ||
+        (entry.sourceKind ?? "user") !== "user" ||
+        entry.trust !== "stated")) {
+        throw new MemoryError("MEMORY_CHANGED", "候选成员已变化，不能继续更新。");
+      }
+
+      const affected = new Set();
+      const finalVersions = {};
+      for (const entry of members) {
+        const nextSourceId = `corrected:${entry.id}:${entry.version + 1}`;
+        store.addSourceControl(entry.characterId, sourceIdHash(entry.sourceId), nowMs);
+        const next = {
+          ...entry,
+          body: anchor.body,
+          trust: anchor.trust,
+          sourceKind: "user",
+          expiresAt: anchor.expiresAt,
+          sourceId: nextSourceId,
+          sourceVersion: 1,
+          version: entry.version + 1,
+          updatedAt: nowMs,
+        };
+        store.updateEntry(next, tokenizeForIndex(anchor.body));
+        affected.add(entry.characterId);
+        finalVersions[entry.id] = next.version;
+      }
+
+      const correctedFingerprint = identityFingerprint({
+        kind: anchor.kind,
+        trust: anchor.trust,
+        sourceKind: "user",
+        expiresAt: anchor.expiresAt,
+        body: anchor.body,
+      });
+      if (correctedFingerprint) {
+        store.registerAlias(correctedFingerprint, identityId, nowMs);
+      }
+      const contextVersions = {};
+      for (const characterId of affected) {
+        contextVersions[characterId] = store.bumpContextVersion(characterId, nowMs);
+      }
+      return {
+        updated: members.length,
+        affectedCharacters: [...affected].sort(),
+        contextVersions,
+        finalVersions,
+      };
+    };
+    return input.inTransaction === true
+      ? applyCorrection()
+      : store.transaction(applyCorrection);
   }
 
   /* 供 S03b 组装上下文：核心设定、重要偏好与经历分段并有字符预算，
@@ -1455,6 +1545,9 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     restrictSharing,
     allowSharing,
     associateFacts,
+    getHeldEntry,
+    listIdentityEntries,
+    applyConfirmedCorrectionToIdentityMembers,
     buildContext,
     getContextVersion,
     isContextCurrent,

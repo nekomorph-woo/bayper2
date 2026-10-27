@@ -19,6 +19,7 @@ const {
   RELAY_FAILURE_CODES,
 } = require("./chat-memory-operations.cjs");
 const { detectSharingSetting } = require("./chat-sharing-setting.cjs");
+const { createChatMemoryVerification } = require("./chat-memory-verification.cjs");
 
 const MAX_MESSAGE_CHARS = 2000;
 const MAX_REQUEST_ID_CHARS = 200;
@@ -52,6 +53,10 @@ const RETRYABLE_ERRORS = new Set([
 /* 操作目标在模型响应期间被本地修改或删除时，整笔请求转为 stale，
    不展示迟到回复，也不执行旧目标。 */
 const STALE_OPERATION_CODES = new Set(["MEMORY_CHANGED", "ENTRY_NOT_FOUND", "FACT_NOT_HELD"]);
+const VERIFICATION_PENDING_SUFFIX =
+  "\n\n其他相近内容我正在核对，完成后会在同一条消息里更新。";
+const VERIFICATION_LOCAL_ONLY_SUFFIX =
+  "\n\n其他相近内容未继续核对，本地这次更正已完成。";
 const DEFAULT_CHARACTERS = require("./content/characters.json").candidates;
 
 function cleanText(value, field, max) {
@@ -92,6 +97,9 @@ function sourceHash(sourceId) {
 function createChatService({
   db,
   memory,
+  memorySourceContext = null,
+  chatStore = null,
+  onVerificationSettled = null,
   now = () => Date.now(),
   characters = DEFAULT_CHARACTERS,
   getCredentials = () => null,
@@ -105,11 +113,20 @@ function createChatService({
   if (!memory) {
     throw new AppError("MEMORY_REQUIRED", "聊天服务需要记忆服务。");
   }
-  const store = createChatStore(db);
+  const store = chatStore ?? createChatStore(db);
   const contentById = new Map(characters.map((character) => [character.id, character]));
   const controllers = new Map();
+  const verifications = new Map();
   const inFlight = new Set();
   let disposed = false;
+  const verification = memorySourceContext
+    ? createChatMemoryVerification({
+      memory,
+      memorySourceContext,
+      requestChatCompletion,
+      now,
+    })
+    : null;
 
   function trackRequest(promise) {
     inFlight.add(promise);
@@ -521,6 +538,7 @@ function createChatService({
       status: request.status,
       memoryApplied: request.memoryApplied,
       errorCode: request.errorCode,
+      verificationStatus: request.verificationStatus ?? "none",
     };
     if (request.status === "completed") {
       const assistant = request.assistantMessageId
@@ -652,6 +670,385 @@ function createChatService({
     };
   }
 
+  function isVerificationPending(request) {
+    return Boolean(request && request.status === "completed" &&
+      request.verificationStatus === "pending" && request.assistantMessageId);
+  }
+
+  function verificationReply(content, status, { applied = 0, unconfirmed = 0, truncated = false } = {}) {
+    let base = content;
+    if (base.endsWith(VERIFICATION_PENDING_SUFFIX)) {
+      base = base.slice(0, -VERIFICATION_PENDING_SUFFIX.length).trimEnd();
+    } else if (base.endsWith(VERIFICATION_LOCAL_ONLY_SUFFIX)) {
+      base = base.slice(0, -VERIFICATION_LOCAL_ONLY_SUFFIX.length).trimEnd();
+    }
+    if (status !== "completed") {
+      return `${base}${VERIFICATION_LOCAL_ONLY_SUFFIX}`;
+    }
+    let suffix = applied > 0
+      ? `\n\n另外把 ${applied} 条确认属于同一件事的内容一并更正了。`
+      : "\n\n其他相近内容没有确认到可以一起更正的部分，我没有改动。";
+    if (unconfirmed > 0 || truncated) {
+      suffix += "\n如果也要一起处理，请直接说出那条内容。";
+    }
+    return `${base}${suffix}`;
+  }
+
+  /* 原位更新同一 assistant 消息并写核验状态；调用方决定事务边界。 */
+  function writeVerificationResult(request, status, options = {}) {
+    if (!request) {
+      return;
+    }
+    if (request.assistantMessageId) {
+      const assistant = store.getMessage(request.assistantMessageId);
+      if (assistant) {
+        store.updateMessageContent(
+          assistant.id,
+          verificationReply(assistant.content, status, options),
+        );
+      }
+    }
+    store.setVerification(request.id, status);
+  }
+
+  function finalizeVerification(requestId, status, options = {}) {
+    const request = store.getRequest(requestId);
+    if (!request || request.status !== "completed") {
+      return status;
+    }
+    store.transaction(() => writeVerificationResult(request, status, options));
+    return status;
+  }
+
+  function notifyVerificationSettled(request, status) {
+    if (!request || typeof onVerificationSettled !== "function") {
+      return;
+    }
+    try {
+      onVerificationSettled({
+        requestId: request.id,
+        characterId: request.characterId,
+        conversationId: request.conversationId,
+        status,
+      });
+    } catch {
+      // 事件回调不得影响已提交的第一/第二阶段结果。
+    }
+  }
+
+  function proofMatches(anchor, proof) {
+    return Boolean(
+      anchor &&
+      anchor.version === proof.anchorEntryVersion &&
+      anchor.factIdentityId === proof.anchorIdentityId &&
+      sourceHash(anchor.body) === proof.bodyHash &&
+      sourceHash(anchor.sourceId) === proof.anchorSourceIdHash,
+    );
+  }
+
+  function sourceControlsMatch(holderCharacterId, captured, increments) {
+    const expected = new Set([...captured, ...increments]);
+    const current = memory.listExcludedSources(holderCharacterId);
+    return current.length === expected.size && current.every((hash) => expected.has(hash));
+  }
+
+  function memberEvidenceCurrent(expected) {
+    if (!expected?.snapshot) {
+      return false;
+    }
+    if (memorySourceContext.isCurrent(expected.snapshot)) {
+      return sourceControlsMatch(
+        expected.characterId,
+        expected.excludedSourceHashes,
+        expected.sourceIncrements,
+      );
+    }
+    return memorySourceContext.isEvidenceCurrent(expected.snapshot, {
+      holderCharacterId: expected.characterId,
+      expectedExcludedHashes: expected.excludedSourceHashes,
+      allowedSourceHashes: expected.sourceIncrements,
+    });
+  }
+
+  function candidateMembersMatch(candidate) {
+    const members = memory.listIdentityEntries(candidate.identityId);
+    if (members.length !== candidate.members.length) {
+      return false;
+    }
+    const byId = new Map(members.map((member) => [member.id, member]));
+    return candidate.members.every((expected) => {
+      const current = byId.get(expected.entryId);
+      return Boolean(current &&
+        current.version === expected.version &&
+        current.sourceId === expected.sourceId &&
+        memberEvidenceCurrent(expected));
+    });
+  }
+
+  function targetEvidenceCurrent(request, evidence) {
+    return memorySourceContext.isEvidenceCurrent(evidence.snapshot, {
+      holderCharacterId: request.characterId,
+      expectedExcludedHashes: evidence.excludedSourceHashes,
+      allowedSourceHashes: evidence.allowedSourceHashes,
+    });
+  }
+
+  function candidateEvidenceCurrent(candidate) {
+    if (memorySourceContext.isCurrent(candidate.snapshot)) {
+      return sourceControlsMatch(
+        candidate.characterId,
+        candidate.excludedSourceHashes,
+        candidate.sourceIncrements,
+      );
+    }
+    return memorySourceContext.isEvidenceCurrent(candidate.snapshot, {
+      holderCharacterId: candidate.characterId,
+      expectedExcludedHashes: candidate.excludedSourceHashes,
+      allowedSourceHashes: candidate.sourceIncrements,
+    });
+  }
+
+  function settleLatest(requestId, options = {}) {
+    const latest = store.getRequest(requestId);
+    if (!latest) {
+      return "failed";
+    }
+    if (latest.verificationStatus === "pending") {
+      return finalizeVerification(requestId, "failed", options);
+    }
+    if (["cancelled", "failed", "stale", "interrupted"].includes(latest.verificationStatus)) {
+      return finalizeVerification(requestId, latest.verificationStatus, options);
+    }
+    return latest.verificationStatus;
+  }
+
+  async function runVerification({
+    request,
+    proof,
+    targetEvidence,
+    candidates,
+    truncated,
+    controller,
+  }) {
+    const requestId = request.id;
+    const unconfirmedOptions = { unconfirmed: candidates.length, truncated };
+    const fail = (status = "failed") => finalizeVerification(requestId, status, {
+      unconfirmed: candidates.length,
+      truncated,
+    });
+    try {
+      const current = store.getRequest(requestId);
+      if (!isVerificationPending(current)) {
+        return settleLatest(requestId, unconfirmedOptions);
+      }
+      const anchor = memory.getHeldEntry({
+        characterId: request.characterId,
+        entryId: proof.anchorEntryId,
+      });
+      if (!proofMatches(anchor, proof)) {
+        return fail("stale");
+      }
+      if (!targetEvidenceCurrent(request, targetEvidence)) {
+        return fail("stale");
+      }
+
+      let active = [];
+      let unconfirmed = 0;
+      for (const candidate of candidates) {
+        const entry = memory.getHeldEntry({
+          characterId: candidate.characterId,
+          entryId: candidate.entryId,
+        });
+        if (
+          !entry ||
+          entry.version !== candidate.version ||
+          entry.factIdentityId !== candidate.identityId ||
+          entry.trust !== "stated" ||
+          (entry.sourceKind ?? "user") !== "user" ||
+          entry.expiresAt !== null ||
+          !candidateMembersMatch(candidate) ||
+          !candidateEvidenceCurrent(candidate)
+        ) {
+          unconfirmed += 1;
+          continue;
+        }
+        active.push(candidate);
+      }
+      if (active.length === 0) {
+        return finalizeVerification(requestId, "completed", { unconfirmed, truncated });
+      }
+
+      const credentials = await getCredentials();
+      const afterCredentials = store.getRequest(requestId);
+      if (!isVerificationPending(afterCredentials)) {
+        return settleLatest(requestId, { unconfirmed, truncated });
+      }
+      if (!credentials) {
+        return fail("failed");
+      }
+      /* 等凭据期间可能取消或新增权限/来源限制；发送核验前再次复核，避免把旧
+         source 内容发出。任一候选失效即从本批剔除，全部失效则不发请求。 */
+      const anchorAfterCredentials = memory.getHeldEntry({
+        characterId: request.characterId,
+        entryId: proof.anchorEntryId,
+      });
+      if (!proofMatches(anchorAfterCredentials, proof) ||
+        !targetEvidenceCurrent(request, targetEvidence)) {
+        return fail("stale");
+      }
+      const stillActive = active.filter((candidate) => {
+        const entry = memory.getHeldEntry({
+          characterId: candidate.characterId,
+          entryId: candidate.entryId,
+        });
+        return Boolean(
+          entry &&
+          entry.version === candidate.version &&
+          entry.factIdentityId === candidate.identityId &&
+          candidateMembersMatch(candidate) &&
+          candidateEvidenceCurrent(candidate),
+        );
+      });
+      unconfirmed += active.length - stillActive.length;
+      active = stillActive;
+      if (active.length === 0) {
+        return finalizeVerification(requestId, "completed", { unconfirmed, truncated });
+      }
+      const verified = await verification.verify({
+        targetSnapshot: targetEvidence.snapshot,
+        candidates: active,
+        credentials,
+        signal: controller.signal,
+      });
+      const afterResponse = store.getRequest(requestId);
+      if (!isVerificationPending(afterResponse)) {
+        return settleLatest(requestId, { unconfirmed, truncated });
+      }
+
+      const approved = verified.results
+        .filter((result) => result.effectiveRelation === "equivalent" && result.candidate)
+        .map((result) => result.candidate);
+      const unresolved = unconfirmed + (active.length - approved.length);
+      if (approved.length === 0) {
+        return finalizeVerification(requestId, "completed", {
+          unconfirmed: unresolved,
+          truncated,
+        });
+      }
+
+      const nowMs = currentMs();
+      store.transaction(() => {
+        const inside = store.getRequest(requestId);
+        if (!isVerificationPending(inside)) {
+          throw new AppError("VERIFICATION_CANCELLED", "核验已取消。");
+        }
+        let currentAnchor = memory.getHeldEntry({
+          characterId: request.characterId,
+          entryId: proof.anchorEntryId,
+        });
+        if (!proofMatches(currentAnchor, proof) ||
+          !targetEvidenceCurrent(request, targetEvidence)) {
+          throw new AppError("VERIFICATION_STALE", "原操作已变化。");
+        }
+        // 所有候选证据必须在第一关联前复核；关联会改变 B 的来源控制与版本。
+        for (const candidate of approved) {
+          const entry = memory.getHeldEntry({
+            characterId: candidate.characterId,
+            entryId: candidate.entryId,
+          });
+          if (
+            !entry ||
+            entry.version !== candidate.version ||
+            entry.factIdentityId !== candidate.identityId ||
+            !candidateMembersMatch(candidate) ||
+            !candidateEvidenceCurrent(candidate)
+          ) {
+            throw new AppError("VERIFICATION_STALE", "候选已变化。");
+          }
+        }
+        const memberIds = [];
+        for (const candidate of approved) {
+          const entry = memory.getHeldEntry({
+            characterId: candidate.characterId,
+            entryId: candidate.entryId,
+          });
+          if (
+            !entry ||
+            entry.factIdentityId !== candidate.identityId
+          ) {
+            throw new AppError("VERIFICATION_STALE", "候选已变化。");
+          }
+          memory.associateFacts({
+            left: { entryId: currentAnchor.id, expectedVersion: currentAnchor.version },
+            right: { entryId: entry.id, expectedVersion: entry.version },
+            nowMs,
+            inTransaction: true,
+          });
+          currentAnchor = memory.getHeldEntry({
+            characterId: request.characterId,
+            entryId: proof.anchorEntryId,
+          });
+          if (!currentAnchor) {
+            throw new AppError("VERIFICATION_STALE", "纠正锚已变化。");
+          }
+          memberIds.push(...candidate.members.map((member) => member.entryId));
+        }
+        const uniqueMembers = [...new Set(memberIds)].filter((id) => id !== currentAnchor.id);
+        memory.applyConfirmedCorrectionToIdentityMembers({
+          anchorEntryId: currentAnchor.id,
+          memberEntryIds: uniqueMembers,
+          nowMs,
+          inTransaction: true,
+        });
+        writeVerificationResult(inside, "completed", {
+          applied: approved.length,
+          unconfirmed: unresolved,
+          truncated,
+        });
+        store.setVerification(requestId, "completed", JSON.stringify({
+          ...proof,
+          anchorEntryVersion: currentAnchor.version,
+          anchorIdentityId: currentAnchor.factIdentityId,
+          verification: "completed",
+        }));
+      });
+      return "completed";
+    } catch (error) {
+      const latest = store.getRequest(requestId);
+      if (latest?.verificationStatus === "cancelled") {
+        return finalizeVerification(requestId, "cancelled", unconfirmedOptions);
+      }
+      if (latest?.verificationStatus !== "pending") {
+        return settleLatest(requestId, unconfirmedOptions);
+      }
+      if (error?.code === "VERIFICATION_STALE") {
+        return fail("stale");
+      }
+      return fail("failed");
+    }
+  }
+
+  function startVerification({ request, proof, targetEvidence, candidates, truncated }) {
+    const controller = new AbortController();
+    const promise = runVerification({
+      request, proof, targetEvidence, candidates, truncated, controller,
+    }).then((status) => {
+      notifyVerificationSettled(store.getRequest(request.id) ?? request, status);
+      return status;
+    }).catch(() => {
+      const status = finalizeVerification(request.id, "failed", {
+        unconfirmed: candidates.length,
+        truncated,
+      });
+      notifyVerificationSettled(store.getRequest(request.id) ?? request, status);
+      return status;
+    }).finally(() => {
+      verifications.delete(request.id);
+    });
+    verifications.set(request.id, { promise, controller });
+    return promise;
+  }
+
   async function runModelRequest({
     request,
     messages,
@@ -661,6 +1058,7 @@ function createChatService({
     const controller = new AbortController();
     controllers.set(request.id, controller);
     let operationPlan = null;
+    let candidateScan = null;
     try {
       const pending = store.getRequest(request.id);
       if (!pending || pending.status !== "pending") {
@@ -716,6 +1114,39 @@ function createChatService({
         recentText: operationContext.recentText,
       });
 
+      const operation = operationPlan.kind === "execute" ? operationPlan.operation : null;
+      const twoPhaseCorrect =
+        verification &&
+        operation?.action === "correct" &&
+        operation?.mode === "replace" &&
+        operation?.target?.entry;
+      let targetEvidence = null;
+      if (twoPhaseCorrect) {
+        try {
+          targetEvidence = verification.captureTargetEvidence({
+            characterId: request.characterId,
+            targetEntry: operation.target.entry,
+            nowMs: currentMs(),
+          });
+          candidateScan = targetEvidence
+            ? verification.captureCandidates({
+              characterId: request.characterId,
+              holderCharacterIds: knownCharacters()
+                .map((character) => character.characterId),
+              targetEntry: operation.target.entry,
+              sourceIncrementsByHolder: targetEvidence.sourceIncrementsByHolder,
+              nowMs: currentMs(),
+            })
+            : { candidates: [], truncated: false };
+        } catch {
+          // 候选核验是不可靠增强；捕获异常不得阻止已明确的本地 correct。
+          targetEvidence = null;
+          candidateScan = { candidates: [], truncated: false, captureFailed: true };
+        }
+      } else {
+        candidateScan = { candidates: [], truncated: false };
+      }
+
       const userMessage = store.getMessage(afterResponse.userMessageId);
       if (!userMessage) {
         return failRequest(request.id, "REQUEST_NOT_FOUND");
@@ -727,6 +1158,7 @@ function createChatService({
 
       const completedAt = currentMs();
       const assistantId = crypto.randomUUID();
+      let verificationStart = null;
       const completed = store.transaction(() => {
         let reply = parsed.reply;
         // memoryApplied 只统计本轮新学习的事实；操作变更由回复和数据库结果核验。
@@ -762,6 +1194,51 @@ function createChatService({
             }
             reply = relayFailureReply(error.code);
           }
+          if (twoPhaseCorrect && targetEvidence && candidateScan.candidates.length > 0) {
+            const anchor = memory.getHeldEntry({
+              characterId: request.characterId,
+              entryId: operationPlan.operation.target.entry.id,
+            });
+            if (!anchor || !anchor.factIdentityId) {
+              throw new AppError("ENTRY_NOT_FOUND", "纠正锚不存在。");
+            }
+            const proof = {
+              action: "correct",
+              mode: "replace",
+              anchorEntryId: anchor.id,
+              anchorEntryVersion: anchor.version,
+              anchorIdentityId: anchor.factIdentityId,
+              anchorSourceIdHash: sourceHash(anchor.sourceId),
+              bodyHash: sourceHash(anchor.body),
+            };
+            reply = `${reply}${VERIFICATION_PENDING_SUFFIX}`;
+            verificationStart = {
+              proof,
+              targetEvidence,
+              candidates: candidateScan.candidates,
+              truncated: candidateScan.truncated,
+            };
+            store.insertMessage({
+              id: assistantId,
+              conversationId: request.conversationId,
+              characterId: request.characterId,
+              role: "assistant",
+              content: reply,
+              sourceId: userMessage.sourceId,
+              createdAt: completedAt,
+            });
+            store.updateRequest(request.id, {
+              status: "completed",
+              completedAt,
+              assistantMessageId: assistantId,
+              memoryApplied,
+            });
+            return store.setVerification(
+              request.id,
+              "pending",
+              JSON.stringify(proof),
+            );
+          }
         } else {
           reply = operationPlan.reply;
         }
@@ -781,6 +1258,15 @@ function createChatService({
           memoryApplied,
         });
       });
+      if (verificationStart) {
+        startVerification({
+          request: completed,
+          proof: verificationStart.proof,
+          targetEvidence: verificationStart.targetEvidence,
+          candidates: verificationStart.candidates,
+          truncated: verificationStart.truncated,
+        });
+      }
       return requestResult(completed);
     } catch (error) {
       const current = store.getRequest(request.id);
@@ -956,6 +1442,18 @@ function createChatService({
       throw new AppError("REQUEST_NOT_FOUND", "请求不存在。");
     }
     if (request.status !== "pending") {
+      if (request.status === "completed" && request.verificationStatus === "pending") {
+        store.transaction(() => {
+          writeVerificationResult(request, "cancelled", { unconfirmed: 1 });
+        });
+        verifications.get(request.id)?.controller.abort();
+        return {
+          cancelled: true,
+          status: "completed",
+          verificationStatus: "cancelled",
+          requestId: request.id,
+        };
+      }
       return { cancelled: false, status: request.status, requestId: request.id };
     }
     const at = currentMs(nowMs);
@@ -990,7 +1488,18 @@ function createChatService({
       controllers.get(request.id)?.abort();
       cancelledRequestIds.push(request.id);
     }
-    return { conversation: closed, cancelledRequestIds };
+    const cancelledVerificationIds = [];
+    for (const request of store.listPendingVerifications()) {
+      if (request.conversationId !== existing.id) {
+        continue;
+      }
+      store.transaction(() => {
+        writeVerificationResult(request, "cancelled", { unconfirmed: 1 });
+      });
+      verifications.get(request.id)?.controller.abort();
+      cancelledVerificationIds.push(request.id);
+    }
+    return { conversation: closed, cancelledRequestIds, cancelledVerificationIds };
   }
 
   /* 退出窄能力：先取消所有 pending，再中止在途请求并等待其收束。
@@ -1004,8 +1513,18 @@ function createChatService({
     for (const controller of controllers.values()) {
       controller.abort();
     }
-    await Promise.allSettled([...inFlight]);
+    for (const request of store.listPendingVerifications()) {
+      store.transaction(() => {
+        writeVerificationResult(request, "cancelled", { unconfirmed: 1 });
+      });
+      verifications.get(request.id)?.controller.abort();
+    }
+    await Promise.allSettled([
+      ...inFlight,
+      ...[...verifications.values()].map((item) => item.promise),
+    ]);
     controllers.clear();
+    verifications.clear();
     inFlight.clear();
     return { cancelled };
   }
@@ -1013,6 +1532,13 @@ function createChatService({
   // 仅由明确的启动边界开启：遗留 pending 没有对应 AbortController，转为可显式重试的失败状态。
   if (recoverInterrupted) {
     store.recoverInterruptedRequests(currentMs());
+    const pendingVerifications = store.listPendingVerifications();
+    store.recoverInterruptedVerifications();
+    for (const request of pendingVerifications) {
+      finalizeVerification(request.id, "interrupted", {
+        unconfirmed: 1,
+      });
+    }
   }
 
   return {
