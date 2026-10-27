@@ -3924,3 +3924,483 @@ test("POL-SEMOP/D2 proof负例：holder集合/root/expiry/来源有效性", asyn
     });
   }
 });
+
+/* S03o-A：模型显式 memoryOperation:null 时，单轮明确 correct 由本地补全；
+   仍走既有候选、主体/时间/否定/来源/版本约束与两阶段核验。 */
+function nullCorrectionEnvelope({
+  reply = "你想把咖啡改成什么？",
+  memoryCandidates = [],
+} = {}) {
+  return { reply, memoryCandidates, memoryOperation: null, memoryRelay: null };
+}
+
+async function sendNullCorrection(ctx, conversation, text, {
+  verification = null,
+  characterId = conversation.characterId ?? "a",
+  reply = "你想把咖啡改成什么？",
+  memoryCandidates = [],
+} = {}) {
+  ctx.server.enqueue(({ res }) => sendEnvelope(res, nullCorrectionEnvelope({
+    reply,
+    memoryCandidates,
+  })));
+  if (verification) {
+    ctx.server.enqueue(verification);
+  }
+  return ctx.store.chat.sendMessage({
+    characterId,
+    conversationId: conversation.id,
+    text,
+    requestId: crypto.randomUUID(),
+  });
+}
+
+async function seedSugarCoffeePair(ctx) {
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  await chatTurn(ctx, aConversation, "我平时喝咖啡一定要加糖。", [{
+    factKey: "pref.c03.a",
+    body: "我平时喝咖啡一定要加糖",
+    kind: "preference",
+    trust: "stated",
+    evidence: "我平时喝咖啡一定要加糖",
+  }]);
+  await chatTurn(ctx, bConversation, "我喝咖啡也一定要加糖。", [{
+    factKey: "pref.c03.b",
+    body: "我喝咖啡也一定要加糖",
+    kind: "preference",
+    trust: "stated",
+    evidence: "我喝咖啡也一定要加糖",
+  }], "b");
+  return { aConversation, bConversation };
+}
+
+async function seedBluePair(ctx) {
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  await chatTurn(ctx, aConversation, "我喜欢蓝色。", [{
+    factKey: "pref.blue.a",
+    body: "我喜欢蓝色",
+    kind: "preference",
+    trust: "stated",
+    evidence: "我喜欢蓝色",
+  }]);
+  await chatTurn(ctx, bConversation, "我也喜欢蓝色。", [{
+    factKey: "pref.blue.b",
+    body: "我也喜欢蓝色",
+    kind: "preference",
+    trust: "stated",
+    evidence: "我也喜欢蓝色",
+  }], "b");
+  return { aConversation, bConversation };
+}
+
+async function seedMeteorPair(ctx) {
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  await chatTurn(ctx, aConversation, "我昨天去看流星了。", [{
+    factKey: "exp.meteor.a",
+    body: "我昨天去看流星了",
+    kind: "experience",
+    trust: "stated",
+    evidence: "我昨天去看流星了",
+  }]);
+  await chatTurn(ctx, bConversation, "我昨天也去看流星了。", [{
+    factKey: "exp.meteor.b",
+    body: "我昨天也去看流星了",
+    kind: "experience",
+    trust: "stated",
+    evidence: "我昨天也去看流星了",
+  }], "b");
+  return { aConversation, bConversation };
+}
+
+function assistantOf(ctx, conversationId, requestId) {
+  const request = ctx.store.chat.getRequest({ characterId: "a", requestId });
+  return ctx.store.chat.getConversation({ characterId: "a", conversationId })
+    .messages.find((message) => message.id === request.assistantMessageId) ?? null;
+}
+
+function endOfLocalDayMs(ctx) {
+  const date = new Date(ctx.nowMs());
+  date.setHours(23, 59, 59, 999);
+  return date.getTime();
+}
+
+function extractionBatchCount(ctx) {
+  return withDatabase(ctx.store.dbPath, (db) =>
+    db.prepare("SELECT COUNT(*) AS count FROM memory_extraction_batches").get().count);
+}
+
+function entryCountFor(ctx, characterId) {
+  return withDatabase(ctx.store.dbPath, (db) =>
+    db.prepare("SELECT COUNT(*) AS count FROM memory_entries WHERE character_id = ?")
+      .get(characterId).count);
+}
+
+const equivalentRelation = () =>
+  relationResponder((pairs) => pairs.map((pair) => relationResult(pair, "equivalent")));
+
+function seedCoffeeANegative(ctx) {
+  ctx.store.memory.remember({
+    characterId: "a",
+    factKey: "pref.neg.coffee",
+    body: "我平时喝咖啡一定要加糖",
+    kind: "preference",
+    sourceId: "seed-neg-coffee",
+  });
+}
+
+function seedCoffeeExtra(ctx) {
+  ctx.store.memory.remember({
+    characterId: "a",
+    factKey: "pref.neg.coffee.extra",
+    body: "我喜欢甜咖啡",
+    kind: "preference",
+    sourceId: "seed-neg-coffee-extra",
+  });
+}
+
+function seedExperienceA(ctx) {
+  ctx.store.memory.remember({
+    characterId: "a",
+    factKey: "exp.neg.meteor",
+    body: "我昨天去看流星了",
+    kind: "experience",
+    sourceId: "seed-neg-meteor",
+  });
+}
+
+async function nullNegative(t, {
+  prepare = null,
+  text,
+  characterId = "a",
+}) {
+  const ctx = await setupContext(t);
+  const conversation = openConversation(ctx.store, characterId);
+  assert.equal(conversation.characterId, characterId);
+  if (prepare) {
+    await prepare(ctx, conversation);
+  }
+  const before = memorySnapshot(ctx.store.dbPath);
+  const result = await sendNullCorrection(ctx, conversation, text, {
+    characterId,
+    memoryCandidates: [],
+  });
+  assert.equal(result.status, "completed", text);
+  const requestRow = withDatabase(ctx.store.dbPath, (db) =>
+    db.prepare("SELECT character_id, conversation_id FROM chat_requests WHERE id = ?")
+      .get(result.requestId));
+  assert.equal(requestRow.character_id, characterId, text);
+  assert.equal(requestRow.conversation_id, conversation.id, text);
+  const messages = ctx.store.chat.getConversation({
+    characterId,
+    conversationId: conversation.id,
+  }).messages;
+  assert.ok(messages.some((message) => message.role === "user" && message.content === text), text);
+  if (characterId !== "a") {
+    assert.throws(() => ctx.store.chat.getRequest({
+      characterId: "a",
+      requestId: result.requestId,
+    }), /请求不存在/u);
+  }
+  assert.equal(verificationRequests(ctx).length, 0, text);
+  assert.deepEqual(memorySnapshot(ctx.store.dbPath), before, text);
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null, text);
+  assert.equal(temporaryEntryOf(ctx.store, "b"), null, text);
+  return { ctx, conversation, result };
+}
+
+test("POL-CHATMEM-CLARIFY-002a 显式null单轮临时补全，本地结果确认且 B 同事实同步", async (t) => {
+  const ctx = await setupContext(t);
+  const { aConversation } = await seedSugarCoffeePair(ctx);
+  const aBefore = entryOf(ctx.store, "a", "pref.c03.a");
+  const bBefore = entryOf(ctx.store, "b", "pref.c03.b");
+  const batchesBefore = extractionBatchCount(ctx);
+  const modelReply = "你想把咖啡改成什么？";
+  const leakCandidate = {
+    factKey: "pref.null-answer",
+    body: "我今天想喝茶",
+    kind: "preference",
+    trust: "stated",
+    evidence: "我今天想喝茶",
+  };
+
+  const result = await sendNullCorrection(ctx, aConversation,
+    "不是咖啡，我今天想喝茶，请帮我改过来。", {
+      verification: equivalentRelation(),
+      reply: modelReply,
+      memoryCandidates: [leakCandidate],
+    });
+
+  assert.equal(result.status, "completed");
+  assert.equal(result.reply.includes(modelReply), false);
+  assert.match(result.reply, /^好，我记下了你今天的这条情况/u);
+  assert.equal(result.verificationStatus, "pending");
+  await awaitVerificationSettled(ctx, result);
+
+  assert.equal(entryOf(ctx.store, "a", "pref.c03.a").body, aBefore.body);
+  assert.equal(entryOf(ctx.store, "a", "pref.c03.a").version, aBefore.version);
+  assert.equal(entryOf(ctx.store, "b", "pref.c03.b").body, bBefore.body);
+  assert.equal(entryOf(ctx.store, "b", "pref.c03.b").version, bBefore.version);
+  const aTemp = temporaryEntryOf(ctx.store, "a");
+  const bTemp = temporaryEntryOf(ctx.store, "b");
+  assert.match(aTemp.body, /茶/u);
+  assert.match(aTemp.sourceId, /^chat-current:/u);
+  assert.equal(aTemp.expiresAt, endOfLocalDayMs(ctx));
+  assert.equal(snapshotOf(ctx, "a", aTemp).status, "ok");
+  assert.match(bTemp.body, /茶/u);
+  assert.equal(bTemp.expiresAt, endOfLocalDayMs(ctx));
+  assert.equal(snapshotOf(ctx, "b", bTemp).status, "ok");
+  const proof = JSON.parse(proofOf(ctx, result.requestId).operation_proof);
+  assert.equal(proof.mode, "temporary");
+  assert.equal(proof.expiresAt, endOfLocalDayMs(ctx));
+  assert.ok(proof.entries.length > 0);
+  assert.ok(entryLinkOf(ctx, aTemp.id));
+  assert.equal(entryOf(ctx.store, "a", "pref.null-answer"), null);
+  assert.equal(extractionBatchCount(ctx), batchesBefore);
+  assert.equal(ctx.store.memory.isKnownCharacter("c"), true);
+  assert.equal(entryCountFor(ctx, "c"), 0);
+  assert.equal(ctx.store.memory.isKnownCharacter("d"), false);
+  assert.equal(entryCountFor(ctx, "d"), 0);
+  assert.equal(verificationRequests(ctx).length, 1);
+  const assistant = assistantOf(ctx, aConversation.id, result.requestId);
+  assert.ok(assistant);
+  assert.equal(assistant.content.includes(modelReply), false);
+  assert.match(assistant.content, /原来的长期内容仍然保留/u);
+});
+
+test("POL-CHATMEM-CLARIFY-002b/c 显式null临时补全：different/uncertain 不传播 B", async (t) => {
+  for (const relation of ["different", "uncertain"]) {
+    await t.test(relation, async (t2) => {
+      const ctx = await setupContext(t2);
+      const { aConversation } = await seedSugarCoffeePair(ctx);
+      const bBefore = entryOf(ctx.store, "b", "pref.c03.b");
+      const result = await sendNullCorrection(ctx, aConversation,
+        "不是咖啡，我今天想喝茶，请帮我改过来。", {
+          verification: relationResponder((pairs) =>
+            pairs.map((pair) => relationResult(pair, relation))),
+        });
+      assert.equal(result.verificationStatus, "pending");
+      await awaitVerificationSettled(ctx, result);
+      const aTemp = temporaryEntryOf(ctx.store, "a");
+      assert.match(aTemp.body, /茶/u);
+      assert.match(aTemp.sourceId, /^chat-current:/u);
+      assert.equal(aTemp.expiresAt, endOfLocalDayMs(ctx));
+      assert.equal(temporaryEntryOf(ctx.store, "b"), null);
+      assert.equal(entryOf(ctx.store, "b", "pref.c03.b").body, bBefore.body);
+      assert.equal(entryOf(ctx.store, "b", "pref.c03.b").version, bBefore.version);
+      assert.equal(entryCountFor(ctx, "c"), 0);
+      assert.equal(entryCountFor(ctx, "d"), 0);
+      assert.equal(verificationRequests(ctx).length, 1);
+    });
+  }
+});
+
+test("POL-CHATMEM-CLARIFY-002d1 显式null的非饮料偏好 replace 真实 corrected_v2", async (t) => {
+  const ctx = await setupContext(t);
+  const { aConversation } = await seedBluePair(ctx);
+  const result = await sendNullCorrection(ctx, aConversation,
+    "不是蓝色，我更喜欢绿色，请帮我改过来。", {
+      verification: equivalentRelation(),
+    });
+  assert.equal(result.verificationStatus, "pending");
+  await awaitVerificationSettled(ctx, result);
+  const aAfter = entryOf(ctx.store, "a", "pref.blue.a");
+  assert.match(aAfter.body, /绿色/u);
+  assert.match(entryOf(ctx.store, "b", "pref.blue.b").body, /绿色/u);
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+  assert.equal(temporaryEntryOf(ctx.store, "b"), null);
+  const source = snapshotOf(ctx, "a", aAfter);
+  assert.equal(source.status, "ok");
+  assert.equal(source.format, "corrected_v2");
+  assert.equal(source.direct, true);
+  assert.ok(source.sourceMessage.content.includes("更喜欢绿色"));
+  for (const segment of source.segments) {
+    assert.equal(
+      source.sourceMessage.content.slice(segment.start, segment.end),
+      segment.text,
+    );
+  }
+  assert.equal(verificationRequests(ctx).length, 1);
+});
+
+test("POL-CHATMEM-CLARIFY-002d2 显式null的过去经历 replace，长期/temporary 区分", async (t) => {
+  const ctx = await setupContext(t);
+  const { aConversation } = await seedMeteorPair(ctx);
+  const result = await sendNullCorrection(ctx, aConversation,
+    "不是流星，我昨天去看烟花了，请帮我改过来。", {
+      verification: equivalentRelation(),
+    });
+  assert.equal(result.verificationStatus, "pending");
+  await awaitVerificationSettled(ctx, result);
+  const aAfter = entryOf(ctx.store, "a", "exp.meteor.a");
+  assert.match(aAfter.body, /烟花/u);
+  assert.equal(aAfter.kind, "experience");
+  assert.match(entryOf(ctx.store, "b", "exp.meteor.b").body, /烟花/u);
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+  assert.equal(temporaryEntryOf(ctx.store, "b"), null);
+  const source = snapshotOf(ctx, "a", aAfter);
+  assert.equal(source.status, "ok");
+  assert.equal(source.format, "corrected_v2");
+  assert.ok(source.sourceMessage.content.includes("去看烟花了"));
+  for (const segment of source.segments) {
+    assert.equal(
+      source.sourceMessage.content.slice(segment.start, segment.end),
+      segment.text,
+    );
+  }
+  assert.equal(verificationRequests(ctx).length, 1);
+});
+
+test("POL-CHATMEM-CLARIFY-002d3 否定内容（我不喜欢蓝色）不被仅按开头拒绝", async (t) => {
+  const ctx = await setupContext(t);
+  const aConversation = openConversation(ctx.store);
+  await chatTurn(ctx, aConversation, "我喜欢蓝色。", [{
+    factKey: "pref.blue.neg",
+    body: "我喜欢蓝色",
+    kind: "preference",
+    trust: "stated",
+    evidence: "我喜欢蓝色",
+  }]);
+  const result = await sendNullCorrection(ctx, aConversation,
+    "不是蓝色，我不喜欢蓝色，请帮我改过来。");
+  assert.equal(result.status, "completed");
+  assert.match(result.reply, /已按你给的原话更新/u);
+  const aAfter = entryOf(ctx.store, "a", "pref.blue.neg");
+  assert.match(aAfter.body, /不喜欢蓝色/u);
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+  const source = snapshotOf(ctx, "a", aAfter);
+  assert.equal(source.status, "ok");
+  assert.equal(source.format, "corrected_v2");
+  assert.equal(verificationRequests(ctx).length, 0);
+});
+
+test("POL-CHATMEM-CLARIFY-002e 合法模型 operation 不被本地补全替代或重复", async (t) => {
+  const ctx = await setupContext(t);
+  const { aConversation } = await seedSugarCoffeePair(ctx);
+  const result = await sendCorrection(ctx, aConversation,
+    "不是咖啡，我更喜欢茶，请帮我改过来。", {
+      needle: "加糖",
+      excerpt: "我更喜欢茶",
+      evidence: "请帮我改过来",
+    }, { verification: equivalentRelation() });
+  assert.equal(result.verificationStatus, "pending");
+  await awaitVerificationSettled(ctx, result);
+  assert.match(entryOf(ctx.store, "a", "pref.c03.a").body, /茶/u);
+  assert.match(entryOf(ctx.store, "b", "pref.c03.b").body, /茶/u);
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+  assert.equal(verificationRequests(ctx).length, 1);
+});
+
+test("POL-CHATMEM-CLARIFY-002f 非法 operation 不触发本地补全", async (t) => {
+  const ctx = await setupContext(t);
+  const { aConversation } = await seedSugarCoffeePair(ctx);
+  for (const operation of [
+    { action: "clearAll", target: "M1", evidence: "请帮我改过来" },
+    { action: "forget", target: "M1", evidence: "请帮我改过来" },
+    { action: "correct", target: "M99", excerpt: "我今天想喝茶", evidence: "请帮我改过来" },
+  ]) {
+    ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+      reply: "已经改好了。",
+      memoryCandidates: [],
+      memoryOperation: operation,
+    }));
+    const result = await ctx.store.chat.sendMessage({
+      characterId: "a",
+      conversationId: aConversation.id,
+      text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+      requestId: crypto.randomUUID(),
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(result.reply, "我这次没有改动任何记忆。");
+    assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+    assert.equal(temporaryEntryOf(ctx.store, "b"), null);
+    assert.equal(verificationRequests(ctx).length, 0);
+  }
+});
+
+test("POL-CHATMEM-CLARIFY-002g 显式null负例：每项独立 setup 且全库前后不变", async (t) => {
+  const cases = [
+    {
+      name: "多候选",
+      prepare: (ctx) => { seedCoffeeANegative(ctx); seedCoffeeExtra(ctx); },
+      text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+    },
+    {
+      name: "多新内容",
+      prepare: seedCoffeeANegative,
+      text: "不是咖啡，我今天想喝茶，也想喝果汁，请帮我改过来。",
+    },
+    {
+      name: "缺目标",
+      characterId: "c",
+      text: "我今天想喝茶，请帮我改过来。",
+    },
+    {
+      name: "否定操作",
+      prepare: seedCoffeeANegative,
+      text: "不是咖啡，不要帮我改过来。",
+    },
+    {
+      name: "假设新内容",
+      prepare: seedCoffeeANegative,
+      text: "不是咖啡，如果我想喝茶，请帮我改过来。",
+    },
+    {
+      name: "引号命令",
+      prepare: seedCoffeeANegative,
+      text: "“请帮我改过来”，不是咖啡，我今天想喝茶。",
+    },
+    {
+      name: "引号新内容",
+      prepare: seedCoffeeANegative,
+      text: "不是咖啡，“我今天想喝茶”，请帮我改过来。",
+    },
+    {
+      name: "问号事实",
+      prepare: seedCoffeeANegative,
+      text: "不是咖啡，我今天想喝茶？请帮我改过来。",
+    },
+    {
+      name: "吗字事实",
+      prepare: seedCoffeeANegative,
+      text: "不是咖啡，我今天想喝茶吗，请帮我改过来。",
+    },
+    {
+      name: "不确定",
+      prepare: seedCoffeeANegative,
+      text: "不是咖啡，我今天可能想喝茶，请帮我改过来。",
+    },
+    {
+      name: "第三方经历",
+      prepare: seedExperienceA,
+      text: "不是流星，我姐姐今天去看烟花了，请帮我改过来。",
+    },
+    {
+      name: "归属变更",
+      prepare: seedCoffeeANegative,
+      text: "不是咖啡，是我姐姐喜欢咖啡，请帮我改过来。",
+    },
+    {
+      name: "未来",
+      prepare: seedCoffeeANegative,
+      text: "不是咖啡，我明天想喝茶，请帮我改过来。",
+    },
+    {
+      name: "最近",
+      prepare: seedCoffeeANegative,
+      text: "不是咖啡，我最近想喝茶，请帮我改过来。",
+    },
+    {
+      name: "纯提问命令",
+      prepare: seedCoffeeANegative,
+      text: "不是咖啡，我今天想喝茶，你会帮我改过来吗？",
+    },
+  ];
+  for (const item of cases) {
+    await t.test(item.name, async (t2) => {
+      await nullNegative(t2, item);
+    });
+  }
+});

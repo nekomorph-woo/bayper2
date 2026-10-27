@@ -538,6 +538,9 @@ function createChatService({
         Object.hasOwn(parsed, "memoryOperation") &&
         parsed.memoryOperation !== null &&
         parsed.memoryOperation !== undefined,
+      // 只有显式 null 才允许本地补全；缺少字段仍按原协议视为无建议。
+      operationNull:
+        Object.hasOwn(parsed, "memoryOperation") && parsed.memoryOperation === null,
       operation: parsed.memoryOperation ?? null,
       relayPresent:
         Object.hasOwn(parsed, "memoryRelay") &&
@@ -1423,6 +1426,7 @@ function createChatService({
       }
       operationPlan = planOperation({
         operationPresent: parsed.operationPresent,
+        operationNull: parsed.operationNull,
         operation: parsed.operation,
         relayPresent: parsed.relayPresent,
         relay: parsed.relay,

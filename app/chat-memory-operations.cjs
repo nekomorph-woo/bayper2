@@ -790,8 +790,175 @@ function correctionBody({ anchor, clauses, kind, nowYear }) {
   };
 }
 
+/* correct 的本地核验只生成与模型建议同形的 operation；主体、时间、否定和
+   版本约束与模型路径共用，不在这里直接写库。requireStated 仅用于模型显式
+   null 的本地补全：不确定内容先澄清，避免把推断当成完整明确更正。 */
+function correctionPlan({
+  target,
+  anchor,
+  evidence,
+  intent,
+  nowMs,
+  requireStated = false,
+  excerpt = anchor.text,
+}) {
+  if (
+    target.entry.kind === "experience" &&
+    subjectKindOf(target.entry.body) === "self"
+  ) {
+    const newSubject = subjectKindOf(anchor.text);
+    const intentText = intent.clauses.join(" ");
+    const explicit = explicitSubjectCorrection(intentText);
+    const unknown = newSubject === "unknown" &&
+      !negatesOldContent(target.entry.body, intentText);
+    if ((newSubject === "other" && !explicit) || unknown) {
+      return { reply: REPLIES.subjectClarification };
+    }
+  }
+  const info = correctionBody({
+    anchor,
+    clauses: intent.clauses,
+    kind: target.entry.kind,
+    nowYear: yearOf(nowMs),
+  });
+  if (!info) {
+    return { reply: REPLIES.notProcessed };
+  }
+  if (info.needsClarification || (requireStated && info.trust !== "stated")) {
+    return { reply: REPLIES.uncertaintyClarification };
+  }
+  if (info.temporal === "vague") {
+    return { reply: REPLIES.temporalClarification };
+  }
+  const mode = info.temporal === "today" ? "temporary" : "replace";
+  if (
+    mode === "temporary" &&
+    target.entry.expiresAt === null &&
+    `${target.entry.factKey}.current.${target.entry.id}`.length > MAX_FACT_KEY
+  ) {
+    return { reply: REPLIES.notProcessed };
+  }
+  return {
+    operation: {
+      action: "correct",
+      target,
+      excerpt,
+      body: info.body,
+      evidence,
+      trust: info.trust,
+      mode,
+      expiresToday: info.temporal === "today",
+    },
+  };
+}
+
+/* 问号/吗呢收尾的陈述不能当成已确认事实；礼貌请求由调用方按命令框架区分。 */
+function questionText(text) {
+  return /[？?]\s*$/u.test(text) || /(?:吗|呢)[。！？!?，,]?\s*$/u.test(text);
+}
+
+/* 只有命令分句以请求框架开头时，问句语气才是礼貌请求而非能力询问。 */
+function startsWithRequestFrame(text) {
+  return ["请", "帮我", "帮忙", "麻烦", "拜托", "能不能", "能否", "可不可以", "让你", "愿意"]
+    .some((word) => text.startsWith(word));
+}
+
+/* 分句自身或其原始位置后的语气符号表明它是问句；逗号后的命令不算。 */
+function clauseIsQuestion(clause, userText) {
+  if (questionText(clause)) {
+    return true;
+  }
+  const index = userText.indexOf(clause);
+  if (index < 0) {
+    return false;
+  }
+  const after = userText.slice(index + clause.length);
+  return /^\s*[？?]/u.test(after) || /^\s*(?:吗|呢)/u.test(after);
+}
+
+/* 模型显式返回 memoryOperation:null 时，只有“唯一 correct 命令 + 唯一完整
+   新内容分句 + 唯一目标”才本地补全。它不处理非法 operation、多个新内容、
+   缺目标或不确定内容；失败时回到现有零写/澄清路径，不按样例硬编码。 */
+function completeExplicitCorrection({
+  intent,
+  candidates,
+  userText,
+  recentText,
+  nowMs,
+}) {
+  if (intent.action !== "correct" || intent.reason) {
+    return null;
+  }
+  const commands = intent.clauses.filter((clause) => findCommand("correct", clause));
+  if (commands.length !== 1) {
+    return null;
+  }
+  const evidence = commands[0];
+  if (!validEvidence("correct", evidence, userText, intent.authorizedText)) {
+    return null;
+  }
+  // “你会帮我改过来吗”是能力询问，不是本轮完整命令；礼貌请求仍以“请/帮我”开头。
+  if (questionText(evidence) && !startsWithRequestFrame(evidence.trim())) {
+    return null;
+  }
+  const anchors = [];
+  for (const clause of intent.clauses) {
+    if (isCommandClause(clause)) {
+      continue;
+    }
+    // 问句里的内容不是已确认新事实；纯否定/补充分句也不是独立锚点。
+    if (clauseIsQuestion(clause, userText)) {
+      continue;
+    }
+    if (/^(?:不是|不|没|未|非|无|别)/u.test(clause.trim())) {
+      continue;
+    }
+    if (substantiveTokensOf(clause).length === 0) {
+      continue;
+    }
+    const anchor = correctionAnchor(clause, intent);
+    if (anchor) {
+      anchors.push(anchor);
+    }
+  }
+  if (anchors.length !== 1) {
+    return null;
+  }
+  const [anchor] = anchors;
+  // 本地补全只处理用户本人视角；第三方内容即使在偏好条目上也不猜着改写。
+  if (
+    subjectKindOf(anchor.text) === "other" &&
+    !explicitSubjectCorrection(intent.clauses.join(" "))
+  ) {
+    return { reply: REPLIES.subjectClarification };
+  }
+  const targets = candidates.filter((candidate) => {
+    const resolved = resolveTarget({
+      action: "correct",
+      candidates,
+      userText,
+      recentText,
+      excerpt: anchor.text,
+      target: candidate,
+    });
+    return resolved && resolved.target === candidate.target;
+  });
+  if (targets.length !== 1) {
+    return null;
+  }
+  return correctionPlan({
+    target: targets[0],
+    anchor,
+    evidence,
+    intent,
+    nowMs,
+    requireStated: true,
+  });
+}
+
 function planOperation({
   operationPresent,
+  operationNull = false,
   operation,
   relayPresent = false,
   relay = null,
@@ -824,6 +991,22 @@ function planOperation({
     });
   }
   if (!operationPresent) {
+    if (operationNull && intent.action === "correct") {
+      const completed = completeExplicitCorrection({
+        intent,
+        candidates,
+        userText,
+        recentText,
+        nowMs,
+      });
+      if (completed?.operation) {
+        return { kind: "execute", operation: completed.operation };
+      }
+      // 模糊时间仍沿用现有澄清；本地补全不把它当成完整可执行更正。
+      if (completed?.reply && intent.temporalHint !== "vague") {
+        return { kind: "respond", reply: completed.reply };
+      }
+    }
     if (intent.action === "correct" && intent.temporalHint === "vague") {
       return { kind: "respond", reply: REPLIES.temporalClarification };
     }
@@ -868,55 +1051,18 @@ function planOperation({
     }
     /* 用户自己的经历不能被“别人的事”覆盖；明确主体更正才放行。
        新内容主体未知且没有否定旧事实内容时，同样先澄清。 */
-    if (
-      target.entry.kind === "experience" &&
-      subjectKindOf(target.entry.body) === "self"
-    ) {
-      const newSubject = subjectKindOf(anchor.text);
-      const intentText = intent.clauses.join(" ");
-      const explicit = explicitSubjectCorrection(intentText);
-      const unknown = newSubject === "unknown" &&
-        !negatesOldContent(target.entry.body, intentText);
-      if ((newSubject === "other" && !explicit) || unknown) {
-        return { kind: "respond", reply: REPLIES.subjectClarification };
-      }
-    }
-    const info = correctionBody({
+    const planned = correctionPlan({
+      target,
       anchor,
-      clauses: intent.clauses,
-      kind: target.entry.kind,
-      nowYear: yearOf(nowMs),
+      evidence,
+      intent,
+      nowMs,
+      excerpt,
     });
-    if (!info) {
-      return { kind: "respond", reply: REPLIES.notProcessed };
+    if (planned.reply) {
+      return { kind: "respond", reply: planned.reply };
     }
-    if (info.needsClarification) {
-      return { kind: "respond", reply: REPLIES.uncertaintyClarification };
-    }
-    if (info.temporal === "vague") {
-      return { kind: "respond", reply: REPLIES.temporalClarification };
-    }
-    const mode = info.temporal === "today" ? "temporary" : "replace";
-    if (
-      mode === "temporary" &&
-      target.entry.expiresAt === null &&
-      `${target.entry.factKey}.current.${target.entry.id}`.length > MAX_FACT_KEY
-    ) {
-      return { kind: "respond", reply: REPLIES.notProcessed };
-    }
-    return {
-      kind: "execute",
-      operation: {
-        action,
-        target,
-        excerpt,
-        body: info.body,
-        evidence,
-        trust: info.trust,
-        mode,
-        expiresToday: info.temporal === "today",
-      },
-    };
+    return { kind: "execute", operation: planned.operation };
   }
 
   const resolved = resolveTarget({ action, candidates, userText, recentText });

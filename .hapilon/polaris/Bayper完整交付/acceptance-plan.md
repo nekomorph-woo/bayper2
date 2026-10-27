@@ -86,3 +86,15 @@ S08 最终验收入口的 Part B 已在该 Contract 文件内按 setup/driver/ob
 - Runner：`node --test --test-concurrency=1 tests/acceptance/memory-relation-protocol.spec.cjs`（绑定表）；`tests/acceptance/memory-semantic-operations.spec.cjs`（001/002 真实传播、003/004 不传播）；`tests/acceptance/memory-source-relation.spec.cjs`（001/002 v2）。
 - master 最终五套 **248/248 pass、0 skip、tests.exit 0、before/after 一致**（`evidence/master-s03n-final-NSKiCUx4`），并查看 live L1/L2、holdout 后**受托接受 S03n 已测主体绑定反证防护与 source Case v2**（非用户确认）。live L2 8 REVIEW/3 FAIL（C02/C03/C07），DB falseMerge 0；L1 10/11（C07）；holdout 15/16，falseMerge 0、missedEquivalent 0，仅 15 分类 FAIL。
 - C02/C03 为模型 `memoryOperation: null` 并澄清、产品如实显示未改记忆，**不是绑定门错误**，不得改 Expected 抹掉。自然姓名/弱指代、C07/15、完整主体识别/S03 仍未覆盖；保守拦截不等于全面支持。版本 `0.1.199 → 0.1.200` 待 snap。
+
+## S03o-A 单轮明确 correct 本地补全（2026-10-27 r74，master 有限接受）
+
+- 计划：[s03o-clarification-plan.md](s03o-clarification-plan.md) A 节；Case：[cases.md](cases.md) `POL-CHATMEM-CLARIFY-002a～002h`。
+- 范围：仅模型显式 `memoryOperation:null`、本轮唯一 correct、唯一 target、唯一完整新内容时本地补全；复用既有候选/主体/时间/否定/来源/版本约束与两阶段核验。不实现 pending、多轮、source 拆分、forget 自动补全、renderer。
+- Runner：`node --test tests/acceptance/chat-memory-operations.spec.cjs`（本地补全与负例）；`node --test tests/acceptance/memory-semantic-operations.spec.cjs`（C03 单轮 temporary/replace、关系 equivalent/different/uncertain、B 传播、C 无新增、关系请求次数）。
+- 边界：真实 chat.sendMessage/store/SQLite；chat 与关系 HTTP 为构造；无 GUI/真实模型。C02/C03/C07 原真实 FAIL 与 Expected 不改。
+- 实施：生产净增约 150 行（`chat-memory-operations.cjs` +192/−46、`chat.cjs` +4），测试净增 608 行；超出早期预计，已报告，未压行。
+- 证据：原始生产反向 patch 基线目录 `attempt-20261027-225117-baseline-headprod/` 已被跨次复用，混合历史与可证实/丢失项见 [provenance-review](evidence/s03o-a/provenance-review-20261027-231443/README.md)，不得当单次基线引用；守卫变异基线 [attempt-20261027-230629-mut-question-guard-off](evidence/s03o-a/attempt-20261027-230629-mut-question-guard-off/README.md)、[attempt-20261027-230637-mut-vague-before-local](evidence/s03o-a/attempt-20261027-230637-mut-vague-before-local/README.md)；本地最终五套 [attempt-20261027-230842-final6-bounded](evidence/s03o-a/attempt-20261027-230842-final6-bounded/README.md) **277/277、exit 0、before/after 一致**。
+- **master 验收（2026-10-27）**：独立最终 [master-s03o-a-final-O584PFa8](evidence/master-s03o-a-final-O584PFa8/) 五套 **277/277、0 skip、exit 0、before/after 一致**；据此**受托接受 S03o-A 已测单轮明确 correct 本地补全有限能力**（非用户亲自确认）。先前 [master-s03o-a-review-kXFjGV8d](evidence/master-s03o-a-review-kXFjGV8d/) 虽 277/277 但 tests 变更，只作过程证据。
+- **live**：[master-s03o-a-live-Z7Y05M66](evidence/master-s03o-a-live-Z7Y05M66/) 10 REVIEW / 1 FAIL（C07），44 chat + 10 relation + 1 models，模型为 `/models` 验证的 `deepseek-flash`；C03 原始 `memoryOperation=null` 后 actual/effective correct，A/B 长期 body/version 不变、两条当日 temporary `expires=1793116799999`，单 assistant 如实说明、关系 equivalent；falseMerge 0、wrongDelete 0、wrongSync 0、leak 0，11 临时目录无残留。C07 different vs uncertain 仍 FAIL。
+- 接受边界：C02 本次成功不代表多轮澄清已修好；旧 C02/C03/C07 FAIL/Expected 保留。未覆盖 GUI/live 泛化、多轮澄清/pending、自然指代、C07、完整 S03 与 `POL-SEMOP-001～008` 聚合。版本 `0.1.200 → 0.1.201`（10 文件 11 处）待 snap；生产 150 行/测试 608 行经 master 审查为必要规模，本批不再重构。

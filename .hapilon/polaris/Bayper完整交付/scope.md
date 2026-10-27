@@ -76,7 +76,16 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 
 工具组织REQ-41贯穿所有切片：现有SQLite/造型目录工具是已存在能力，新增项目工具仍须自包含审查，不将此横向约束标作一次性完成。
 
-## 当前阶段：S03n 已测主体绑定反证防护与 source Case v2 获有限接受；不是完整主体识别/自然指代/S03（2026-10-27 r70）
+## 当前阶段：S03o-A 单轮明确 correct 本地补全获有限接受；不是完整澄清/语义/S03（2026-10-27 r74）
+
+master 独立最终五套 **277/277 pass、0 skip、exit 0、before/after 一致**（`evidence/master-s03o-a-final-O584PFa8/`），据此**受托接受 S03o-A 已测单轮明确 correct 本地补全有限能力**（非用户亲自确认）。live `evidence/master-s03o-a-live-Z7Y05M66/` **10 REVIEW / 1 FAIL（C07）**，44 chat + 10 relation + 1 models，模型为 `/models` 验证的 `deepseek-flash`；C03 原始 `memoryOperation=null`，actual/effective correct，A/B 长期 body/version 不变，两条当日 temporary，`expires=1793116799999`，单 assistant 如实说明、关系 equivalent；falseMerge 0、wrongDelete 0、wrongSync 0、leak 0，11 临时目录无残留。C07 different vs uncertain 仍 FAIL。
+
+- **C02 本次成功不代表多轮澄清已修好**；旧 C02/C03/C07 FAIL 与 Expected 保留。未覆盖：GUI/live 泛化、多轮澄清/pending、自然指代、C07 分类、完整 S03 与 `POL-SEMOP-001～008` 聚合。
+- 版本 `0.1.200 → 0.1.201`（10 文件 11 处，不升级依赖）待 snap；生产净增 150 行/测试 608 行经 master 审查属必要规模，本批不再重构。
+- 证据偏差：`attempt-20261027-225117-baseline-headprod/` 跨次复用，混合结果见 [provenance-review](evidence/s03o-a/provenance-review-20261027-231443/README.md)，不得当单次基线引用。
+- 下一步：登记 S03 多轮最小澄清接续仍待完善；正式资源与 GUI 整体路径保持。
+
+## 历史阶段：S03n 已测主体绑定反证防护与 source Case v2 获有限接受；不是完整主体识别/自然指代/S03（2026-10-27 r70）
 
 master 最终五套 **248/248 pass、0 skip、tests.exit 0、before/after 一致**（`evidence/master-s03n-final-NSKiCUx4`）；实际查看请求/响应/DB 前后后，**受托接受 S03n 已测主体绑定反证防护与 source Case v2**（不是用户亲自确认）。live L2 8 REVIEW / 3 FAIL（C02/C03/C07），DB falseMerge 0，44 chat + 8 relation + 1 models；L1 10/11（C07）；grounded holdout 15/16，falseMerge 0、missedEquivalent 0，仅 pair 15 分类 FAIL；11 目录均核无残留。**C02/C03 是模型 `memoryOperation: null` 并澄清、产品如实显示未改记忆，不是绑定门错误；不得改 Expected 抹掉。**
 

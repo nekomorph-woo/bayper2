@@ -89,6 +89,23 @@ POL-COMPANION-004/006同时验证事务失败不留下精力已改但结算时�
 - Execution Boundary：真实Electron和项目导出资源，无模型请求；GUI自动输入不等于原生鼠标、跨Spaces体验。全动作自然度及新版其他角色仍另验。
 - Runner：tests/acceptance/desktop.spec.cjs及tests/unit/desktop-assets.test.cjs；执行结果与边界见desktop-pixel-review.md与evaluation；本文件不记录通过数。原生鼠标与桌面合成另验，不能据此标整个桌面体验通过。
 
+## S03o-A 单轮明确 correct 本地补全（v1，master 有限接受 2026-10-27）
+
+依据 REQ-18/61 与 [s03o-clarification-plan.md](s03o-clarification-plan.md) A 节。仅当模型显式 `memoryOperation:null`、本轮唯一 correct、唯一 target、唯一完整新内容时本地补全；仍复用既有候选、主体/时间/否定/来源/版本约束与两阶段核验。C02/C03/C07 原真实 FAIL 与 Expected 不变。
+
+| ID | Given → When | Expected / 独立 Oracle | Execution Boundary |
+| --- | --- | --- | --- |
+| POL-CHATMEM-CLARIFY-002a | A 咖啡加糖、B 咖啡甜、C 无关；模型 `memoryOperation:null` → 用户“不是咖啡，我今天想喝茶，请帮我改过来。”；关系 equivalent | 单轮 A 产生今日临时“茶”，A 长期 body/version 不变；B 长期不变且同步今日临时；C 无新增；模型 reply 不显示/不授权；reply 来自本地结果；关系请求恰好 1 次；模型 candidate 不落库 | 真实 chat.sendMessage/store/SQLite；构造 HTTP chat 与关系响应；无 GUI/真实模型 |
+| POL-CHATMEM-CLARIFY-002b | 同上；关系 different | A 临时“茶”，B 长期/临时均不变；C 无新增；关系 1 次 | 同上 |
+| POL-CHATMEM-CLARIFY-002c | 同上；关系 uncertain | A 临时“茶”，B 长期/临时均不变；C 无新增；关系 1 次 | 同上 |
+| POL-CHATMEM-CLARIFY-002d | 模型 null → “不是咖啡，我更喜欢茶，请帮我改过来。” | 走 replace；关系 equivalent 时 A/B 长期更新到新正文，无今日临时；不同/不确定仅 A 更新 | 同上 |
+| POL-CHATMEM-CLARIFY-002e | 模型返回合法 correct operation | 正常执行，不被本地补全替代或重复；结果与既有 correct 一致 | 同上 |
+| POL-CHATMEM-CLARIFY-002f | 模型返回非法 operation（如 clearAll、M99） | 不兜底；零写；回复“我这次没有改动任何记忆。”；不发关系请求 | 同上 |
+| POL-CHATMEM-CLARIFY-002g | 模型 null 的负例：多候选、多个新内容、缺目标、否定/假设/引用、不确定、第三方经历、未来/最近、纯提问 | 零写或现行澄清；无临时/长期变化；不发关系请求 | 同上 |
+| POL-CHATMEM-CLARIFY-002h | 002a 的附加观察 | assistant 消息与请求结果均为本地 operationReply/状态；无模型成功文案；无新增闲聊记忆批次 | 同上 |
+
+本组为 master 受托批准的垂直切片。2026-10-27 master 独立最终五套 **277/277 pass、0 skip、exit 0、before/after 一致**（`evidence/master-s03o-a-final-O584PFa8/`），**受托接受 S03o-A 已测单轮明确 correct 本地补全有限能力**（非用户亲自确认）；live `evidence/master-s03o-a-live-Z7Y05M66/` 10 REVIEW/1 FAIL（C07），C03 原始 `memoryOperation=null` 后 actual/effective correct，A/B 长期不变、两条当日 temporary，`expires=1793116799999`。接受仅限已测单轮 null 补全，不等于完整澄清、多轮/pending、forget 补全、自然指代、C07 或 S03；旧 C02/C03/C07 FAIL 与 Expected 保留。
+
 ## 外部 Contract 登记（唯一入口引用）
 
 以下条目只登记指向，不复制 plan 中的完整 Expected。ID 集合按实际 Contract 展开；范围有例外时已单列。Runner 映射见 [acceptance-plan.md](acceptance-plan.md)，执行结果见 evaluation.md 或对应 review。

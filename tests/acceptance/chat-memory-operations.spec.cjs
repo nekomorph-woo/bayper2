@@ -2732,3 +2732,131 @@ test("POL-THEME-SHARE-004E 主题见闻不冒充用户明确告知，模型候�
   assert.ok(bThemeLine.includes("来源:转述，听a说的主题故事见闻"));
   assert.equal(bThemeLine.includes("用户明确告知"), false);
 });
+
+/* S03o-A：显式 memoryOperation:null 的单轮明确 correct 本地补全。
+   测试不启用关系核验；两阶段与 B 传播由 memory-semantic-operations 覆盖。 */
+test("POL-CHATMEM-CLARIFY-002a 显式null单轮本地补全，不采用模型成功/澄清文案", async (t) => {
+  const ctx = await setupContext(t, "POL-CHATMEM-CLARIFY-002a-null");
+  seedOperationFact(ctx.store, {
+    factKey: "pref.coffee",
+    body: "我平时喝咖啡一定要加糖",
+    kind: "preference",
+  });
+  const conversation = openConversation(ctx.store);
+  ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+    reply: "已经改好了。",
+    // 该候选能通过 parse（正文/证据在本轮原话内），但操作回合不得再学习成新事实。
+    memoryCandidates: [{
+      factKey: "pref.null-answer",
+      body: "我今天想喝茶",
+      kind: "preference",
+      trust: "stated",
+      evidence: "我今天想喝茶",
+    }],
+    memoryOperation: null,
+  }));
+  const result = await ctx.store.chat.sendMessage({
+    characterId: "a",
+    conversationId: conversation.id,
+    text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+    requestId: "clarify-null-temporary",
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.reply.includes("已经改好了"), false);
+  assert.match(result.reply, /^好，我记下了你今天的这条情况/u);
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee").body, "我平时喝咖啡一定要加糖");
+  assert.match(temporaryEntryOf(ctx.store, "a").body, /茶/u);
+  assert.equal(entryOf(ctx.store, "a", "pref.null-answer"), null);
+  assert.equal(countRows(ctx.store.dbPath, "memory_extraction_batches"), 0);
+});
+
+test("POL-CHATMEM-CLARIFY-002f 非法operation与缺少operation字段均不触发本地补全", async (t) => {
+  const ctx = await setupContext(t, "POL-CHATMEM-CLARIFY-002f-no-fallback");
+  seedOperationFact(ctx.store, {
+    factKey: "pref.coffee",
+    body: "我平时喝咖啡一定要加糖",
+    kind: "preference",
+  });
+  const conversation = openConversation(ctx.store);
+  const entriesBefore = countRows(ctx.store.dbPath, "memory_entries");
+
+  for (const envelope of [
+    {
+      reply: "已经改好了。",
+      memoryCandidates: [],
+      memoryOperation: { action: "clearAll", target: "M1", evidence: "请帮我改过来" },
+    },
+    {
+      reply: "已经改好了。",
+      memoryCandidates: [],
+      // 缺少 memoryOperation 字段，不是显式 null，不进入本地补全。
+    },
+  ]) {
+    ctx.server.enqueue(({ res }) => sendEnvelope(res, envelope));
+    const result = await ctx.store.chat.sendMessage({
+      characterId: "a",
+      conversationId: conversation.id,
+      text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+      requestId: crypto.randomUUID(),
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(result.reply, "我这次没有改动任何记忆。");
+    assert.equal(entryOf(ctx.store, "a", "pref.coffee").body, "我平时喝咖啡一定要加糖");
+    assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+    assert.equal(countRows(ctx.store.dbPath, "memory_entries"), entriesBefore);
+  }
+});
+
+test("POL-CHATMEM-CLARIFY-002g1 显式null纯提问命令零写", async (t) => {
+  const ctx = await setupContext(t, "POL-CHATMEM-CLARIFY-002g1-question");
+  seedOperationFact(ctx.store, {
+    factKey: "pref.coffee",
+    body: "我平时喝咖啡一定要加糖",
+    kind: "preference",
+  });
+  const conversation = openConversation(ctx.store);
+  const entriesBefore = countRows(ctx.store.dbPath, "memory_entries");
+  ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+    reply: "已经改好了。",
+    memoryCandidates: [],
+    memoryOperation: null,
+  }));
+  const result = await ctx.store.chat.sendMessage({
+    characterId: "a",
+    conversationId: conversation.id,
+    text: "不是咖啡，我今天想喝茶，你会帮我改过来吗？",
+    requestId: crypto.randomUUID(),
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.reply.includes("已经改好了"), false);
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee").body, "我平时喝咖啡一定要加糖");
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+  assert.equal(countRows(ctx.store.dbPath, "memory_entries"), entriesBefore);
+});
+
+test("POL-CHATMEM-CLARIFY-002g2 显式null第三方内容零写", async (t) => {
+  const ctx = await setupContext(t, "POL-CHATMEM-CLARIFY-002g2-third-party");
+  seedOperationFact(ctx.store, {
+    factKey: "pref.coffee",
+    body: "我平时喝咖啡一定要加糖",
+    kind: "preference",
+  });
+  const conversation = openConversation(ctx.store);
+  const entriesBefore = countRows(ctx.store.dbPath, "memory_entries");
+  ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+    reply: "已经改好了。",
+    memoryCandidates: [],
+    memoryOperation: null,
+  }));
+  const result = await ctx.store.chat.sendMessage({
+    characterId: "a",
+    conversationId: conversation.id,
+    text: "不是咖啡，我姐姐今天去看烟花了，请帮我改过来。",
+    requestId: crypto.randomUUID(),
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.reply.includes("已经改好了"), false);
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee").body, "我平时喝咖啡一定要加糖");
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+  assert.equal(countRows(ctx.store.dbPath, "memory_entries"), entriesBefore);
+});
