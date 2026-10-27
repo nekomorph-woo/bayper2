@@ -7,6 +7,7 @@ const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
+const { execFileSync } = require("node:child_process");
 const { test } = require("node:test");
 const { DatabaseSync } = require("node:sqlite");
 const { _electron: electron } = require("playwright");
@@ -66,6 +67,64 @@ async function launchApp(dataDir) {
   const page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
   return { app, page };
+}
+
+/* 只收集本 Case dataDir 对应的 helper、桌面 overlay 主进程和带精确
+   --data-dir 的管理主进程。helper/管理进程只读命令行；桌面进程无法从
+   命令行识别目录，才对候选 PID 单独读环境并匹配完整 token。 */
+function collectVerificationUiPids(dataDir) {
+  const profileDir = path.join(dataDir, "desktop-profile");
+  const profileArg = `--user-data-dir=${profileDir}`;
+  const profileEnv = `BAYPER_DESKTOP_PROFILE=${profileDir}`;
+  const dataDirArg = `--data-dir=${dataDir}`;
+  const electronRoot = path.join(
+    repoRoot, "node_modules", "electron", "dist", "Electron.app", "Contents", "Frameworks",
+  );
+  const desktopCommand = `${electronPath} ${path.join(repoRoot, "app", "desktop")}`;
+  const tokensOf = (command) => command.split(/\s+/u).filter(Boolean);
+  const rows = execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" })
+    .split("\n").map((line) => line.trim().match(/^(\d+)\s+(\d+)\s+(.+)$/u))
+    .filter(Boolean)
+    .map((match) => ({ pid: Number(match[1]), command: match[3] }));
+  const helperPids = rows.filter((row) =>
+    row.command.startsWith(path.join(electronRoot, "Electron Helper")) &&
+    tokensOf(row.command).includes(profileArg),
+  ).map((row) => row.pid);
+  const managementPids = rows.filter((row) =>
+    row.command.startsWith(`${electronPath} `) &&
+    tokensOf(row.command).includes(dataDirArg),
+  ).map((row) => row.pid);
+  const desktopPids = rows
+    .filter((row) => row.command === desktopCommand)
+    .filter((row) => {
+      try {
+        return tokensOf(execFileSync(
+          "ps", ["eww", "-p", String(row.pid), "-o", "command="], { encoding: "utf8" },
+        )).includes(profileEnv);
+      } catch {
+        return false; // 候选在读取环境前已退出。
+      }
+    })
+    .map((row) => row.pid);
+  return [...new Set([...helperPids, ...managementPids, ...desktopPids])];
+}
+
+/* 异常退出 Case 的收尾：先 TERM 精确 PID，等进程消失后删除 dataDir，
+   并把“无活进程、目录已删除”作为 Case 断言，不依赖正常关闭规避。 */
+async function cleanupVerificationUiProcesses(dataDir) {
+  const deadline = Date.now() + 3000;
+  let remaining = collectVerificationUiPids(dataDir);
+  while (remaining.length > 0 && Date.now() < deadline) {
+    // 桌面 host 可能短暂重启 overlay；每轮对当前精确 PID 重新 TERM。
+    for (const pid of remaining) {
+      try { process.kill(pid, "SIGTERM"); } catch { /* 已退出 */ }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    remaining = collectVerificationUiPids(dataDir);
+  }
+  assert.deepEqual(remaining, [], `异常退出测试残留进程: ${remaining.join(",")}`);
+  fs.rmSync(dataDir, { recursive: true, force: true });
+  assert.equal(fs.existsSync(dataDir), false, "异常退出测试目录必须删除");
 }
 
 async function completeOnboarding(page, baseUrl) {
@@ -157,6 +216,55 @@ function readEntry(dataDir, characterId, factKey) {
   }
 }
 
+function readTemporaryRows(dataDir) {
+  const db = new DatabaseSync(path.join(dataDir, DB_FILE), { readOnly: true });
+  db.exec("PRAGMA busy_timeout = 2000");
+  try {
+    return db.prepare(`
+      SELECT character_id, body, fact_identity_id, expires_at, source_id
+      FROM memory_entries WHERE expires_at IS NOT NULL
+      ORDER BY character_id ASC, id ASC
+    `).all();
+  } finally {
+    db.close();
+  }
+}
+
+function readLatestRequestStatus(dataDir) {
+  const db = new DatabaseSync(path.join(dataDir, DB_FILE), { readOnly: true });
+  db.exec("PRAGMA busy_timeout = 2000");
+  try {
+    return db.prepare(
+      "SELECT verification_status FROM chat_requests ORDER BY rowid DESC LIMIT 1",
+    ).get()?.verification_status ?? null;
+  } finally {
+    db.close();
+  }
+}
+
+function candidateTarget(body, needle) {
+  const systemText = body.messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content).join("\n");
+  const line = systemText.split("\n").find((item) =>
+    /^\[M\d+\]/u.test(item) && item.includes(needle));
+  const target = line?.match(/^\[(M\d+)\]/u)?.[1];
+  assert.ok(target, `候选列表缺少${needle}目标`);
+  return target;
+}
+
+const isVerificationRequest = (body) => Boolean(body?.messages?.some((message) =>
+  message.role === "system" && message.content.includes("记忆事实关系判定器")));
+
+function createShotDir() {
+  const shotDir = path.join(
+    repoRoot, ".hapilon", "polaris", "Bayper完整交付", "evidence", "s03m-lifecycle",
+    "gui-shots", `${new Date().toISOString().replace(/[.:]/gu, "-")}-${process.pid}`,
+  );
+  fs.mkdirSync(shotDir, { recursive: true });
+  return shotDir;
+}
+
 async function openSeededUi(t) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bayper-verification-ui-"));
   const server = await startServer();
@@ -196,18 +304,42 @@ async function openSeededUi(t) {
     dataDir,
     correctionResponder() {
       return ({ body, response }) => {
-        const systemText = body.messages
-          .filter((message) => message.role === "system")
-          .map((message) => message.content).join("\n");
-        const line = systemText.split("\n").find((item) =>
-          /^\[M\d+\]/u.test(item) && item.includes("我喜欢咖啡"));
-        const target = line?.match(/^\[(M\d+)\]/u)?.[1];
-        assert.ok(target, "候选列表缺少咖啡目标");
         sendStructured(response, {
           reply: "好的。",
           memoryCandidates: [],
           memoryOperation: {
-            action: "correct", target, excerpt: "我更喜欢茶", evidence: "请帮我改过来",
+            action: "correct",
+            target: candidateTarget(body, "我喜欢咖啡"),
+            excerpt: "我更喜欢茶",
+            evidence: "请帮我改过来",
+          },
+        });
+      };
+    },
+    temporaryCorrectionResponder() {
+      return ({ body, response }) => {
+        sendStructured(response, {
+          reply: "好的。",
+          memoryCandidates: [],
+          memoryOperation: {
+            action: "correct",
+            target: candidateTarget(body, "我喜欢咖啡"),
+            excerpt: "我今天想喝茶",
+            evidence: "请帮我改过来",
+          },
+        });
+      };
+    },
+    forgetResponder() {
+      return ({ body, response }) => {
+        sendStructured(response, {
+          reply: "好的。",
+          memoryCandidates: [],
+          memoryOperation: {
+            action: "forget",
+            target: candidateTarget(body, "我喜欢咖啡"),
+            scope: "all",
+            evidence: "请忘记我喜欢咖啡这件事",
           },
         });
       };
@@ -335,7 +467,7 @@ test("POL-SEMOP-003a GUI 核验早完成：原位刷新且不追加消息", { ti
   assert.equal(readEntry(ui.dataDir, "hu", "pref.coffeeB").body, "不是咖啡，我更喜欢茶");
 });
 
-test("POL-SEMOP-003c GUI 系统暂停取消核验：本地完成且不传播", { timeout: 180000 }, async (t) => {
+test("POL-SEMOP-003c GUI 模拟 suspend 取消核验：本地完成且不传播", { timeout: 180000 }, async (t) => {
   const ui = await openSeededUi(t);
   ui.server.enqueue(ui.correctionResponder());
   ui.server.enqueue(({ body }) => {
@@ -345,6 +477,7 @@ test("POL-SEMOP-003c GUI 系统暂停取消核验：本地完成且不传播", {
   await ui.sendCorrection();
   await waitForAssistantText(ui.page, "正在核对");
   assert.equal(readEntry(ui.dataDir, "hu", "pref.coffeeB").body, "我也爱喝咖啡");
+  // 这里只是向 powerMonitor 发出 suspend 事件，模拟系统挂起；不是真实锁屏或休眠。
   await ui.app.evaluate(({ powerMonitor }) => {
     powerMonitor.emit("suspend");
   });
@@ -375,4 +508,187 @@ test("POL-SEMOP-003c GUI 关闭后迟到核验事件不重启旧会话", { timeo
   const bodyText = await ui.page.locator("body").innerText();
   assert.equal(bodyText.includes("正在核对"), false);
   assert.equal(readEntry(ui.dataDir, "hu", "pref.coffeeB").body, "我也爱喝咖啡");
+});
+
+test("POL-SEMOP-001d/003a GUI 临时理解阶段1先显示，阶段2原位刷新且长期不变", { timeout: 180000 }, async (t) => {
+  const shotDir = createShotDir();
+  const ui = await openSeededUi(t);
+  const aLong = readEntry(ui.dataDir, "rin", "pref.coffee");
+  const bLong = readEntry(ui.dataDir, "hu", "pref.coffeeB");
+
+  ui.server.enqueue(ui.temporaryCorrectionResponder());
+  ui.server.enqueue(ui.equivalentResponder(500));
+  await ui.page.locator("#chat-input").fill("不是咖啡，我今天想喝茶，请帮我改过来。");
+  await ui.page.locator("#chat-send").click();
+
+  await waitForAssistantText(ui.page, "正在核对");
+  await ui.page.screenshot({ path: path.join(shotDir, "temporary-phase1-pending.png") });
+  const during = await ui.page.locator(".chat-bubble-assistant").count();
+  assert.equal(await ui.page.locator("#chat-input").isDisabled(), true);
+  const stage1 = readTemporaryRows(ui.dataDir);
+  assert.equal(stage1.length, 1, "阶段1只给发起人写当日理解");
+  assert.equal(stage1[0].character_id, "rin");
+  assert.match(stage1[0].body, /茶/u);
+  assert.notEqual(stage1[0].body, aLong.body);
+  assert.deepEqual(readEntry(ui.dataDir, "rin", "pref.coffee"), aLong, "长期事实不变");
+  assert.deepEqual(readEntry(ui.dataDir, "hu", "pref.coffeeB"), bLong);
+
+  await waitForAssistantText(ui.page, "一并更正");
+  await ui.page.screenshot({ path: path.join(shotDir, "temporary-phase2-final.png") });
+  assert.equal(
+    await ui.page.locator(".chat-bubble-assistant").count(),
+    during,
+    "阶段2必须原位更新同一 assistant",
+  );
+  await ui.page.waitForFunction(() => {
+    const input = document.querySelector("#chat-input");
+    return input && !input.disabled;
+  });
+  const rows = readTemporaryRows(ui.dataDir);
+  assert.equal(rows.length, 2, "已确认的另一角色也应有当日 current");
+  const rinRow = rows.find((row) => row.character_id === "rin");
+  const huRow = rows.find((row) => row.character_id === "hu");
+  assert.ok(rinRow && huRow);
+  assert.equal(huRow.fact_identity_id, rinRow.fact_identity_id);
+  assert.equal(huRow.body, rinRow.body);
+  assert.equal(huRow.expires_at, rinRow.expires_at);
+  assert.match(huRow.source_id, /^chat-current-copy:/u);
+  assert.deepEqual(readEntry(ui.dataDir, "rin", "pref.coffee"), aLong, "临时理解不合并长期");
+  assert.deepEqual(readEntry(ui.dataDir, "hu", "pref.coffeeB"), bLong);
+  assert.equal(await ui.page.locator("#chat-status").textContent(), "");
+  console.log(`S03M_LIFECYCLE_GUI_SHOTS ${shotDir}`);
+});
+
+test("POL-SEMOP-002a/003a GUI forget 阶段1可见，阶段2原位删除且不说更正", { timeout: 180000 }, async (t) => {
+  const shotDir = createShotDir();
+  const ui = await openSeededUi(t);
+  const bLong = readEntry(ui.dataDir, "hu", "pref.coffeeB");
+
+  ui.server.enqueue(ui.forgetResponder());
+  ui.server.enqueue(ui.equivalentResponder(500));
+  await ui.page.locator("#chat-input").fill("请忘记我喜欢咖啡这件事。");
+  await ui.page.locator("#chat-send").click();
+
+  await waitForAssistantText(ui.page, "正在核对");
+  await ui.page.screenshot({ path: path.join(shotDir, "forget-phase1-pending.png") });
+  const during = await ui.page.locator(".chat-bubble-assistant").count();
+  assert.equal(await ui.page.locator("#chat-input").isDisabled(), true);
+  assert.equal(readEntry(ui.dataDir, "rin", "pref.coffee"), null, "阶段1先删除本地锚");
+  assert.deepEqual(readEntry(ui.dataDir, "hu", "pref.coffeeB"), bLong);
+
+  await waitForAssistantText(ui.page, "一并删除");
+  await ui.page.screenshot({ path: path.join(shotDir, "forget-phase2-final.png") });
+  assert.equal(
+    await ui.page.locator(".chat-bubble-assistant").count(),
+    during,
+    "阶段2必须原位更新同一 assistant",
+  );
+  await ui.page.waitForFunction(() => {
+    const input = document.querySelector("#chat-input");
+    return input && !input.disabled;
+  });
+  assert.equal(readEntry(ui.dataDir, "rin", "pref.coffee"), null);
+  assert.equal(readEntry(ui.dataDir, "hu", "pref.coffeeB"), null);
+  const finalText = await ui.page.locator(".chat-bubble-assistant").last().textContent();
+  assert.match(finalText, /一并删除/u);
+  assert.equal(finalText.includes("更正"), false, "forget 收口不能沿用更正文案");
+  console.log(`S03M_LIFECYCLE_GUI_SHOTS ${shotDir}`);
+});
+
+test("POL-SEMOP-003c GUI 临时关闭后迟到核验不复活会话也不传播", { timeout: 180000 }, async (t) => {
+  const ui = await openSeededUi(t);
+  const aLong = readEntry(ui.dataDir, "rin", "pref.coffee");
+  const bLong = readEntry(ui.dataDir, "hu", "pref.coffeeB");
+  ui.server.enqueue(ui.temporaryCorrectionResponder());
+  let release;
+  let startedResolve;
+  const started = new Promise((resolve) => { startedResolve = resolve; });
+  ui.server.enqueue(({ body, response }) => {
+    const pairs = pairsOf(body);
+    startedResolve();
+    return new Promise((resolve) => {
+      release = () => {
+        sendStructured(response, { results: pairs.map((pair) => relationResult(pair)) });
+        resolve();
+      };
+    });
+  });
+  await ui.page.locator("#chat-input").fill("不是咖啡，我今天想喝茶，请帮我改过来。");
+  await ui.page.locator("#chat-send").click();
+  await waitForAssistantText(ui.page, "正在核对");
+  await started;
+  assert.equal(readTemporaryRows(ui.dataDir).length, 1);
+
+  await ui.page.locator("#chat-close").click();
+  await ui.page.locator("#chat-panel").waitFor({ state: "hidden" });
+  release();
+  await ui.page.waitForTimeout(500);
+  assert.equal(await ui.page.locator("#chat-panel").isVisible(), false);
+  const bodyText = await ui.page.locator("body").innerText();
+  assert.equal(bodyText.includes("正在核对"), false);
+  const rows = readTemporaryRows(ui.dataDir);
+  assert.equal(rows.length, 1, "阶段1的A当日理解保留，迟到结果不得给B建副本");
+  assert.equal(rows[0].character_id, "rin");
+  assert.deepEqual(readEntry(ui.dataDir, "rin", "pref.coffee"), aLong);
+  assert.deepEqual(readEntry(ui.dataDir, "hu", "pref.coffeeB"), bLong);
+});
+
+test("POL-SEMOP-003c GUI 真实异常退出遗留 pending：重开 interrupted、不重试、保留阶段1", { timeout: 180000 }, async (t) => {
+  const shotDir = createShotDir();
+  const ui = await openSeededUi(t);
+  const aLong = readEntry(ui.dataDir, "rin", "pref.coffee");
+  const bLong = readEntry(ui.dataDir, "hu", "pref.coffeeB");
+  ui.server.enqueue(ui.temporaryCorrectionResponder());
+  let startedResolve;
+  const started = new Promise((resolve) => { startedResolve = resolve; });
+  ui.server.enqueue(() => {
+    startedResolve();
+    return new Promise(() => {});
+  });
+  await ui.page.locator("#chat-input").fill("不是咖啡，我今天想喝茶，请帮我改过来。");
+  await ui.page.locator("#chat-send").click();
+  await waitForAssistantText(ui.page, "正在核对");
+  await started;
+  assert.equal(readTemporaryRows(ui.dataDir).length, 1);
+  const requestsBeforeKill = ui.server.requests.filter(isVerificationRequest).length;
+  assert.equal(requestsBeforeKill, 1);
+
+  // 模拟真实异常退出：SIGKILL 主进程，保留已提交的阶段1与 pending 核验状态。
+  const child = ui.app.process();
+  child.kill("SIGKILL");
+  await new Promise((resolve) => child.once("exit", resolve));
+  await new Promise((resolve) => setTimeout(resolve, 200));
+
+  let relaunched = null;
+  try {
+    relaunched = await launchApp(ui.dataDir);
+    const page = relaunched.page;
+    await page.locator('[data-step="home"]').waitFor({ state: "visible", timeout: 20000 });
+    await page.locator("#chat-current").click();
+    await page.locator("#chat-panel").waitFor({ state: "visible" });
+    await waitForAssistantText(page, "本地这次更正已完成");
+    await page.screenshot({ path: path.join(shotDir, "recovery-chat.png") });
+    assert.equal(
+      (await page.locator("body").innerText()).includes("正在核对"),
+      false,
+    );
+    await page.waitForTimeout(500);
+    assert.equal(
+      ui.server.requests.filter(isVerificationRequest).length,
+      requestsBeforeKill,
+      "重开不得重试核验",
+    );
+    assert.equal(readLatestRequestStatus(ui.dataDir), "interrupted");
+    const rows = readTemporaryRows(ui.dataDir);
+    assert.equal(rows.length, 1, "阶段1的A当日理解保留，未向B传播");
+    assert.equal(rows[0].character_id, "rin");
+    assert.deepEqual(readEntry(ui.dataDir, "rin", "pref.coffee"), aLong);
+    assert.deepEqual(readEntry(ui.dataDir, "hu", "pref.coffeeB"), bLong);
+    console.log(`S03M_LIFECYCLE_GUI_SHOTS ${shotDir}`);
+  } finally {
+    if (relaunched) {
+      try { await relaunched.app.close(); } catch { /* 已在退出 */ }
+    }
+    await cleanupVerificationUiProcesses(ui.dataDir);
+  }
 });

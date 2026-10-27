@@ -1633,6 +1633,55 @@ test("POL-SEMOP-002c forget 关系未确认/截断不删候选，如实说明未
   assert.match(assistant.content, /请直接说出那条内容/u);
   assert.equal(assistant.content.includes("一并删除了"), false);
 });
+test("POL-SEMOP-002c/006 forget 关系 uncertain 与网络失败均不删候选且不说更正", async (t) => {
+  await t.test("uncertain", async (t2) => {
+    const { ctx, aConversation } = await setupForgetPair(t2);
+    const bOld = entryOf(ctx.store, "b", "pref.coffeeB");
+
+    const result = await sendForget(ctx, aConversation, "请忘记我喜欢咖啡这件事。", {
+      needle: "我喜欢咖啡", evidence: "请忘记我喜欢咖啡这件事",
+    }, {
+      verification: relationResponder((pairs) =>
+        pairs.map((pair) => relationResult(pair, "uncertain"))),
+    });
+    assert.equal(result.verificationStatus, "pending");
+    await awaitVerificationSettled(ctx, result);
+
+    const request = ctx.store.chat.getRequest({ characterId: "a", requestId: result.requestId });
+    assert.equal(request.verificationStatus, "completed");
+    assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null, "阶段1本地删除保留");
+    assert.equal(entryOf(ctx.store, "b", "pref.coffeeB").body, bOld.body);
+    const assistant = lastAssistant(ctx, aConversation);
+    assert.match(assistant.content, /没有确认到可以一起删除的部分/u);
+    assert.match(assistant.content, /请直接说出那条内容/u);
+    assert.equal(assistant.content.includes("一并删除了"), false);
+    assert.equal(assistant.content.includes("更正"), false);
+  });
+
+  await t.test("network", async (t2) => {
+    const { ctx, aConversation } = await setupForgetPair(t2);
+    const bOld = entryOf(ctx.store, "b", "pref.coffeeB");
+
+    const result = await sendForget(ctx, aConversation, "请忘记我喜欢咖啡这件事。", {
+      needle: "我喜欢咖啡", evidence: "请忘记我喜欢咖啡这件事",
+    }, {
+      verification: ({ res }) => { res.destroy(); },
+    });
+    await waitFor(() => ctx.store.chat.getRequest({
+      characterId: "a", requestId: result.requestId,
+    }).verificationStatus !== "pending");
+
+    const request = ctx.store.chat.getRequest({ characterId: "a", requestId: result.requestId });
+    assert.equal(request.verificationStatus, "failed");
+    assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null, "阶段1本地删除保留");
+    assert.equal(entryOf(ctx.store, "b", "pref.coffeeB").body, bOld.body);
+    const assistant = lastAssistant(ctx, aConversation);
+    assert.match(assistant.content, /本地这次删除已完成/u);
+    assert.equal(assistant.content.includes("一并删除了"), false);
+    assert.equal(assistant.content.includes("更正"), false);
+  });
+});
+
 test("POL-SEMOP-003a forget 阶段 1 提前返回，阶段 2 同一 assistant 原位更新", async (t) => {
   const { ctx, aConversation, bConversation } = await setupForgetPair(t);
   const assistantsBefore = ctx.store.chat.getConversation({
@@ -3200,6 +3249,77 @@ test("POL-SEMOP/D4 临时阶段2：第二候选写失败全回滚，阶段1保�
     characterId: "a", conversationId: aConversation.id,
   }).messages.find((message) => message.id === result.assistantMessageId);
   assert.match(last.content, /本地这次更正已完成/u);
+});
+
+test("POL-SEMOP/003b/003c temporary 取消/关闭/dispose/重启均保留阶段1且不传播", async (t) => {
+  for (const mode of ["cancel", "close", "dispose", "restart"]) {
+    await t.test(mode, async (t2) => {
+      const ctx = await setupContext(t2);
+      const { aConversation, aLong, bLong } = await seedAWithIndependentB(ctx);
+      const gate = gatedVerification(t2);
+      const result = await sendTodayWithVerification(ctx, aConversation, "a", {
+        text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+        needle: aLong.body,
+        excerpt: "我今天想喝茶",
+        evidence: "请帮我改过来",
+      }, gate.responder);
+      assert.equal(result.verificationStatus, "pending", "临时理解必须进入阶段 2");
+      const aTemp = temporaryEntryOf(ctx.store, "a");
+      assert.ok(aTemp);
+      assert.equal(temporaryEntryOf(ctx.store, "b"), null);
+      await gate.waitStarted();
+      const pendingAssistant = lastAssistant(ctx, aConversation);
+
+      if (mode === "cancel") {
+        const cancelled = ctx.store.chat.cancelRequest({
+          characterId: "a", requestId: result.requestId,
+        });
+        assert.equal(cancelled.verificationStatus, "cancelled");
+      } else if (mode === "close") {
+        ctx.store.chat.closeConversation({
+          characterId: "a", conversationId: aConversation.id,
+        });
+      } else if (mode === "dispose") {
+        await ctx.store.chat.dispose();
+      } else {
+        // 先正常收尾，再把核验恢复为 pending，模拟进程异常退出遗留状态。
+        await ctx.store.chat.dispose();
+        withDatabase(ctx.store.dbPath, (db) => {
+          db.prepare("UPDATE chat_messages SET content = ? WHERE id = ?")
+            .run(pendingAssistant.content, result.assistantMessageId);
+          db.prepare("UPDATE chat_requests SET verification_status = 'pending' WHERE id = ?")
+            .run(result.requestId);
+        });
+        ctx.reopenWithRecover();
+      }
+
+      if (mode === "cancel" || mode === "close") {
+        gate.release();
+      }
+      await awaitVerificationSettled(ctx, result);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const request = ctx.store.chat.getRequest({ characterId: "a", requestId: result.requestId });
+      assert.equal(
+        request.verificationStatus,
+        mode === "restart" ? "interrupted" : "cancelled",
+      );
+      const aAfter = temporaryEntryOf(ctx.store, "a");
+      assert.equal(aAfter.id, aTemp.id, "阶段1的A当日理解必须保留");
+      assert.equal(aAfter.body, aTemp.body);
+      assert.equal(aAfter.version, aTemp.version);
+      assert.equal(temporaryEntryOf(ctx.store, "b"), null, "不得向B传播");
+      assert.equal(temporaryEntryOf(ctx.store, "c"), null);
+      assert.equal(entryOf(ctx.store, "a", "pref.coffee").body, aLong.body);
+      assert.equal(entryOf(ctx.store, "b", "pref.coffeeB").body, bLong.body);
+      const assistant = ctx.store.chat.getConversation({
+        characterId: "a", conversationId: aConversation.id,
+      }).messages.find((message) => message.id === result.assistantMessageId);
+      assert.match(assistant.content, /本地这次更正已完成/u);
+      assert.equal(assistant.content.includes("正在核对"), false);
+      assert.equal(verificationRequests(ctx).length, 1, "不得重试核验");
+    });
+  }
 });
 
 test("POL-SEMOP/D5 临时阶段2：未结识角色不进入候选、不新增关系/副本", async (t) => {

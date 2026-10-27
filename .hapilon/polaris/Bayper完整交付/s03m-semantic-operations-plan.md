@@ -622,3 +622,12 @@ Mock 只替换聊天与关系模型 HTTP；不 mock 核心 store/chat/memory/sou
 - 生产净增 **748 行**（chat +237、verification +127、temporary +206、memory +178）经 master 职责审查认可为必要的来源/证明/事务/流程职责；本批**不再代码重构**，原超规模迟报保留，master 已裁决接受该规模。
 - 未覆盖：temporary 专属取消/恢复 GUI 真实链、真实模型 L1/L2、UI IPC/GUI/live、跨角色独立同义、完整 S03 与 `POL-SEMOP-001～008` 聚合。
 - Polaris 复盘：本批问题属于实现资格、测试夹具与规模迟报；master 的实际退回与独立复验证据保留。现行 skill 能处理这些发现，无新 skill 缺陷，故不改 skill；不将任何自动/Agent 结果记为用户人工确认。
+
+### 13.14 生命周期/GUI 有限能力受托接受（2026-10-27 r54）
+
+- master 证据一：[master-chat-lifecycle-EDScQrNM](evidence/master-chat-lifecycle-EDScQrNM/)。三套件 **111/111 PASS、0 skip、exit 0、before/after 一致**；master 实际查看 temporary/forget/recovery 截图。证据二：[master-lifecycle-cleanup-fpxOn887](evidence/master-lifecycle-cleanup-fpxOn887/)，异常退出 Case **1/1 PASS、0 skip、exit 0、before/after 一致**，独立 `ps` 无 Electron 匹配 `bayper-verification-ui` 残留。
+- 受托接受范围：**本批已测 temporary/forget 生命周期与 Electron GUI 有限能力**（不是用户亲自确认、不是人类体验、不是真实模型语义，不接受完整 S03/Goal）。具体包括：temporary cancel/close/dispose 与构造 pending 恢复后端；真实 SIGKILL 重开 GUI 的 `interrupted`、不重试、阶段 1 保留；temporary/forget 阶段 1/阶段 2 单 assistant 原位更新 GUI；forget uncertain 与网络失败分支。
+- 口径边界：模拟 suspend 的原 Case 是 correct 路径，只证明 `powerMonitor.emit` 模拟事件，**不代表 temporary 专属真实系统锁屏/休眠通过**。三套件 111/111 覆盖未变业务断言；cleanup 复验覆盖最终进程清理 helper，两轮证据结合才构成接受。
+- 历史保留：开发首次清理遗漏（SIGKILL 管理主进程后桌面 overlay 与 helper 残留）、master 退回、r52 精确 PID TERM、r53 完整 token 与仅候选 PID 读环境修正，以及全部旧 attempt/失败证据均保留，不覆盖。
+- 仍未完成：真实模型 L1/L2、正式资源、完整父级 S03 与 `POL-SEMOP-001～008` 聚合；跨角色独立同义、UI IPC/live 另列。下一步直接接已批准的真实模型 L1/L2 效果验证，不另起大型规划或内部探针。
+- 本批仅文档与版本 `0.1.196 → 0.1.197`（10 文件 11 处），未改生产/测试/依赖；Polaris 复盘无新 skill 缺陷，不修改 skill。
