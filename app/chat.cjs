@@ -17,6 +17,7 @@ const {
   operationReply,
   relayFailureReply,
   RELAY_FAILURE_CODES,
+  REPLIES,
 } = require("./chat-memory-operations.cjs");
 const { detectSharingSetting } = require("./chat-sharing-setting.cjs");
 const { createChatMemoryVerification } = require("./chat-memory-verification.cjs");
@@ -222,7 +223,19 @@ function createChatService({
     const theme = entry.sourceKind === "theme";
     const themeSuffix = theme ? "的主题故事见闻" : "";
     let source;
-    if (!entry.derived) {
+    if (entry.temporarySource) {
+      const temporary = entry.temporarySource;
+      if (temporary.kind === "direct") {
+        source = "用户今天明确说明";
+      } else if (temporary.kind === "edit") {
+        source = "用户在面板修改了今日理解，不是聊天原话";
+      } else if (temporary.relayFrom) {
+        source = `听${identityLabel(temporary.relayFrom)}转告${identityLabel(temporary.originCharacterId)}的今日说明，不是直接告知`;
+      } else {
+        source = `经${identityLabel(temporary.originCharacterId)}的今日说明同步，不是直接告知`;
+      }
+      source = `${source}；今日理解优先于长期偏好`;
+    } else if (!entry.derived) {
       source = theme
         ? "主题故事见闻，不是用户亲历或用户原话"
         : entry.trust === "stated"
@@ -1362,14 +1375,18 @@ function createChatService({
             });
             reply = operationReply(operationPlan.operation, operationResult);
           } catch (error) {
-            // 转告只提交一条，本地限制拒绝发生在任何写入之前；在同一事务内如实说明。
-            if (
-              operationPlan.operation.action !== "relay" ||
-              !RELAY_FAILURE_CODES.has(error?.code)
+            // 临时理解无法唯一确定时，本地零写入并在同一条回复里最小澄清。
+            if (error?.code === "TEMPORARY_AMBIGUOUS") {
+              reply = REPLIES.temporaryAmbiguous;
+            } else if (
+              operationPlan.operation.action === "relay" &&
+              RELAY_FAILURE_CODES.has(error?.code)
             ) {
+              // 转告只提交一条，本地限制拒绝发生在任何写入之前；在同一事务内如实说明。
+              reply = relayFailureReply(error.code);
+            } else {
               throw error;
             }
-            reply = relayFailureReply(error.code);
           }
           let proof = null;
           if (twoPhaseCorrect && targetEvidence && candidateScan.candidates.length > 0) {

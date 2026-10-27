@@ -39,6 +39,17 @@ const FACT_IDENTITY_SCHEMA = `
     PRIMARY KEY (character_id, identity_id)
   );
 
+  /* S03m 2c-1 临时理解关联：只保存身份/角色/到期时间，不保存正文、摘要或来源
+     文本。放在身份迁移保存点内，旧库失败回滚时不会留下半建表；成功重开后
+     用于继承旧 forget/share 控制，不参与检索，也不抑制长期记忆。 */
+  CREATE TABLE IF NOT EXISTS memory_temporary_links (
+    temp_identity_id TEXT NOT NULL,
+    long_identity_id TEXT NOT NULL,
+    holder_character_id TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    PRIMARY KEY (temp_identity_id, long_identity_id, holder_character_id, expires_at)
+  );
+
   CREATE TABLE IF NOT EXISTS memory_share_identity_controls (
     identity_id TEXT PRIMARY KEY REFERENCES memory_fact_identities(identity_id),
     created_at INTEGER NOT NULL
@@ -262,6 +273,37 @@ function createMemoryStore(db) {
         source_id, source_version, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `),
+    replaceDerivation: db.prepare(`
+      INSERT OR REPLACE INTO memory_derivations (
+        entry_id, parent_entry_id, origin_character_id, narrator_character_id,
+        source_id, source_version, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `),
+    deleteDerivation: db.prepare("DELETE FROM memory_derivations WHERE entry_id = ?"),
+    setEntryFactKey: db.prepare("UPDATE memory_entries SET fact_key = ? WHERE id = ?"),
+    insertTemporaryLink: db.prepare(`
+      INSERT OR IGNORE INTO memory_temporary_links (
+        temp_identity_id, long_identity_id, holder_character_id, expires_at
+      ) VALUES (?, ?, ?, ?)
+    `),
+    listTemporaryLinksByIdentity: db.prepare(`
+      SELECT temp_identity_id, long_identity_id, holder_character_id, expires_at
+      FROM memory_temporary_links
+      WHERE temp_identity_id = ?
+      ORDER BY holder_character_id ASC, expires_at ASC
+    `),
+    listTemporaryLinksByHolderLong: db.prepare(`
+      SELECT temp_identity_id, long_identity_id, holder_character_id, expires_at
+      FROM memory_temporary_links
+      WHERE holder_character_id = ? AND long_identity_id = ?
+      ORDER BY expires_at ASC, temp_identity_id ASC
+    `),
+    listTemporaryLinksByLongIdentity: db.prepare(`
+      SELECT temp_identity_id, long_identity_id, holder_character_id, expires_at
+      FROM memory_temporary_links
+      WHERE long_identity_id = ?
+      ORDER BY expires_at ASC, temp_identity_id ASC, holder_character_id ASC
+    `),
     updateEntry: db.prepare(`
       UPDATE memory_entries SET
         body = ?, trust = ?, source_kind = ?, importance = ?, expires_at = ?,
@@ -361,6 +403,16 @@ function createMemoryStore(db) {
         from_entry_id, to_entry_id, kind, created_at
       ) VALUES (?, ?, ?, ?)
     `),
+    deleteRelationEdgesToEntry: db.prepare(
+      "DELETE FROM memory_fact_relation_edges WHERE to_entry_id = ?",
+    ),
+    /* 临时理解在 direct/copy 之间转换时，来源归属和持久父条目必须与
+       derivation 同事务更新；既有 updateEntry 只负责正文/来源/版本。 */
+    updateTemporaryOrigin: db.prepare(`
+      UPDATE memory_entries
+      SET origin_character_id = ?, derived_from_entry_id = ?
+      WHERE id = ?
+    `),
     insertFactIdentity: db.prepare(`
       INSERT OR IGNORE INTO memory_fact_identities (identity_id, created_at)
       VALUES (?, ?)
@@ -421,7 +473,6 @@ function createMemoryStore(db) {
         )
     `),
     deleteEntry: db.prepare("DELETE FROM memory_entries WHERE id = ?"),
-    deleteDerivation: db.prepare("DELETE FROM memory_derivations WHERE entry_id = ?"),
     insertFts: db.prepare(
       "INSERT INTO memory_fts (entry_id, char_tokens, segment_tokens) VALUES (?, ?, ?)",
     ),
@@ -668,6 +719,74 @@ function createMemoryStore(db) {
     statements.insertRelationEdge.run(fromEntryId, toEntryId, kind, createdAt);
   }
 
+  function removeRelationEdgesToEntry(entryId) {
+    statements.deleteRelationEdgesToEntry.run(entryId);
+  }
+
+  function updateTemporaryOrigin(entryId, originCharacterId, derivedFromEntryId) {
+    statements.updateTemporaryOrigin.run(originCharacterId, derivedFromEntryId, entryId);
+  }
+
+  function setEntryFactKey(entryId, factKey) {
+    statements.setEntryFactKey.run(factKey, entryId);
+  }
+
+  /* 临时条目更新正文后仍需保留/改写派生关系；直接来源删除旧派生记录。 */
+  function setDerivation(entry) {
+    statements.replaceDerivation.run(
+      entry.id,
+      entry.derivedFromEntryId,
+      entry.originCharacterId,
+      entry.narratorCharacterId ?? null,
+      entry.sourceId,
+      entry.sourceVersion,
+      entry.createdAt,
+    );
+  }
+
+  function removeDerivation(entryId) {
+    statements.deleteDerivation.run(entryId);
+  }
+
+  function insertTemporaryLink({
+    tempIdentityId,
+    longIdentityId,
+    holderCharacterId,
+    expiresAt,
+  }) {
+    statements.insertTemporaryLink.run(
+      tempIdentityId,
+      longIdentityId,
+      holderCharacterId,
+      expiresAt,
+    );
+  }
+
+  function mapTemporaryLinks(rows) {
+    return rows.map((row) => ({
+      tempIdentityId: row.temp_identity_id,
+      longIdentityId: row.long_identity_id,
+      holderCharacterId: row.holder_character_id,
+      expiresAt: row.expires_at,
+    }));
+  }
+
+  function listTemporaryLinksByIdentity(identityId) {
+    return mapTemporaryLinks(statements.listTemporaryLinksByIdentity.all(identityId));
+  }
+
+  function listTemporaryLinksByHolderLong(holderCharacterId, longIdentityId) {
+    return mapTemporaryLinks(
+      statements.listTemporaryLinksByHolderLong.all(holderCharacterId, longIdentityId),
+    );
+  }
+
+  function listTemporaryLinksByLongIdentity(longIdentityId) {
+    return mapTemporaryLinks(
+      statements.listTemporaryLinksByLongIdentity.all(longIdentityId),
+    );
+  }
+
   function getIdentityLegacyId(identityId) {
     return statements.getIdentityLegacy.get(identityId)?.legacy_identity_id ?? null;
   }
@@ -848,6 +967,15 @@ function createMemoryStore(db) {
     mergeFactIdentities,
     insertFactIdentity,
     insertRelationEdge,
+    removeRelationEdgesToEntry,
+    updateTemporaryOrigin,
+    setEntryFactKey,
+    setDerivation,
+    removeDerivation,
+    insertTemporaryLink,
+    listTemporaryLinksByIdentity,
+    listTemporaryLinksByHolderLong,
+    listTemporaryLinksByLongIdentity,
     getIdentityLegacyId,
     isSplitIdentity,
     listAliasIdentityIds,

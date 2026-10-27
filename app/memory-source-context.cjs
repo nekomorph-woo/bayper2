@@ -6,6 +6,7 @@ const { AppError } = require("./errors.cjs");
 const {
   locateCorrectionSegments,
 } = require("./memory-correction-evidence.cjs");
+const { parseTemporarySource } = require("./memory-temporary-source.cjs");
 
 const LIMITS = {
   characterId: 200, entryId: 200, utterance: 3000, contextMessages: 2,
@@ -15,7 +16,14 @@ const CHAT_SOURCE = /^chat:([^:\s]+)$/u;
 const CORRECTED_SOURCE = /^chat-correct:([^:\s]+):([1-9]\d*):(chat:[^:\s]+)$/u;
 const CURRENT_SOURCE = /^chat-current:([^:\s]+):(\d+):(chat:[^:\s]+)$/u;
 const PROPAGATED_SOURCE = /^corrected:([^:\s]+):([1-9]\d*)$/u;
-const CORRECTED_VIA = new Set(["corrected_chat", "identity_correction", "current_temporary"]);
+const CORRECTED_VIA = new Set([
+  "corrected_chat",
+  "identity_correction",
+  "current_temporary",
+  "temporary_propagation",
+  "temporary_relay",
+  "temporary_edit",
+]);
 
 const sha256 = (value) => crypto.createHash("sha256").update(value, "utf8").digest("hex");
 const unavailable = (reason) => ({ status: "unavailable", reason });
@@ -40,6 +48,16 @@ function digestOf(snapshot) {
       snapshot.direct, snapshot.via, snapshot.expiresAt, snapshot.segments,
     );
   }
+  if (snapshot.temporaryKind) {
+    base.push(
+      snapshot.temporaryKind, snapshot.temporaryIdentityId,
+      snapshot.temporarySourceEntryId, snapshot.temporarySourceVersion,
+      snapshot.temporarySourceStatus, snapshot.sourceAnchorStatus,
+      snapshot.holderAnchorEntryId, snapshot.holderAnchorVersion,
+      snapshot.holderAnchorIdentityId, snapshot.holderAnchorStatus,
+      snapshot.edited, snapshot.relayFrom,
+    );
+  }
   return sha256(JSON.stringify(base));
 }
 
@@ -56,7 +74,17 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
     e.source_version, e.version, e.expires_at, e.origin_character_id,
     e.fact_identity_id, e.derived_from_entry_id,
     EXISTS (SELECT 1 FROM memory_derivations d WHERE d.entry_id = e.id)
-      AS has_derivation
+      AS has_derivation,
+    (SELECT d.narrator_character_id FROM memory_derivations d WHERE d.entry_id = e.id)
+      AS temporary_narrator_id,
+    (SELECT d.parent_entry_id FROM memory_derivations d WHERE d.entry_id = e.id)
+      AS temporary_parent_entry_id,
+    (SELECT d.origin_character_id FROM memory_derivations d WHERE d.entry_id = e.id)
+      AS temporary_derivation_origin,
+    (SELECT d.source_id FROM memory_derivations d WHERE d.entry_id = e.id)
+      AS temporary_derivation_source_id,
+    (SELECT d.source_version FROM memory_derivations d WHERE d.entry_id = e.id)
+      AS temporary_derivation_source_version
   `;
   const statements = {
     isKnownCharacter: db.prepare("SELECT 1 AS found FROM relationships WHERE character_id = ?"),
@@ -82,6 +110,20 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
     `),
     hasSourceControl: db.prepare(`
       SELECT 1 AS found FROM memory_source_controls WHERE character_id = ? AND source_id_hash = ?
+    `),
+    listTemporaryLinks: db.prepare(`
+      SELECT temp_identity_id, long_identity_id, holder_character_id, expires_at
+      FROM memory_temporary_links
+      WHERE temp_identity_id = ?
+      ORDER BY holder_character_id ASC, long_identity_id ASC, expires_at ASC
+    `),
+    /* 显式 share/relay 会留下无正文关系边；身份同步 copy 没有边。用边区分
+       propagation 与 temporary_relay，避免把同一来源格式当成同一种讲述方式。 */
+    getRelationEdgeToEntry: db.prepare(`
+      SELECT from_entry_id, kind FROM memory_fact_relation_edges
+      WHERE to_entry_id = ?
+      ORDER BY kind ASC
+      LIMIT 1
     `),
   };
 
@@ -280,15 +322,25 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       const anchor = statements.getEntry.get(match[1]);
       const embeddedSourceId = match[3];
       const message = statements.getMessage.get(embeddedSourceId.slice("chat:".length));
+      const expectedFactKey = anchor ? `${anchor.fact_key}.current.${anchor.id}` : null;
+      const link = temporaryLinkInfo(entry);
       if (
         !anchor ||
         anchor.character_id !== characterId ||
         !anchor.fact_identity_id ||
         entry.expires_at === null ||
-        entry.fact_key !== `${anchor.fact_key}.current.${anchor.id}` ||
+        !expectedFactKey ||
+        (entry.fact_key !== expectedFactKey &&
+          !entry.fact_key.startsWith(`${expectedFactKey}.`)) ||
         (anchor.expires_at !== null && anchor.expires_at <= nowMs) ||
         !messageBelongsTo(message, characterId, embeddedSourceId)
       ) {
+        return unavailable("source_mismatch");
+      }
+      if (link.reason) {
+        return unavailable(link.reason);
+      }
+      if (link.longIdentityId !== anchor.fact_identity_id) {
         return unavailable("source_mismatch");
       }
       return correctedSnapshot({
@@ -328,6 +380,305 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       entry, characterId, nowMs, anchor, message, embeddedSourceId,
       sourceCharacterId: anchor.character_id, direct: false, via: "identity_correction",
     });
+  }
+
+  /* 临时条目必须与自身 T 的无正文 link 一致：同一长期 identity、同一到期，
+     且当前 holder 恰有一行。缺失/冲突一律保守不可用，不猜第一条，也不拿
+     来源里的锚替代 link 证据。 */
+  function temporaryLinkInfo(entry) {
+    const rows = statements.listTemporaryLinks.all(entry.fact_identity_id);
+    if (rows.length === 0) {
+      return { reason: "link_missing" };
+    }
+    const longIdentityIds = new Set(rows.map((row) => row.long_identity_id));
+    if (longIdentityIds.size !== 1 ||
+      rows.some((row) => row.expires_at !== entry.expires_at)) {
+      return { reason: "link_conflict" };
+    }
+    const holderRows = rows.filter((row) => row.holder_character_id === entry.character_id);
+    if (holderRows.length !== 1) {
+      return { reason: holderRows.length === 0 ? "link_missing" : "link_conflict" };
+    }
+    return { longIdentityId: rows[0].long_identity_id };
+  }
+
+  /* copy/edit 共用的关系核验：显式 share/relay 的关系边只对当前 immediate
+     parent 有效；身份同步必须指向 origin current。derived_from 必须与持久
+     derivation 一致：父行存活时不能缺失，父行删除后应为 NULL。 */
+  function temporaryRelationInfo(entry, sourceCharacterId, characterId, expectedParentId) {
+    if (!entry.has_derivation) {
+      return { reason: "derivation_missing" };
+    }
+    if (entry.temporary_derivation_origin !== sourceCharacterId ||
+      entry.temporary_derivation_source_id !== entry.source_id ||
+      entry.temporary_derivation_source_version !== 1) {
+      return { reason: "derivation_mismatch" };
+    }
+    const parentId = entry.temporary_parent_entry_id;
+    const narrator = entry.temporary_narrator_id;
+    if (!parentId || narrator === null) {
+      return { reason: "derivation_mismatch" };
+    }
+    const parent = statements.getEntry.get(parentId);
+    if (entry.derived_from_entry_id !== (parent ? parentId : null)) {
+      return { reason: "derivation_mismatch" };
+    }
+    const relationEdge = statements.getRelationEdgeToEntry.get(entry.id);
+    if (relationEdge) {
+      if (parentId !== relationEdge.from_entry_id || narrator === characterId) {
+        return { reason: "derivation_mismatch" };
+      }
+      if (parent && (
+        parent.fact_identity_id !== entry.fact_identity_id ||
+        parent.expires_at !== entry.expires_at ||
+        parent.character_id !== narrator
+      )) {
+        return { reason: "derivation_mismatch" };
+      }
+      return { relayed: true, narrator };
+    }
+    if (narrator !== sourceCharacterId || parentId !== expectedParentId) {
+      return { reason: "derivation_mismatch" };
+    }
+    if (parent && (
+      parent.fact_identity_id !== entry.fact_identity_id ||
+      parent.expires_at !== entry.expires_at ||
+      parent.character_id !== sourceCharacterId
+    )) {
+      return { reason: "derivation_mismatch" };
+    }
+    return { relayed: false, narrator };
+  }
+
+  /* 同步副本：来源只嵌入 origin 锚与 holder long，不保存正文副本。
+     derivation、link、origin current、holder long 与消息归属都必须一致；
+     link 缺失或冲突时不得猜第一条，也不能拿临时 T 冒充长期 L。origin
+     current 被删除后，B 仍可按持久 derivation/link 与 origin 消息验证。 */
+  function resolveTemporaryCopy(entry, characterId, nowMs) {
+    if (entry.source_version !== 1) {
+      return unavailable("source_version_mismatch");
+    }
+    const parsed = parseTemporarySource(entry.source_id);
+    if (!parsed || parsed.kind !== "copy") {
+      return unavailable("unsupported_source");
+    }
+    const sourceCharacterId = entry.origin_character_id;
+    const relation = temporaryRelationInfo(
+      entry,
+      sourceCharacterId,
+      characterId,
+      parsed.originCurrentEntryId,
+    );
+    if (relation.reason) {
+      return unavailable(relation.reason);
+    }
+    const relayed = relation.relayed;
+    const narratorCharacterId = relation.narrator;
+    /* 来源控制按 holder 作用域：A 的 self 控制不阻断 B，但 B 自己的副本来源
+       与其嵌入的 origin 消息来源都必须未被 B 排除。 */
+    if (sourceExcluded(characterId, entry.source_id) ||
+      sourceExcluded(characterId, parsed.messageSourceId)) {
+      return unavailable("source_excluded");
+    }
+    const message = statements.getMessage.get(parsed.messageSourceId.slice("chat:".length));
+    if (!messageBelongsTo(message, sourceCharacterId, parsed.messageSourceId)) {
+      return unavailable("source_mismatch");
+    }
+    if (message.content.length > LIMITS.utterance) {
+      return unavailable("source_too_long");
+    }
+    const segments = locateCorrectionSegments(message.content, entry.body);
+    if (!segments || segments.length === 0 || segments.length > LIMITS.segments) {
+      return unavailable("segments_unavailable");
+    }
+
+    const link = temporaryLinkInfo(entry);
+    if (link.reason) {
+      return unavailable(link.reason);
+    }
+    const longIdentityId = link.longIdentityId;
+
+    let holderAnchor = null;
+    if (parsed.holderLongEntryId) {
+      holderAnchor = statements.getEntry.get(parsed.holderLongEntryId);
+      if (!holderAnchor ||
+        holderAnchor.character_id !== characterId ||
+        holderAnchor.version !== parsed.holderLongVersion ||
+        holderAnchor.fact_identity_id !== longIdentityId ||
+        (holderAnchor.expires_at !== null && holderAnchor.expires_at <= nowMs)) {
+        return unavailable("holder_anchor_changed");
+      }
+    }
+
+    const originCurrent = statements.getEntry.get(parsed.originCurrentEntryId);
+    if (originCurrent) {
+      const originParsed = parseTemporarySource(originCurrent.source_id);
+      if (originCurrent.character_id !== sourceCharacterId ||
+        originCurrent.fact_identity_id !== entry.fact_identity_id ||
+        originCurrent.version !== parsed.originCurrentVersion ||
+        originCurrent.body !== entry.body ||
+        originCurrent.trust !== entry.trust ||
+        (originCurrent.expires_at ?? null) !== entry.expires_at ||
+        !originParsed || originParsed.kind !== "direct" ||
+        originParsed.originLongEntryId !== parsed.originLongEntryId ||
+        originParsed.messageSourceId !== parsed.messageSourceId) {
+        return unavailable("temporary_source_changed");
+      }
+    }
+    const originLong = statements.getEntry.get(parsed.originLongEntryId);
+    const { messages, contextIncomplete } = priorMessages({ message, sourceCharacterId });
+    const snapshot = {
+      status: "ok",
+      format: "corrected_v2",
+      speaker: "user",
+      sourceCharacterId,
+      holderCharacterId: characterId,
+      sourceAnchorEntryId: parsed.originLongEntryId,
+      sourceAnchorVersion: parsed.originLongVersion,
+      sourceAnchorIdentityId: longIdentityId,
+      entryId: entry.id,
+      entryVersion: entry.version,
+      sourceId: entry.source_id,
+      sourceVersion: entry.source_version,
+      contextVersion: memory.getContextVersion(characterId),
+      sourceCreatedAt: message.created_at,
+      expiresAt: entry.expires_at,
+      excerpt: entry.body,
+      sourceMessage: messageView(message),
+      messages,
+      contextIncomplete,
+      direct: false,
+      via: relayed ? "temporary_relay" : "temporary_propagation",
+      temporaryKind: "copy",
+      temporaryIdentityId: entry.fact_identity_id,
+      temporarySourceEntryId: parsed.originCurrentEntryId,
+      temporarySourceVersion: originCurrent?.version ?? parsed.originCurrentVersion,
+      temporarySourceStatus: originCurrent ? "live" : "removed",
+      sourceAnchorStatus: originLong ? "live" : "removed",
+      holderAnchorEntryId: holderAnchor?.id ?? null,
+      holderAnchorVersion: holderAnchor?.version ?? 0,
+      holderAnchorIdentityId: holderAnchor?.fact_identity_id ?? null,
+      holderAnchorStatus: holderAnchor ? "live" : "absent",
+      edited: false,
+      relayFrom: relayed ? narratorCharacterId : null,
+      segments: segments.map((segment) => ({ messageId: message.id, ...segment })),
+    };
+    return { ...snapshot, digest: digestOf(snapshot) };
+  }
+
+  /* 面板编辑来源：origin 消息只作溯源，正文不要求与消息片段一致。仍核
+     T/link/holder/expiry、holder long、origin current（存在时）与 derivation
+     的真实 immediate parent/narrator；origin current 删除后按持久证据验证。 */
+  function resolveEdit(entry, characterId, nowMs) {
+    if (entry.source_version !== 1) {
+      return unavailable("source_version_mismatch");
+    }
+    const parsed = parseTemporarySource(entry.source_id);
+    if (!parsed || parsed.kind !== "edit") {
+      return unavailable("unsupported_source");
+    }
+    const sourceCharacterId = entry.origin_character_id;
+    if (sourceExcluded(characterId, entry.source_id) ||
+      sourceExcluded(characterId, parsed.messageSourceId)) {
+      return unavailable("source_excluded");
+    }
+    const message = statements.getMessage.get(parsed.messageSourceId.slice("chat:".length));
+    if (!messageBelongsTo(message, sourceCharacterId, parsed.messageSourceId)) {
+      return unavailable("source_mismatch");
+    }
+    if (message.content.length > LIMITS.utterance) {
+      return unavailable("source_too_long");
+    }
+    const link = temporaryLinkInfo(entry);
+    if (link.reason) {
+      return unavailable(link.reason);
+    }
+    const longIdentityId = link.longIdentityId;
+
+    let holderAnchor = null;
+    if (parsed.holderLongEntryId) {
+      holderAnchor = statements.getEntry.get(parsed.holderLongEntryId);
+      if (!holderAnchor ||
+        holderAnchor.character_id !== characterId ||
+        holderAnchor.version !== parsed.holderLongVersion ||
+        holderAnchor.fact_identity_id !== longIdentityId ||
+        (holderAnchor.expires_at !== null && holderAnchor.expires_at <= nowMs)) {
+        return unavailable("holder_anchor_changed");
+      }
+    }
+
+    const originCurrent = statements.getEntry.get(parsed.originCurrentEntryId);
+    if (originCurrent) {
+      const originParsed = parseTemporarySource(originCurrent.source_id);
+      if (originCurrent.character_id !== sourceCharacterId ||
+        originCurrent.fact_identity_id !== entry.fact_identity_id ||
+        originCurrent.version !== parsed.originCurrentVersion ||
+        originCurrent.body !== entry.body ||
+        originCurrent.trust !== entry.trust ||
+        (originCurrent.expires_at ?? null) !== entry.expires_at ||
+        !originParsed ||
+        (originParsed.kind !== "direct" && originParsed.kind !== "edit") ||
+        originParsed.originLongEntryId !== parsed.originLongEntryId ||
+        originParsed.messageSourceId !== parsed.messageSourceId) {
+        return unavailable("temporary_source_changed");
+      }
+    }
+
+    const isOrigin = entry.character_id === sourceCharacterId &&
+      entry.id === parsed.originCurrentEntryId;
+    let relayedNarrator = null;
+    if (!isOrigin) {
+      const relation = temporaryRelationInfo(
+        entry,
+        sourceCharacterId,
+        characterId,
+        parsed.originCurrentEntryId,
+      );
+      if (relation.reason) {
+        return unavailable(relation.reason);
+      }
+      relayedNarrator = relation.relayed ? relation.narrator : null;
+    }
+
+    const originLong = statements.getEntry.get(parsed.originLongEntryId);
+    const { messages, contextIncomplete } = priorMessages({ message, sourceCharacterId });
+    const snapshot = {
+      status: "ok",
+      format: "corrected_v2",
+      speaker: "user",
+      sourceCharacterId,
+      holderCharacterId: characterId,
+      sourceAnchorEntryId: parsed.originLongEntryId,
+      sourceAnchorVersion: parsed.originLongVersion,
+      sourceAnchorIdentityId: longIdentityId,
+      entryId: entry.id,
+      entryVersion: entry.version,
+      sourceId: entry.source_id,
+      sourceVersion: entry.source_version,
+      contextVersion: memory.getContextVersion(characterId),
+      sourceCreatedAt: message.created_at,
+      expiresAt: entry.expires_at,
+      excerpt: entry.body,
+      sourceMessage: messageView(message),
+      messages,
+      contextIncomplete,
+      direct: false,
+      via: "temporary_edit",
+      temporaryKind: "edit",
+      temporaryIdentityId: entry.fact_identity_id,
+      temporarySourceEntryId: parsed.originCurrentEntryId,
+      temporarySourceVersion: originCurrent?.version ?? parsed.originCurrentVersion,
+      temporarySourceStatus: originCurrent ? "live" : "removed",
+      sourceAnchorStatus: originLong ? "live" : "removed",
+      holderAnchorEntryId: holderAnchor?.id ?? null,
+      holderAnchorVersion: holderAnchor?.version ?? 0,
+      holderAnchorIdentityId: holderAnchor?.fact_identity_id ?? null,
+      holderAnchorStatus: holderAnchor ? "live" : "absent",
+      edited: true,
+      relayFrom: relayedNarrator,
+      segments: [],
+    };
+    return { ...snapshot, digest: digestOf(snapshot) };
   }
 
   function resolveDirect(entry, characterId, nowMs) {
@@ -414,6 +765,12 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
     if ((entry.source_kind ?? "user") !== "user") {
       return unavailable("unsupported_source");
     }
+    if (entry.source_id.startsWith("temporary-edit:")) {
+      return resolveEdit(entry, characterId, nowMs);
+    }
+    if (entry.source_id.startsWith("chat-current-copy:")) {
+      return resolveTemporaryCopy(entry, characterId, nowMs);
+    }
     const corrected = entry.source_id.startsWith("chat-correct:") ||
       entry.source_id.startsWith("corrected:") ||
       entry.source_id.startsWith("chat-current:");
@@ -464,7 +821,21 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
         current.sourceCreatedAt === snapshot.sourceCreatedAt &&
         current.sourceMessage.id === snapshot.sourceMessage?.id &&
         JSON.stringify(current.segments) === JSON.stringify(snapshot.segments) &&
-        current.digest === snapshot.digest
+        current.digest === snapshot.digest &&
+        (!snapshot.temporaryKind || (
+          current.temporaryKind === snapshot.temporaryKind &&
+          current.temporaryIdentityId === snapshot.temporaryIdentityId &&
+          current.temporarySourceEntryId === snapshot.temporarySourceEntryId &&
+          current.temporarySourceVersion === snapshot.temporarySourceVersion &&
+          current.temporarySourceStatus === snapshot.temporarySourceStatus &&
+          current.sourceAnchorStatus === snapshot.sourceAnchorStatus &&
+          current.holderAnchorEntryId === snapshot.holderAnchorEntryId &&
+          current.holderAnchorVersion === snapshot.holderAnchorVersion &&
+          current.holderAnchorIdentityId === snapshot.holderAnchorIdentityId &&
+          current.holderAnchorStatus === snapshot.holderAnchorStatus &&
+          current.edited === snapshot.edited &&
+          current.relayFrom === snapshot.relayFrom
+        ))
       );
     }
     return (

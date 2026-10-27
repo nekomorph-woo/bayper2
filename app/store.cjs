@@ -97,6 +97,9 @@ function createStore(dataDir, options = {}) {
   // 先由 chat-store 建好聊天表，来源上下文才能安全 prepare；再组装聊天服务。
   const chatStore = createChatStore(db);
   const memorySourceContext = createMemorySourceContext({ db, memory, now });
+  /* 临时正文进入检索/上下文前必须经过同一权威来源核验；缺失时保守剔除。
+     校验器只读，不改变记忆或上下文版本。 */
+  memory.setTemporaryValidator((input) => memorySourceContext.resolve(input));
   const chat = createChatService({
     db,
     memory,

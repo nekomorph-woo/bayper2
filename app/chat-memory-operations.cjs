@@ -64,6 +64,8 @@ const REPLIES = Object.freeze({
   relayMultipleRecipients:
     "这句话里提到了不止一位角色或不止一个转告对象；我这次没有转告，请指定唯一一位。",
   relayNotProcessed: "我这次没有转告任何内容。",
+  temporaryAmbiguous:
+    "这件事今天有多条还没法确定关联的记录，我这次先不改动；你能说要更新哪一条吗？",
 });
 
 const FORGET_PATTERNS = Object.freeze([
@@ -782,12 +784,10 @@ function planOperation({
     if (info.temporal === "vague") {
       return { kind: "respond", reply: REPLIES.temporalClarification };
     }
-    const mode =
-      info.temporal === "today" && target.entry.expiresAt === null
-        ? "temporary"
-        : "replace";
+    const mode = info.temporal === "today" ? "temporary" : "replace";
     if (
       mode === "temporary" &&
+      target.entry.expiresAt === null &&
       `${target.entry.factKey}.current.${target.entry.id}`.length > MAX_FACT_KEY
     ) {
       return { kind: "respond", reply: REPLIES.notProcessed };
@@ -830,48 +830,22 @@ function endOfLocalDay(nowMs) {
   return date.getTime();
 }
 
-/* 长期事实不覆盖；今天的当前理解写入独立的 .current 事实并在当天结束失效。
-   若已有同一条临时理解，复用其 factKey 并以 factKey 路径更新。 */
+/* 今天的当前理解由 memory 领域入口统一写入：长期不动，发起人 direct current，
+   已证明同一长期事实的持有者同步 copy；多条无法唯一证明时零写入抛错，
+   由聊天层转成最小澄清。 */
 function applyTemporaryCorrection({ memory, characterId, entry, operation, nowMs, userSourceId }) {
-  const factKey = `${entry.factKey}.current.${entry.id}`;
   const expiresAt = endOfLocalDay(nowMs);
-  const sourceId = `chat-current:${entry.id}:${nowMs}:${userSourceId}`;
-  let result;
-  try {
-    result = memory.correct({
-      characterId,
-      factKey,
-      body: operation.body,
-      trust: operation.trust,
-      expiresAt,
-      sourceId,
-      nowMs,
-      inTransaction: true,
-    });
-  } catch (error) {
-    if (error?.code !== "FACT_NOT_HELD") {
-      throw error;
-    }
-    result = memory.remember({
-      characterId,
-      factKey,
-      body: operation.body,
-      kind: entry.kind,
-      trust: operation.trust,
-      importance: entry.importance,
-      expiresAt,
-      sourceId,
-      createdAt: nowMs,
-      // 当前聊天分句是用户新的明确陈述；允许重新建立被忘记的临时理解。
-      explicitConsent: true,
-      inTransaction: true,
-    });
-    if (!result.created) {
-      const error = new Error("临时理解未能写入。");
-      error.code = "TEMP_NOT_WRITTEN";
-      throw error;
-    }
-  }
+  const result = memory.applyTemporaryUnderstanding({
+    characterId,
+    entryId: entry.id,
+    expectedVersion: entry.version,
+    body: operation.body,
+    trust: operation.trust,
+    expiresAt,
+    sourceId: userSourceId,
+    inTransaction: true,
+    nowMs,
+  });
   return { ...result, mode: "temporary", expiresAt, longTermFactKey: entry.factKey };
 }
 

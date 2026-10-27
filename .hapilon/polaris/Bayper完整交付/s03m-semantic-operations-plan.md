@@ -1,6 +1,6 @@
 # S03m 显式纠正/忘记的语义核验最小纵向切片（v1）
 
-2026-10-27，master 受托确认 POL-SEMOP-001～008 v1 及 Part A/B（不是用户亲自确认）。两阶段：阶段 1 本地已完成；阶段 2 系统核验独立候选，合格关联/操作在第二事务原子。阶段 2 失败不回滚阶段 1；只更新同一条 assistant 消息，不追加第二条。自动整理/定向共享/完整召回仍后续承接。本文件已并入 r3 审查的三处接口修正：关联后事务内版本重读、correct temporary 路径（最终以 §12 r3 为准）、corrected_v2 来源归属与 isCurrent。首批已按 §8 收口：master 19 套件 185/185 受托接受来源追溯与协议的已测有限能力；2a 长期 correct 两阶段的确定性业务流程亦已由 master 独立 28/28、0 skipped、exit 0 与 GUI 14/14 受托接受为**已测有限能力**。008 聚合仍 NOT_COVERED（部分已验）；2b 已提交为 `27ad18d`/`0.1.191`，下一批 2c-1 待实施。
+2026-10-27，master 受托确认 POL-SEMOP-001～008 v1 及 Part A/B（不是用户亲自确认）。两阶段：阶段 1 本地已完成；阶段 2 系统核验独立候选，合格关联/操作在第二事务原子。阶段 2 失败不回滚阶段 1；只更新同一条 assistant 消息，不追加第二条。自动整理/定向共享/完整召回仍后续承接。本文件已并入 r3 审查的三处接口修正：关联后事务内版本重读、correct temporary 路径（最终以 §12 r3 为准）、corrected_v2 来源归属与 isCurrent。首批已按 §8 收口：master 19 套件 185/185 受托接受来源追溯与协议的已测有限能力；2a 长期 correct 两阶段的确定性业务流程亦已由 master 独立 28/28、0 skipped、exit 0 与 GUI 14/14 受托接受为**已测有限能力**。008 聚合仍 NOT_COVERED（部分已验）；2b 已提交为 `27ad18d`/`0.1.191`；2c-1 后续已实施并由 master 独立 20 套件 295/295 受托接受为已测领域/真实 chat 构造 HTTP 有限范围，2c-2 未实施。
 
 ## 1. 实际契约与调查事实（实施前时点，非现状）
 
@@ -363,9 +363,9 @@ HEAD `88ff9c7`（VERSION `0.1.189`，已由 master snap）。master 已受托审
 - 下一批 temporary：以 §12 r3 为准（随机 T/copy/relay/edit 来源、self/all/restrict/exclusive、阶段 2 contextVersion/原子回滚）；继续不增加 GUI/main/preload 范围，除非 master 另行派发。
 - 本批仅文档与版本收口：VERSION `0.1.190` -> `0.1.191`（同一 10 文件 11 处字面量，无依赖变化），不改源码/测试，不重跑测试/API/GUI，不 Git/子代理。初版中止、夹具错误、FAIL 与部分通过记录保留，不覆盖。
 
-## 12. 2c temporary 实施基线 r4（2026-10-27 master 受托批准 2c-1/2c-2 方向；未实现）
+## 12. 2c temporary 实施基线与收口（2026-10-27）
 
-master 2026-10-27 受托批准本方向，**不是用户亲自确认**。C2 旧 Expected 更新的业务理由：用户明确说“今天…”时，今日 current 与长期偏好含义不同；长期记录保留为长期，但不得在聊天上下文冒充今日状态，因此有效 current 优先、旧长期不并列注入。POL-SEMOP-001～008 聚合仍 **NOT_COVERED**；2c-1/2c-2 尚未实施、未运行测试/API/GUI，不填 PASS。r2 退回原因：固定“日期+长期 identity”的 T 无法满足全删后同日新陈述与第二持有人发起；sourceAnchor=A 长期使 B 依赖 A 存活；拒绝 temporary share/relay 与通用编辑不符合 PRD。r4 按最终 diff 审查补入最小无正文同锚防回流控制，删除“正文不同即新事实/换 T 绕过”边界；以下为已批准方向的最小设计，具体代码与实施结果待新派发。
+master 2026-10-27 受托批准本方向，**不是用户亲自确认**。C2 旧 Expected 更新的业务理由：用户明确说“今天…”时，今日 current 与长期偏好含义不同；长期记录保留为长期，但不得在聊天上下文冒充今日状态，因此有效 current 优先、旧长期不并列注入。r4 时点 2c-1/2c-2 均未实施；后续 2c-1a/1b 与 r2 返修已由 Claude Code 实施，master 独立复跑 20 套件 **295 tests / 295 pass / 0 fail / 0 skipped、exit 0**、before/after 摘要一致且当前 after 清单复验一致（`evidence/master-temporary-final-gmf6gukR/`），据此受托接受 **2c-1 已测领域与真实 chat/构造 HTTP 范围**。该接受不是用户亲自确认、不是真实模型语义、不是真实 GUI/UI IPC，也不接受 S03 或完整 Goal；POL-SEMOP-001～008 聚合仍 **NOT_COVERED**，2c-2 未实施。r2 退回原因（历史）：固定“日期+长期 identity”的 T 无法满足全删后同日新陈述与第二持有人发起；sourceAnchor=A 长期使 B 依赖 A 存活；拒绝 temporary share/relay 与通用编辑不符合 PRD。r4 已按最终 diff 审查补入最小无正文同锚防回流控制，删除“正文不同即新事实/换 T 绕过”边界；以下保留已批准的最小设计，实施细节以 §12.4～§12.8 为准。
 
 ### 12.1 Part A：最小设计
 
@@ -450,3 +450,39 @@ master 2026-10-27 受托批准本方向，**不是用户亲自确认**。C2 旧 
 - 长期操作仍按 2b；temporary 的 restrict/exclusive 不扩大到长期 identity，也不声称 T 过期后长期受限。
 - `memory_temporary_links` 只用于查旧 forget/share/exclusive，不存正文、不抑制长期、不建 overlay；同一有效时段且明确同 `long_identity_id` 的新 T 不得通过换 source/措辞解除旧控制，旧源始终阻断。过期后跨日新事实与旧临时状态分开，旧临时禁令不升级为长期禁令。
 - 同锚关系无法证明的独立语义不虚称防回流已解决，保留真实模型与召回门禁；本批只落实可证明的同锚控制。
+
+### 12.4 2c-1a/2c-1b 分步执行依据（2026-10-27 r33，master 授权）
+
+- master 要求 2c-1 不再单批实现：本轮只做 **2c-1a**（随机 T/link、阶段 1 同长期 identity 同步、copy 来源可解析、`buildContext` 今日优先、self/all/restrict/exclusive 与同锚无正文控制），覆盖 S1-S6、S9-S12；**S7 显式转告与 S8 面板编辑专属来源留 2c-1b**，本轮不实现、不宣称通过。
+- `searchMemories` 与 `buildContext` 职责区分：search 是管理定位入口，合法长期偏好仍可被检索/编辑；只有 `buildContext` 在有效今日 current 存在时抑制同一长期 identity 的长期锚。到期/失效后不设墓碑，长期恢复。
+- S11 拆成 forget-only、restrict-only、exclusive-only 三组同锚重建；同义改写使用等价语句，另测不同今日选项复用同一有效时段 T。S12 冲突存量改为两个来源、holder、正文、到期均合法且明确同锚的 current；A 的 link 行只代表 self 删除后保留的无正文控制，不使用伪造 direct 来源。
+- 实现复用既有 forget/restrict/keepExclusive 对 T 的控制流程；新增 `app/memory-temporary.cjs` 领域模块与纯来源 helper，source-context 保留 copy 来源核验。2c-1b/2c-2、真实模型、GUI/live 仍未完成。
+
+### 12.5 2c-1a 返修：唯一权威来源校验（2026-10-27 r34，master 退回后）
+
+- master 退回原因：`memory-temporary` 的 `temporaryInfo` 只查来源自身控制与部分 holder anchor，未验证 origin current 版本/正文、消息 segments、holder 消息控制与完整 derivation；`buildContext` 因此仍可能把 resolve 已 unavailable 的临时正文送入聊天并抑制合法长期。copy resolve 也只看任意 derivation/derived_from，link 用 LIMIT 1 且可能以临时 T 冒充长期 L。
+- 修正方向：`memorySourceContext.resolve` 成为唯一权威临时来源校验。store 组装后通过 `memory.setTemporaryValidator` 注入；`searchMemories`、`buildContext` 与聊天操作候选共用同一规则。校验器缺失时临时项保守剔除，不放行。search 保留合法长期；hybrid 回退按“过滤后结果”判断，避免失效 strict 命中阻止 expanded/broad。
+- copy 来源严格核对：derivation parent/narrator/origin/source 与 entry 一致；link 必须存在且 T 下 long identity/expiry 唯一一致、holder link 唯一；origin current 存在时必须是同 origin 的 direct、相同消息、版本/正文/trust/到期一致；origin current 不存在时按持久 derivation/link 与真实消息验证（A self 删除不误伤 B）；holder anchor 必须匹配 link 的长期 identity。来源控制按 holder 作用域，B 嵌入消息控制生效，A 的 self 控制不阻断 B。
+- 新增 S13 业务测试：真实 chat 建 A/B current 后分别篡改消息内容/role/来源归属、origin current 版本/正文、B 嵌入消息来源控制、derivation parent 删除/替换、link 冲突；每组核对 resolve unavailable、search 不含失效临时、真实 B 聊天上下文不含旧今日正文且长期恢复、resolve 前后状态不变；直接临时来源同样覆盖消息变化，并保留 A self 删除/A 长期删除后 B 仍有效的正对照。S7/S8 仍留 2c-1b，不修改其 Expected。
+
+### 12.6 2c-1b 返修：来源归属与关系边生命周期（2026-10-27 r36，master 退回后）
+
+- 真实缺口：`applyUnderstanding` 只改内存对象，`store.updateEntry` 不写 `origin_character_id`/`derived_from_entry_id`。B 从 copy 成为第二发起者后数据库仍把 origin 记为 A；A 从 direct 转为 copy 后同样失配，resolve/search/context/真实聊天会把合法新状态判失效。
+- 最小写入口：仅临时 direct/copy 转换使用 `memory-store` 窄语句，在同一事务更新 `origin_character_id`/`derived_from_entry_id`，不泛改 `updateEntry` 的旧行为。initiator 转 direct 时 `derived_from` 置 NULL；其他 holder 同步 copy 时指向新的 origin current。
+- 关系边生命周期：身份同步替换 immediate parent 时，删除指向该临时条目的旧 share/relay 边，避免旧边与新 derivation 矛盾；显式 relay/share 新建的边保持真实 immediate parent。resolve 只把与当前 parent 一致的边当作 relay，其余矛盾边 unavailable；父条目删除后持久 derivation 仍是证据。
+- 编辑来源：copy/edit 共用关系核验；非 origin 必须父条目非空，父 ID 等于 origin current（同步）或关系边来源（显式 relay）；`derived_from` 在父行存活时必须等于 parent，父行删除后必须为 NULL。真实父删除（持久 derivation 仍在）后仍有效。
+- 验证：S14 覆盖 B 第二发起、A/C 持久来源、resolve/search/context/真实 A/B 聊天、C 已有 relay 边以及 A 再发起回改；S15 覆盖 parent/derived/edge 变异 unavailable、search/context 恢复长期与真实父删除正对照；S16 覆盖编辑后再次改口、A self 删除 current 后 B 连续编辑与转告。无 origin 时两次编辑来源相同且未被旧 source control 阻断（实测），因此不增加额外放行分支。
+
+### 12.7 2c-1 收口（2026-10-27 r37，master 独立复验后）
+
+- 实现由 Claude Code CLI 完成（2c-1a、2c-1b、r2 返修）；独立复验与接受决定由 Codex master 完成。master 对当前工作区实际复跑 20 个相关套件：**295/295 pass、0 fail、0 skipped、exit 0**，前后摘要一致，`shasum -c` 当前 after 清单一致，证据 `evidence/master-temporary-final-gmf6gukR/`。
+- 受托接受的是 **2c-1 已测领域与真实 chat/构造 HTTP 范围**：S1～S6、S7/S7b/S8、S9～S16 的本地存储/chat/memory/source-context 行为，以及合法多 T 澄清、self 删除、同锚防回流、来源归属和编辑关系核验。不是用户亲自确认、不是真实模型语义、不是真实 GUI/UI IPC 或 live，也不接受 S03 或完整 Goal。
+- `POL-SEMOP-001～008` 聚合仍 **NOT_COVERED**；2c-2、真实模型 L1/L2、GUI/UI IPC/live、跨角色独立同义及其它产品缺口保留。旧 285/295 开发记录与原始 attempt 保留为历史时点。
+- 本批只做文档与版本元数据；VERSION `0.1.192` → `0.1.193`（10 文件 11 处字面量），不 commit，待 master snap。此轮是实现/验收缺陷经返修闭环，现行 skill 已支持发现与返修，无新 skill 缺陷。
+
+### 12.8 2c-2 待审技术矛盾（只登记，不解决）
+
+- 现有 `temporaryLinkInfo` 及 T 的 link/控制/lookup 路径假定一个临时身份 T 只对应一个 `long_identity_id`；2c-1 的 holder 同步也以“同一长期 identity”为前提。
+- D1/D2 明确独立同义候选不能在核验前合并长期 identity L。进入 2c-2 后，一个 T 可能在阶段 2 关联多个已核实的独立 L，同一 holder 也可能存在多个锚条目；这与当前“T → 单一 L”的校验/控制查找粒度冲突。
+- 2c-2 实施前必须先设计清楚 holder+long 粒度、权威来源、对账、控制与临时抑制关联；不得用“合并长期 identity”或“跳过已触碰 holder”绕过。
+- 本节仅登记待审事实，不把该矛盾写成 2c-1/1b 的产品失败，也不新增业务限制或预设方案。

@@ -22,6 +22,7 @@ const {
   shouldBroadenQuery,
   tokenizeForIndex,
 } = require("./memory-retrieval.cjs");
+const { createMemoryTemporary } = require("./memory-temporary.cjs");
 
 const LIMITS = Object.freeze({
   characterId: 200,
@@ -253,6 +254,30 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     store.setEntryIdentity(entry.id, identityId);
     entry.factIdentityId = identityId;
     return identityId;
+  }
+
+  /* 临时理解领域模块只拿显式依赖：既有身份/哈希/索引/事务仍由本服务提供，
+     不复制 forget/restrict/exclusive 的控制流程。来源有效性由 store 组装后
+     注入的权威校验器（memorySourceContext.resolve）统一判定。 */
+  let temporaryValidator = null;
+  const temporary = createMemoryTemporary({
+    store,
+    newId: newEntryId,
+    hashSource: sourceIdHash,
+    identityOf: identityOfEntry,
+    fingerprintOf: strictFactFingerprint,
+    validateTemporary: (input) =>
+      temporaryValidator ? temporaryValidator(input) : null,
+    tokenize: tokenizeForIndex,
+    MemoryError,
+    limits: LIMITS,
+  });
+
+  function setTemporaryValidator(validator) {
+    if (typeof validator !== "function") {
+      throw new MemoryError("INVALID_INPUT", "临时来源校验器必须是函数。");
+    }
+    temporaryValidator = validator;
   }
 
   /* 与当前正文指纹相关的全部身份。歧义指纹不挑首项，控制检查覆盖整组，
@@ -504,6 +529,11 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     return input.inTransaction === true ? applyRemember() : store.transaction(applyRemember);
   }
 
+  /* 聊天“今天…”的阶段 1 入口；长期条目不动，T/控制/同步由领域模块负责。 */
+  function applyTemporaryUnderstanding(input = {}) {
+    return temporary.applyUnderstanding(input);
+  }
+
   /* S03b 的提炼入口基础：一次明确提交同一个来源的多个事实。
      本切片不调用模型；S03b 必须把已验证的提炼结果组装成 facts 后调用这里。
      同一 sourceVersion 重复应用是幂等的；新 sourceVersion 视为新提炼，
@@ -694,19 +724,24 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       throw new MemoryError("INVALID_INPUT", "查询超过长度上限。");
     }
 
+    const validHits = (strategyName) => temporary.filterSearch(
+      executeSearch(characterId, input.query, strategyName, nowMs, limit, strategy),
+      nowMs,
+    );
     if (strategy === "hybrid") {
-      // 先保留严格分词基线；无结果时尝试有限概念扩展，最后才对自然提问宽召回。
-      const strict = executeSearch(characterId, input.query, "segment", nowMs, limit, strategy);
+      // 只有“过滤失效临时项后仍有结果”才算命中；否则继续既有 expanded/broad 回退。
+      const strict = validHits("segment");
       if (strict.length > 0) {
-        return strict;
+        return strict.slice(0, limit);
       }
-      const expanded = executeSearch(characterId, input.query, "expanded", nowMs, limit, strategy);
+      const expanded = validHits("expanded");
       if (expanded.length > 0 || !shouldBroadenQuery(input.query)) {
-        return expanded;
+        return expanded.slice(0, limit);
       }
-      return executeSearch(characterId, input.query, "broad", nowMs, limit, strategy);
+      return validHits("broad").slice(0, limit);
     }
-    return executeSearch(characterId, input.query, strategy, nowMs, limit, strategy);
+    // 管理定位仍允许长期条目；只剔除权威来源核验失败的临时项。
+    return validHits(strategy).slice(0, limit);
   }
 
   /* 只按显式 factKey 或稳定条目定位纠正；调用方没有事实键时不会凭相似度猜测。
@@ -730,6 +765,18 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       const { entry: held } = factForSelectedChange(input, characterId);
       if (!held) {
         throw new MemoryError("FACT_NOT_HELD", "当前角色没有该事实，不能发起纠正。");
+      }
+      /* 面板保存临时理解时走窄路径：同步同一 T 的全部成员，保留 T/到期/
+         长期锚，来源标记为 temporary-edit；不把面板编辑写成聊天原话。 */
+      if (temporary.isTemporaryEntry(held)) {
+        return temporary.editUnderstanding({
+          characterId,
+          entryId: held.id,
+          expectedVersion: held.version,
+          body,
+          nowMs,
+          inTransaction: true,
+        });
       }
       const identityId = identityOfEntry(held, nowMs);
       const entries = store.listEntriesByIdentity(identityId);
@@ -1005,6 +1052,51 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     return { enabled: input.enabled };
   }
 
+  /* 分享/转告共用条目构造：长期副本保持既有来源；临时理解复用 T、到期与
+     真实 origin，并写 derivation/link，收件人只有明确同锚长期时才挂 holder
+     long。父条目删除后，临时副本仍可凭 derivation 与 origin 消息验证。 */
+  function insertPropagatedEntry({
+    original, toCharacterId, fromCharacterId, identityId, relation, nowMs, shareSourceId = null,
+  }) {
+    const temporaryCopy = temporary.propagationSource({
+      entry: original,
+      holderCharacterId: toCharacterId,
+      nowMs,
+    });
+    const entry = {
+      id: newEntryId(),
+      characterId: toCharacterId,
+      factKey: original.factKey,
+      factIdentityId: identityId,
+      originCharacterId: original.originCharacterId,
+      derivedFromEntryId: original.id,
+      narratorCharacterId: fromCharacterId,
+      kind: original.kind,
+      body: original.body,
+      trust: original.trust,
+      sourceKind: original.sourceKind,
+      importance: original.importance,
+      expiresAt: temporaryCopy?.expiresAt ?? original.expiresAt,
+      sourceId: temporaryCopy?.sourceId ?? shareSourceId ?? `${relation}:${original.id}:${toCharacterId}`,
+      sourceVersion: 1,
+      version: 1,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    };
+    store.insertEntry(entry, tokenizeForIndex(entry.body));
+    if (temporaryCopy) {
+      store.setDerivation(entry);
+      store.insertTemporaryLink({
+        tempIdentityId: temporaryCopy.temporaryIdentityId,
+        longIdentityId: temporaryCopy.longIdentityId,
+        holderCharacterId: toCharacterId,
+        expiresAt: temporaryCopy.expiresAt,
+      });
+    }
+    store.insertRelationEdge(original.id, entry.id, relation, nowMs);
+    return entry;
+  }
+
   /* 指定分享只复制明确列出的条目，保留原讲述者与派生链；
      B 再转发 A 的派生内容会被 origin/derived 检查拒绝。用户明确转告属于 S03b
      的独立业务入口，不与这里的自动/派生分享权限混用。
@@ -1079,28 +1171,15 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
           shared.push({ sourceEntryId: original.id, entryId: held.entry.id, alreadyHeld: true });
           continue;
         }
-        const entry = {
-          id: newEntryId(),
-          characterId: toCharacterId,
-          factKey: original.factKey,
-          factIdentityId: identityId,
-          originCharacterId: original.originCharacterId,
-          derivedFromEntryId: original.id,
-          narratorCharacterId: fromCharacterId,
-          kind: original.kind,
-          body: original.body,
-          trust: original.trust,
-          sourceKind: original.sourceKind,
-          importance: original.importance,
-          expiresAt: original.expiresAt,
-          sourceId: sourceId ?? `share:${original.id}:${toCharacterId}`,
-          sourceVersion: 1,
-          version: 1,
-          createdAt: nowMs,
-          updatedAt: nowMs,
-        };
-        store.insertEntry(entry, tokenizeForIndex(entry.body));
-        store.insertRelationEdge(original.id, entry.id, "share", nowMs);
+        const entry = insertPropagatedEntry({
+          original,
+          toCharacterId,
+          fromCharacterId,
+          identityId,
+          relation: "share",
+          nowMs,
+          shareSourceId: sourceId,
+        });
         shared.push({ sourceEntryId: original.id, entryId: entry.id, alreadyHeld: false });
         created += 1;
       }
@@ -1202,28 +1281,14 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
           shared.push({ sourceEntryId: original.id, entryId: held.entry.id, alreadyHeld: true });
           continue;
         }
-        const entry = {
-          id: newEntryId(),
-          characterId: toCharacterId,
-          factKey: original.factKey,
-          factIdentityId: identityId,
-          originCharacterId: original.originCharacterId,
-          derivedFromEntryId: original.id,
-          narratorCharacterId: fromCharacterId,
-          kind: original.kind,
-          body: original.body,
-          trust: original.trust,
-          sourceKind: original.sourceKind,
-          importance: original.importance,
-          expiresAt: original.expiresAt,
-          sourceId: `relay:${original.id}:${toCharacterId}`,
-          sourceVersion: 1,
-          version: 1,
-          createdAt: nowMs,
-          updatedAt: nowMs,
-        };
-        store.insertEntry(entry, tokenizeForIndex(entry.body));
-        store.insertRelationEdge(original.id, entry.id, "relay", nowMs);
+        const entry = insertPropagatedEntry({
+          original,
+          toCharacterId,
+          fromCharacterId,
+          identityId,
+          relation: "relay",
+          nowMs,
+        });
         shared.push({ sourceEntryId: original.id, entryId: entry.id, alreadyHeld: false });
         created += 1;
       }
@@ -1567,7 +1632,10 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     const nowMs = resolveNow(input.nowMs);
     const maxChars = limitOf(input.maxChars, LIMITS.contextMaxChars, LIMITS.contextMaxChars);
     const contextVersion = store.getContextVersion(characterId);
-    const active = store.listActiveEntries(characterId, nowMs, LIMITS.contextEntries);
+    const active = temporary.annotateContext(
+      store.listActiveEntries(characterId, nowMs, LIMITS.contextEntries),
+      nowMs,
+    );
 
     const core = active.filter((entry) => entry.kind === "identity").slice(0, LIMITS.contextCore);
     const preferences = active
@@ -1576,12 +1644,15 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
 
     let experiences;
     if (typeof input.query === "string" && input.query.trim() !== "") {
-      experiences = searchMemories({
-        characterId,
+      experiences = temporary.annotateContext(
+        searchMemories({
+          characterId,
+          nowMs,
+          query: input.query,
+          limit: Math.min(LIMITS.contextQueryResults, RETRIEVAL_CONFIG.maxLimit),
+        }),
         nowMs,
-        query: input.query,
-        limit: Math.min(LIMITS.contextQueryResults, RETRIEVAL_CONFIG.maxLimit),
-      })
+      )
         .filter((entry) => entry.kind === "experience")
         .slice(0, LIMITS.contextExperiences);
     } else {
@@ -1657,6 +1728,8 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
   return {
     remember,
     applyExtractionBatch,
+    applyTemporaryUnderstanding,
+    setTemporaryValidator,
     listMemories,
     listMemoriesPage,
     searchMemories,

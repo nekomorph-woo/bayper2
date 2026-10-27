@@ -236,6 +236,29 @@ function entryOfAt(store, characterId, factKey, nowMs) {
   );
 }
 
+/* 只按来源形状取今日临时理解，不依赖实现内部的 T 或 factKey 猜测。 */
+function temporaryEntryOf(store, characterId) {
+  return (
+    store.memory
+      .listMemories(characterId)
+      .find((entry) => /^(chat-current:|chat-current-copy:|temporary-edit:)/u.test(entry.sourceId)) ??
+    null
+  );
+}
+
+function lastSystemContext(server) {
+  return server.requests.at(-1).messages
+    .filter((message) => message.role === "system")[1].content;
+}
+
+function temporaryRow(store, entryId) {
+  return withDatabase(store.dbPath, (db) =>
+    db.prepare(
+      "SELECT id, fact_identity_id, body, source_id, version, expires_at FROM memory_entries WHERE id = ?",
+    ).get(entryId),
+  );
+}
+
 function endOfLocalDay(nowMs) {
   const date = new Date(nowMs);
   date.setHours(23, 59, 59, 999);
@@ -668,6 +691,7 @@ test("POL-CHATMEM-001 今天临时情况保留长期事实并按当天结束失�
   assert.match(temporary.sourceId, /^chat-current:/u);
   assert.equal(entryOf(store, "a", "exp.qingdao").body, "用户曾在青岛吃蛤蜊");
   const coffeeHits = store.memory.searchMemories({ characterId: "a", query: "咖啡", nowMs: START });
+  // C2 只改变上下文/当前状态：searchMemories 仍是管理定位入口，合法长期偏好可被找到和编辑。
   assert.ok(coffeeHits.some((entry) => entry.factKey === "pref.coffee"));
   assert.ok(coffeeHits.some((entry) => entry.factKey === tempKey));
   assert.equal(store.memory.searchMemories({ characterId: "a", query: "喝茶", nowMs: START }).length, 1);
@@ -685,7 +709,8 @@ test("POL-CHATMEM-001 今天临时情况保留长期事实并按当天结束失�
   const liveContext = server.requests.at(-1).messages.filter(
     (message) => message.role === "system",
   )[1].content;
-  assert.ok(liveContext.includes("用户喜欢咖啡"));
+  // C2：今天有效时只注入今天理解，长期偏好仍保留在库中但不在本轮冒充今日状态。
+  assert.equal(liveContext.includes("用户喜欢咖啡"), false);
   assert.ok(liveContext.includes("我今天想喝茶"));
   assert.ok(liveContext.includes("时效:有效至"));
 
@@ -718,6 +743,196 @@ test("POL-CHATMEM-001 今天临时情况保留长期事实并按当天结束失�
   assert.equal(expiredContext.includes("我今天想喝茶"), false);
   assert.equal(expiredContext.includes("时效:有效至"), false);
   assert.equal(entryOf(store, "a", "exp.qingdao").body, "用户曾在青岛吃蛤蜊");
+});
+
+test("POL-SEMOP-001d/S5 同日改口复用同一临时身份，原地更新已同步副本", async (t) => {
+  const ctx = await setupContext(t, "S5-same-day-rewrite");
+  const { store, server } = ctx;
+  store.memory.remember({
+    characterId: "a",
+    factKey: "pref.coffee",
+    body: "用户喜欢咖啡",
+    kind: "preference",
+    sourceId: "seed-a-coffee",
+  });
+  const aLong = entryOf(store, "a", "pref.coffee");
+  store.memory.relay({
+    fromCharacterId: "a",
+    toCharacterId: "b",
+    entries: [{ entryId: aLong.id, expectedVersion: aLong.version }],
+  });
+  const conversation = openConversation(store);
+
+  server.enqueue(({ body, res }) =>
+    sendEnvelope(res, {
+      reply: "好的。",
+      memoryCandidates: [],
+      memoryOperation: {
+        action: "correct",
+        target: targetFromRequest(body, "用户喜欢咖啡"),
+        excerpt: "我今天想喝茶",
+        evidence: "请帮我改过来",
+      },
+    }),
+  );
+  const first = await store.chat.sendMessage({
+    characterId: "a",
+    conversationId: conversation.id,
+    text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+    requestId: "s5-first",
+  });
+  assert.equal(first.status, "completed");
+
+  const aBefore = temporaryEntryOf(store, "a");
+  const bBefore = temporaryEntryOf(store, "b");
+  assert.ok(aBefore, "发起人应有今日临时理解");
+  assert.ok(bBefore, "已证明同一长期事实的B应同步今日理解");
+  assert.equal(aBefore.factIdentityId, bBefore.factIdentityId);
+  const bSnapshotBefore = store.memorySourceContext.resolve({
+    characterId: "b",
+    entryId: bBefore.id,
+    expectedVersion: bBefore.version,
+  });
+  assert.equal(bSnapshotBefore.status, "ok");
+
+  // 再改口只针对今天的当前理解；必须复用 T，而不是另造一组或写 corrected:。
+  server.enqueue(({ body, res }) =>
+    sendEnvelope(res, {
+      reply: "好的。",
+      memoryCandidates: [],
+      memoryOperation: {
+        action: "correct",
+        target: targetFromRequest(body, "我今天想喝茶"),
+        excerpt: "我今天想喝乌龙茶",
+        evidence: "请帮我改过来",
+      },
+    }),
+  );
+  const second = await store.chat.sendMessage({
+    characterId: "a",
+    conversationId: conversation.id,
+    text: "我刚才说错了，我今天想喝乌龙茶，请帮我改过来。",
+    requestId: "s5-second",
+  });
+  assert.equal(second.status, "completed");
+
+  const aAfter = temporaryEntryOf(store, "a");
+  const bAfter = temporaryEntryOf(store, "b");
+  assert.equal(aAfter.id, aBefore.id, "A 的今日理解应原地更新");
+  assert.equal(bAfter.id, bBefore.id, "B 的同步副本应原地更新");
+  assert.equal(aAfter.version, aBefore.version + 1);
+  assert.equal(bAfter.version, bBefore.version + 1);
+  assert.equal(aAfter.factIdentityId, aBefore.factIdentityId);
+  assert.equal(bAfter.factIdentityId, aBefore.factIdentityId);
+  assert.equal(bAfter.body, aAfter.body);
+  assert.equal(aAfter.expiresAt, aBefore.expiresAt);
+  assert.equal(/^(chat-correct:|corrected:)/u.test(aAfter.sourceId), false);
+  assert.equal(/^(chat-correct:|corrected:)/u.test(bAfter.sourceId), false);
+  assert.equal(store.memorySourceContext.isCurrent(bSnapshotBefore), false);
+  const longAfter = entryOf(store, "a", "pref.coffee");
+  assert.equal(longAfter.body, "用户喜欢咖啡");
+  assert.equal(longAfter.version, aLong.version);
+});
+
+test("POL-SEMOP-001d/S10 到期恢复长期语境，次日新建临时身份且旧T不复活", async (t) => {
+  const ctx = await setupContext(t, "S10-expiry-new-temporary");
+  const { store, server } = ctx;
+  store.memory.remember({
+    characterId: "a",
+    factKey: "pref.coffee",
+    body: "用户喜欢咖啡",
+    kind: "preference",
+    sourceId: "seed-a-coffee",
+  });
+  const aLong = entryOf(store, "a", "pref.coffee");
+  const conversation = openConversation(store);
+
+  server.enqueue(({ body, res }) =>
+    sendEnvelope(res, {
+      reply: "好的。",
+      memoryCandidates: [],
+      memoryOperation: {
+        action: "correct",
+        target: targetFromRequest(body, "用户喜欢咖啡"),
+        excerpt: "我今天想喝茶",
+        evidence: "请帮我改过来",
+      },
+    }),
+  );
+  const first = await store.chat.sendMessage({
+    characterId: "a",
+    conversationId: conversation.id,
+    text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+    requestId: "s10-first",
+  });
+  assert.equal(first.status, "completed");
+  const firstTemp = temporaryEntryOf(store, "a");
+  assert.ok(firstTemp);
+  const firstRow = temporaryRow(store, firstTemp.id);
+
+  server.enqueue(({ res }) =>
+    sendEnvelope(res, { reply: "现在先喝茶。", memoryCandidates: [] }),
+  );
+  const beforeExpiry = await store.chat.sendMessage({
+    characterId: "a",
+    conversationId: conversation.id,
+    text: "现在呢？",
+    requestId: "s10-live",
+  });
+  assert.equal(beforeExpiry.status, "completed");
+  const liveContext = lastSystemContext(server);
+  assert.equal(
+    liveContext.includes("用户喜欢咖啡"),
+    false,
+    "有效今日理解应抑制长期锚进入本轮上下文",
+  );
+  assert.ok(liveContext.includes("我今天想喝茶"));
+
+  const expiresAt = endOfLocalDay(ctx.nowMs());
+  ctx.advance(expiresAt - ctx.nowMs() + 1);
+  server.enqueue(({ res }) =>
+    sendEnvelope(res, { reply: "之后再聊。", memoryCandidates: [] }),
+  );
+  const afterExpiry = await store.chat.sendMessage({
+    characterId: "a",
+    conversationId: conversation.id,
+    text: "后来呢？",
+    requestId: "s10-expired",
+  });
+  assert.equal(afterExpiry.status, "completed");
+  const expiredContext = lastSystemContext(server);
+  assert.ok(expiredContext.includes("用户喜欢咖啡"));
+  assert.equal(expiredContext.includes("我今天想喝茶"), false);
+  assert.equal(temporaryEntryOf(store, "a"), null);
+
+  server.enqueue(({ body, res }) =>
+    sendEnvelope(res, {
+      reply: "好的。",
+      memoryCandidates: [],
+      memoryOperation: {
+        action: "correct",
+        target: targetFromRequest(body, "用户喜欢咖啡"),
+        excerpt: "我今天想喝奶茶",
+        evidence: "请帮我改过来",
+      },
+    }),
+  );
+  const nextDay = await store.chat.sendMessage({
+    characterId: "a",
+    conversationId: conversation.id,
+    text: "不是咖啡，我今天想喝奶茶，请帮我改过来。",
+    requestId: "s10-next-day",
+  });
+  assert.equal(nextDay.status, "completed");
+
+  const secondTemp = temporaryEntryOf(store, "a");
+  assert.ok(secondTemp);
+  assert.notEqual(secondTemp.id, firstTemp.id, "次日应新建临时条目，不复活旧条目");
+  assert.notEqual(secondTemp.factIdentityId, firstTemp.factIdentityId, "次日应使用新的临时身份");
+  const oldRow = temporaryRow(store, firstTemp.id);
+  assert.equal(oldRow.body, firstRow.body);
+  assert.equal(oldRow.expires_at, firstRow.expires_at);
+  assert.equal(entryOf(store, "a", "pref.coffee").version, aLong.version);
 });
 
 test("POL-CHATMEM-001 “最近”期限不明确时最小澄清，不发明天数", async (t) => {
