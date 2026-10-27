@@ -46,3 +46,7 @@ Codex已检查memory-sharing.spec.cjs:358/410、memory-exclusive.spec.cjs:339/44
 ## Codex补充决定：无正文的本角色删除匹配
 
 审查旧POL-EXCLUSIVE业务Case发现，experience/detail删除后从新来源原文重学也必须阻止；这与“不把不同角色的同文经历自动认定为同一件事”同时成立。不得用键槽位永久封锁替代此要求。允许为删除实际触达的角色保存严格正文指纹的最小无正文控制（包含kind/trust/sourceKind/expiry，NFC+trim），覆盖experience/detail；它只判该角色已删除内容的原文回流，不用于跨角色身份合并，也不保存旧正文或依赖factKey。旧来源控制仍先检查，明确新许可沿用原规则。此补充是细化既有防回流实现，不降低旧Case Expected。具体表结构由Claude在既有控制职责内最小实现，不为此扩建策略框架。
+
+## v2修订依据（2026-10-27）
+
+本文件v1关于“相同正文的identity/preference无需模型可确认同一性”被真实chat来源反例证伪，停止作为新实现依据。POL-FACTID-002改由[s03l-source-identity-plan.md](s03l-source-identity-plan.md)约束：独立来源先保留独立身份，正式核实/派生后仍需同步管理。v1记录仅追溯已执行历史，旧PASS不能证明本轮来源隔离；控制、防回流、派生及管理原子性要求继续有效。已有持久误合组迁移另批处理，不因本修订将其标为已解决。

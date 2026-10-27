@@ -1,6 +1,10 @@
 # 正式 Acceptance Cases
 
-当前批次 S01，版本 v1。由 Codex 依据用户完整交付授权受托确认，2026-10-25。以下是 Expected，不是执行结果。所有列出的 Case 均 P0/必需。
+正式入口，2026-10-27 流程补建。已有完整 Expected 以本文件内条目为准；外部完整 Contract 只登记引用，不复制第二份 Expected。Case 版本与确认依据逐组注明，未独立执行的不得写 PASS。本文件不记录会过期的测试通过数或批次状态；结果统一见 [evaluation.md](evaluation.md)（本轮待补齐）及对应 review。
+
+适用元数据：POL-ONBOARD-001～006 为 v1，Codex 依据完整交付授权受托确认，2026-10-25，依据 [s01-design.md](s01-design.md)；该组全部 P0/必需。其余内联分节标题已注明各自 v1 与 Codex 受托确认；以下是 Expected，不是执行结果；确认日期只采用源文档明确写出的日期，不补猜。
+
+本文件覆盖现行 plan/review 中实际已定义的业务 Case。研究/探针子样本若没有独立业务 Contract，只映射父级并标内部证据，不伪造业务 ID。未找到完整 Contract 的组列入文末缺口，不从实现输出反推 Expected。
 
 | ID | 来源与场景 | Given → When | Expected（包括禁止副作用） | Oracle / Execution Boundary |
 | --- | --- | --- | --- | --- |
@@ -11,7 +15,7 @@
 | POL-ONBOARD-005 | 配置与隔离边界 | 首次窗口 → 提交远端HTTP、含凭据URL、非法模型输入；页面尝试外部导航 | 拒绝不安全配置，无Key外发/日志泄漏；无任意IPC/文件访问/新外部页面 | 独立请求收集+IPC表面/安全配置审查；真实应用和服务，不用安全配置函数单测代替 |
 | POL-ONBOARD-006 | 真实服务核实 | 获授权服务配置 → 实际窗口验证一次，接纳并重启 | 真实服务有效应答，Key安全保存且重启可读取；不输出凭据或私人内容 | 真实兼容服务无Mock，脱敏记录和Codex受托体验；配置尚需确定，此项不允许Mock结果覆盖 |
 
-后续切片在实现前扩展此唯一Case文件，维持稳定ID；Runner映射和实际结果另记 evaluation.md，不预填PASS。
+Runner 映射见 [acceptance-plan.md](acceptance-plan.md)；实际结果见 evaluation.md（待补齐）与相应 review，本文件不预填 PASS/FAIL。
 
 ## S02a 陪伴安排与数值（v1，Codex受托确认）
 
@@ -61,7 +65,7 @@ POL-COMPANION-004/006同时验证事务失败不留下精力已改但结算时�
 
 ## S03b 对话与记忆实际生效（v1，Codex受托确认）
 
-依据memory-and-sharing.md、companionship-rules.md与s03b-plan.md。以下Case尚未实施，默认NOT_COVERED；受控HTTP仅控制服务响应，不替代真实记忆、SQLite、请求协调和GUI逻辑。
+依据memory-and-sharing.md、companionship-rules.md与s03b-plan.md。Contract 见本表；执行结果见 evaluation/review，不预填状态；受控HTTP仅控制服务响应，不替代真实记忆、SQLite、请求协调和GUI逻辑。
 
 | ID | Given → When | Expected与独立Oracle |
 | --- | --- | --- |
@@ -83,67 +87,65 @@ POL-COMPANION-004/006同时验证事务失败不留下精力已改但结算时�
 - Expected：角色可见本体等比适配约128×128逻辑点，窗口舍入最多1点；同角色所有帧/动作共用可见范围、缩放、原点与脚锚，不能忽大忽小、裁切或把透明画布尺寸当本体。真实图片路径与角色/版本一致；切换不借其他角色图片；不改变已有自然节点、焦点策略、缺素材提示与退出清理。
 - Oracle：manifest几何与真实Electron窗口/DOM图片尺寸独立核对，查看实际截图序列、资源URL及进程清理；只读常量或仅HTTP成功不算证明。
 - Execution Boundary：真实Electron和项目导出资源，无模型请求；GUI自动输入不等于原生鼠标、跨Spaces体验。全动作自然度及新版其他角色仍另验。
-- Runner：tests/acceptance/desktop.spec.cjs及tests/unit/desktop-assets.test.cjs；Codex独立执行11/11通过，见desktop-pixel-review.md。POL-DESKTOP-007本体/素材接线自动化子项PASS；原生鼠标与桌面合成另验，不能据此标整个桌面体验通过。
+- Runner：tests/acceptance/desktop.spec.cjs及tests/unit/desktop-assets.test.cjs；执行结果与边界见desktop-pixel-review.md与evaluation；本文件不记录通过数。原生鼠标与桌面合成另验，不能据此标整个桌面体验通过。
 
-## POL-SOURCE-001～005：外部来源权限基础
+## 外部 Contract 登记（唯一入口引用）
 
-完整Given/When/Expected/Oracle及真实执行边界见[s04a-plan.md](s04a-plan.md) Acceptance Contract，Codex受托确认。对应REQ-13的候选发现、默认关闭、目录明确授权、撤销后旧许可失效、重启与路径边界。Runner为tests/acceptance/external-sources.spec.cjs，权限基础已独立执行，结果见下文；不是完整会话分析、UI授权或预算验收。
+以下条目只登记指向，不复制 plan 中的完整 Expected。ID 集合按实际 Contract 展开；范围有例外时已单列。Runner 映射见 [acceptance-plan.md](acceptance-plan.md)，执行结果见 evaluation.md（待补齐）或对应 review。
 
-POL-SOURCE-006补充授权许可释放与事务失败保持，完整Contract见s04a-plan.md末段。Codex独立external-sources.spec.cjs共6/6通过（s04a-codex-r2.log），仅模块权限基础PASS；设置页、解析、实际模型在途撤销仍NOT_COVERED。
+| 父级/业务能力 | 正式 ID（版本/例外） | 唯一 Contract | 需求来源 | 验收边界 | 确认依据 |
+|---|---|---|---|---|---|
+| S02 关系数值事件 | POL-RELATION-001～004（v1） | [s02c-relationship-effects-plan.md](s02c-relationship-effects-plan.md) | REQ-50 | 真实 SQLite/companion；有效互动接线另验 | Codex 受托 v1（plan 首段） |
+| S03 记忆管理 UI | POL-MEMUI-001～006（v1） | [s03c-memory-ui-plan.md](s03c-memory-ui-plan.md) | REQ-18/51/61 | 真实 Electron/SQLite；自然语言另验 | Codex 受托 v1（plan 首段） |
+| S03 明确转告 | POL-SHARING-001～006（v1） | [s03d-explicit-sharing-plan.md](s03d-explicit-sharing-plan.md) | REQ-60/61 | 真实 memory/SQLite；GUI 另验 | Codex 受托 v1（plan 首段） |
+| S03 分享窗口 | POL-SHAREUI-001～006（v1） | [s03e-sharing-window-plan.md](s03e-sharing-window-plan.md) | REQ-60/61 | 真实 Electron/SQLite；自然语言另验 | Codex 受托 v1（plan 首段） |
+| S03 聊天记忆操作 | POL-CHATMEM-001～006；POL-CHATMEM-UI-001（v1） | [s03f-chat-memory-operations-plan.md](s03f-chat-memory-operations-plan.md)；[s03f-gui-plan.md](s03f-gui-plan.md) | REQ-18/51/61 | 正式 chat/memory；构造 HTTP/GUI | Codex 受托 v1（plans） |
+| S03 聊天明确转告 | POL-CHATRELAY-001～006；POL-CHATRELAY-UI-001（v1） | [s03g-chat-relay-plan.md](s03g-chat-relay-plan.md)；[s03g-review.md](s03g-review.md) | REQ-60/61 | 正式 chat/memory；真实模型/GUI 分别 | Codex 受托 v1（plan/review） |
+| S03 独属保留 | POL-EXCLUSIVE-001～005；POL-EXCLUSIVECHAT-001～005；POL-EXCLUSIVEUI-001～003；POL-EXCLUSIVE-LIVE-001～003（v1） | [s03h-exclusive-memory-plan.md](s03h-exclusive-memory-plan.md)；[s03h-live-exclusive-plan.md](s03h-live-exclusive-plan.md) | REQ-18/51/60/61 | service/chat/GUI/live 四层 | Codex 受托 v1（plans/review） |
+| S03 自动共享控制 | POL-AUTOSHARE-CONTROL-001～004（v1） | [s03i-plan.md](s03i-plan.md) | REQ-60 | 正式设置/SQLite；主题调度另验 | Codex 受托 v1（plan 首段） |
+| S03 主题定向共享 | POL-THEME-SHARE-001～005；POL-THEME-SHARE-004B、POL-THEME-SHARE-004C、POL-THEME-SHARE-004D、POL-THEME-SHARE-004E、POL-THEME-SHARE-006（v1） | [s03j-plan.md](s03j-plan.md)；[s03j-review.md](s03j-review.md) | REQ-51/54/60 | 正式 story/memory；正式素材门 false | Codex 受托 v1（plan/review） |
+| S03 全局分享开关 | POL-SHARESETTING-001～005（v1） | [s03k-plan.md](s03k-plan.md) | REQ-60 | 正式 chat/设置/GUI | Codex 受托 v1（plan 首段） |
+| S03 语义基线 | SEM-001～008（v1） | [s03l-plan.md](s03l-plan.md) | REQ-18/51/61 | 真实 SQLite/正式 memory；无模型 | Codex 受托 v1 2026-10-27 |
+| S03 事实身份 | POL-FACTID-001、POL-FACTID-003、POL-FACTID-004、POL-FACTID-005、POL-FACTID-006（v1）；POL-FACTID-002（v2，替代 v1 002） | [s03l-identity-plan.md](s03l-identity-plan.md)；[s03l-source-identity-plan.md](s03l-source-identity-plan.md) | REQ-09/18/51/60/61 | 真实 SQLite；实现未独立验收，旧 v1 002 机制 PASS 失效 | v1/v2 计划均 Codex 受托确认 2026-10-27；实现未独立验收 |
+| S03 语义留出 | POL-SEM-HOLD-001（子项 01～16，v1） | [s03l-holdout-plan.md](s03l-holdout-plan.md) | REQ-18/51 | 真实模型/构造数据 | Codex 受托 v1 2026-10-27 |
+| S03 原子关联 | POL-ASSOC-001～005（v1） | [s03l-association-plan.md](s03l-association-plan.md) | REQ-18/51/61 | 真实事务；等价 Fixture | Codex 受托 v1 2026-10-27 |
+| S03 关系协议 | POL-REL-001～004（v1） | [s03l-grounding-plan.md](s03l-grounding-plan.md) | REQ-18/51 | 构造模型输出 | Codex 受托 v1 2026-10-27 |
+| S03 模型对照 | POL-MODEL-COMP-001（v1） | [s03l-model-comparison-plan.md](s03l-model-comparison-plan.md) | REQ-18/51 | 真实模型/构造数据 | Codex 受托 v1 2026-10-27 |
+| S03 来源上下文 | POL-SOURCECTX-001～006（v1） | [s03l-source-context-plan.md](s03l-source-context-plan.md) | REQ-18/51/61 | 真实 store/chat/source | Codex 受托 v1 2026-10-27 |
+| S03 来源关系协议 | POL-SOURCE-REL-001～004（v1） | [s03l-source-grounding-plan.md](s03l-source-grounding-plan.md) | REQ-18/51 | 构造模型响应 | Codex 受托 v1 2026-10-27 |
+| S03 真实来源对照 | POL-SOURCE-LIVE-001（子项 01～12，v1） | [s03l-source-live-plan.md](s03l-source-live-plan.md) | REQ-18/51 | 正式聊天/真实模型 | Codex 受托 v1 2026-10-27 |
+| S03 来源身份 | POL-SOURCE-ID-001～004（v1） | [s03l-source-identity-plan.md](s03l-source-identity-plan.md) | REQ-09/18/51/60/61 | 真实 store/chat；实现未独立验收 | 计划 Codex 受托确认 2026-10-27；实现未独立验收；plan 可按 master 批准作为后续流程文档提交依据，产品源码/测试不提交 |
+| S04 来源权限基础 | POL-SOURCE-001～006（v1） | [s04a-plan.md](s04a-plan.md) | REQ-13 | 真实 SQLite/临时目录 | Codex 受托 v1（plan 首段） |
+| S04 会话读取 | POL-SOURCE-007～012（v1） | [s04b-reader-plan.md](s04b-reader-plan.md)；[s04b-review.md](s04b-review.md) | REQ-13 | 真实临时文件/SQLite | Codex 受托 v1（plan/review） |
+| S04 来源分析 | POL-ANALYSIS-001～011；POL-SOURCE-013（v1） | [s04c-analysis-plan.md](s04c-analysis-plan.md)（001～005）；[s04c-provenance-plan.md](s04c-provenance-plan.md)（006、008；009 见「方案」第3/7条及「验收」在途改写条；010 见「方案」第6条）；[s04c-review.md](s04c-review.md)（007 复现与补核、011、SOURCE-013）；[s03l-association-review.md](s03l-association-review.md)（010 业务 Expected 保留） | REQ-13 | 真实临时文件/SQLite/本机 HTTP | Codex 受托 v1（plans/review）；007/009/010 为 master 2026-10-27 核实的原规则到 ID 映射，不伪称历史编号确认时间 |
+| S04 来源设置 | POL-SOURCE-UI-001～003（v1） | [s04d-source-settings-plan.md](s04d-source-settings-plan.md) | REQ-13 | 真实 Electron；原生 dialog fixture | Codex 受托 v1（plan 首段） |
+| S04 生产自动分析 | POL-SOURCE-AUTO-001～005；POL-SOURCE-AUTO-002b、POL-SOURCE-AUTO-002c、POL-SOURCE-AUTO-004a、POL-SOURCE-AUTO-004a2、POL-SOURCE-AUTO-004b、POL-SOURCE-AUTO-004c、POL-SOURCE-AUTO-004d、POL-SOURCE-AUTO-004e（v1） | [s04e-production-analysis-plan.md](s04e-production-analysis-plan.md)；[s04e-review.md](s04e-review.md) | REQ-13 | 真实主进程/心跳/SQLite | Codex 受托 v1（plan/review） |
+| S05 连接器账本与传输 | POL-CONNECTOR-001～007；POL-TRANSPORT-001～004；POL-HERDR-LIVE-001～003（v1） | [s05a-connector-ledger-plan.md](s05a-connector-ledger-plan.md)（CONNECTOR-001～006）；[s05a-review.md](s05a-review.md)（CONNECTOR-007 见「r2独立验收」前的业务契约补充段）；[s05b-transport-plan.md](s05b-transport-plan.md)（TRANSPORT-001～003）；[s05b-review.md](s05b-review.md)（TRANSPORT-004）；[s05b-live-plan.md](s05b-live-plan.md) | REQ-06/21/28 | SQLite/真实 Unix socket/隔离 Herdr | Codex 受托 v1（plans/reviews） |
+| S05 运行身份与登记 | POL-HERDR-ID-001～003；POL-REGISTER-001～004（v1） | [s05c-identity-plan.md](s05c-identity-plan.md)；[s05d-registration-plan.md](s05d-registration-plan.md)（REGISTER-001～003）；[s05d-review.md](s05d-review.md)（REGISTER-004） | REQ-21 | 隔离 Herdr/正式插件登记 | Codex 受托 v1（plans/reviews） |
+| S05 适配与运行管理 | POL-ADAPTER-001～008；POL-HERDR-RUNTIME-001～012（v1） | [s05e-adapter-plan.md](s05e-adapter-plan.md)（ADAPTER-001～006）；[s05e-review.md](s05e-review.md)（ADAPTER-007～008）；[s05g-runtime-plan.md](s05g-runtime-plan.md)（RUNTIME-001～005）；[s05g-review.md](s05g-review.md)（RUNTIME-006～007）；[s05h-stop-evidence-plan.md](s05h-stop-evidence-plan.md)（RUNTIME-008～011）；[s05h-review.md](s05h-review.md)（RUNTIME-012） | REQ-06/21/28/58 | 正式 adapter/ledger；隔离 Herdr | Codex 受托 v1（plans/reviews） |
+| S05 通知队列 | POL-NOTIFY-001～009（v1） | [s05f-notification-plan.md](s05f-notification-plan.md)（001～005）；[s05f-review.md](s05f-review.md)（006「写入失败跨重启的持久性」、007「终态独立检查与返修」、008「第二轮独立结果与跨页截止点排序」、009「最终积压上限检查」） | REQ-06/35/58 | ledger/真实 Electron 通知 | Codex 受托 v1（plan/review） |
+| S05 连接设置 UI | POL-CONNECTOR-UI-001～006（v1） | [s05i-production-connections-plan.md](s05i-production-connections-plan.md)（001）；[s05i-review.md](s05i-review.md)（002～006 见「最终独立验收与受托决定」UI002～UI006 表） | REQ-06/21/28 | 真实 Electron/隔离 Herdr | Codex 受托 v1（plan/review） |
+| S05 桌面通知 UI | POL-NOTIFY-UI-001～011（v1） | [s05j-desktop-notifications-plan.md](s05j-desktop-notifications-plan.md)（001）；[s05j-review.md](s05j-review.md)（002～011 分节与最终结果） | REQ-35/58 | 真实 Electron 通知窗口 | Codex 受托 v1（plan/review） |
+| S06 预算与机会 | POL-BUDGET-001～008；POL-OPPORTUNITY-001～007（v1） | [s06a-budget-plan.md](s06a-budget-plan.md)（001～004）；[s06a-review.md](s06a-review.md)（005 见「005补充Contract」，006～008 见「S04集成发现的预算收尾恢复」）；[s06b-opportunities-plan.md](s06b-opportunities-plan.md) | REQ-48/53 | 真实 SQLite/构造时钟 | Codex 受托 v1（plans/review） |
+| S06 日常与探索 | POL-ACTIVITY-001～008；POL-ACTIVITY-RUNTIME-001～004（v1） | [s06c-activity-lifecycle-plan.md](s06c-activity-lifecycle-plan.md)（ACTIVITY-001～005）；[s06c-review.md](s06c-review.md)（ACTIVITY-006～008）；[s06d-runtime-activities-plan.md](s06d-runtime-activities-plan.md) | REQ-48/53/56 | 真实 SQLite/Electron 桌面 | Codex 受托 v1（plans/review） |
+| S06 故事/发现/内容 | POL-STORY-001～005；POL-DISCOVERY-001～006；POL-CONTENT-001～003；POL-STORYRUN-001～005、POL-STORYRUN-004B、POL-STORYRUN-UI-001；POL-STORYUI-001～005（v1） | [s06e-story-progress-plan.md](s06e-story-progress-plan.md)（STORY-001～004）；[s06e-review.md](s06e-review.md)（STORY-005）；[s06f-discovery-outcomes-plan.md](s06f-discovery-outcomes-plan.md)（DISCOVERY-001～005）；[s06f-review.md](s06f-review.md)（DISCOVERY-006）；[s06g-authored-content-plan.md](s06g-authored-content-plan.md)；[s06i-story-runtime-plan.md](s06i-story-runtime-plan.md)（STORYRUN-001～005）；[s06i-review.md](s06i-review.md)（STORYRUN-004B、STORYRUN-UI-001）；[s06j-story-window-plan.md](s06j-story-window-plan.md) | REQ-46/52/54/59 | 真实活动/story/SQLite/GUI | Codex 受托 v1（plans/review） |
+| S07 角色素材与输入 | POL-ASSET-001～002；POL-ASSET3-001～005；POL-RESTUI-001～003；POL-HIT-001～003（v1） | [asset-pilot.md](asset-pilot.md)；[s07b-three-character-runtime-plan.md](s07b-three-character-runtime-plan.md)；[s07-rest-runtime-plan.md](s07-rest-runtime-plan.md)；[s07c-transparent-input-plan.md](s07c-transparent-input-plan.md) | REQ-03/39/45/49/58 | 真实播放器/Electron/原生输入 | Codex 受托 v1（plans/review） |
+| S08 原生窗口 | POL-NATIVE-001～003（v1） | [s08a-native-shell-plan.md](s08a-native-shell-plan.md) | PRD 原生单屏/设置 | 真实 Electron/两尺寸 | Codex 受托 v1 2026-10-26 |
 
-## 后续契约：记忆管理与会话读取
+登记口径（2026-10-27 r2，r3 更正）：只有能在所引 Contract 中逐项定位定义的 ID 才计 Contract 索引覆盖；文件存在与定义覆盖分开记录，逐组结果见 [coverage-recheck.txt](evidence/process-registry-20261027-r2/coverage-recheck.txt) 与 [r3 核对](evidence/process-registry-20261027-r3/analysis-id-mapping.txt)。以下为仅有编号小节定义、无完整字面 ID 的项，留 master 复核：POL-NOTIFY-007～009、POL-NOTIFY-UI-002～011、POL-CONNECTOR-UI-002～006、POL-HERDR-RUNTIME-006～007 与 009～011、POL-SOURCE-012、POL-DISCOVERY-006、POL-THEME-SHARE-004B～004E 与 006、POL-SOURCE-AUTO-002b/004a2/004b～004e。其余登记 ID 在所引 plan/review 有完整字面定义（POL-FACTID-002 v2 与 POL-ANALYSIS-007/009/010 例外，均见缺口）；不据范围写法或手工清单宣称“全量已证明”。
 
-POL-MEMUI-001～004的完整Contract见[s03c-memory-ui-plan.md](s03c-memory-ui-plan.md)，POL-SOURCE-007～011见[s04b-reader-plan.md](s04b-reader-plan.md)。Codex受托确认；尚未独立执行，均NOT_COVERED。各规格明确真实业务入口、构造数据边界及独立Oracle，不用读取适配器替代完整来源分析。
+## 内部证据与子样本
 
-POL-SOURCE-007～012读取适配：完整Contract见s04b-reader-plan.md与s04b-review.md的012补充。Codex独立权限+读取12/12通过（evidence/s04b-codex-r2.log），当前模块边界PASS；设置、自动分析预算与实际记忆发布仍NOT_COVERED。旧初版结果不能替代r2。
+| 编号/来源 | 归属 | 证据性质 |
+|---|---|---|
+| 语义探针 baseline 01～16 | SEM 组、S03l 语义核验 | 研究/支撑证据；无独立业务 Case ID，不替代 SEM |
+| POL-SEM-HOLD-001 的 01～16 | 同上 | 同一业务 Case 的必需子项，不另立业务能力 |
+| `POL-FACTID001`（review 中写法） | POL-FACTID-001 | 笔误，不新增 ID |
+| POL-SOURCE-AUTO、POL-THEME-SHARE、POL-STORYRUN 的字母子项 | 对应父 Case | 版本/时序例外，已在表中展开，不另造范围 |
 
-POL-BUDGET-001～004正式Contract见[s06a-budget-plan.md](s06a-budget-plan.md)，Codex受托确认，共用自动请求滚动额度、发送尝试幂等、重启/时钟及事务边界。尚未实现验收，NOT_COVERED；不以预算模块替代自动活动调度。
+## 版本与缺口
 
-POL-BUDGET-001～005：Codex独立automatic-budget.spec.cjs 5/5通过；005补充Contract与覆盖矩阵见s06a-review.md，证据evidence/s06a-codex-first.log。003真正in_flight重启分支尚需补测，当前不标完整预算契约PASS；真实调度/HTTP集成未覆盖。
-
-预算r2补测真正未finish的in_flight重启，Codex独立5/5通过，POL-BUDGET-003模块分支补齐；当前001～005模块契约PASS，详见s06a-review.md与s06a-codex-r2.log。
-
-POL-MEMUI-001～006当前模块PASS：Codex独立真实Electron/SQLite/受控HTTP验收6/6，相关聊天UI10/10、聊天及记忆服务32/32通过。005/006完整Contract补入s03c-memory-ui-plan.md；矩阵、失败→修复及边界见s03c-review.md。当前用户可按角色分页查看并本地纠正/删除，旧显示与在途隔离；自然语言定位、主动共享和全页native未覆盖。
-
-POL-BUDGET-006～008收尾存储故障/精确恢复/事务回滚契约与Oracle见s06a-review.md末节；Codex独立预算8/8通过（s04c-codex-budget-r3.log同批还含6项来源回归）。仅已失败token可恢复，内存记录提交后清除。来源006未通过，不将本次预算结果冒充来源分析全部完成。
-
-POL-CONNECTOR-001～007：Contract见s05a-connector-ledger-plan.md及s05a-review.md补充，Codex独立7/7通过（s05a-codex-r2.log）。当前只接受SQLite事实账本；真实Herdr插件/订阅身份/重连适配与可见气泡仍未覆盖，不能把本地fixture序列当Herdr事件字段。
-
-S04c受托接受：POL-ANALYSIS-001～011、POL-SOURCE-013由tests/acceptance/source-analysis.spec.cjs与session-sources.spec.cjs执行，契约见s04c-analysis-plan.md、s04c-provenance-plan.md、s04c-review.md。与权限/预算共同独立32/32，evidence/s04c-codex-index-final.log。PASS仅限真实临时文件/SQLite/本机HTTP模型fixture服务链，正式GUI/自动调度/真实提炼语义仍NOT_COVERED。
-
-S05b传输模块：POL-TRANSPORT-001～004由tests/acceptance/herdr-transport.spec.cjs执行，契约见s05b-transport-plan.md与s05b-review.md。r2 Codex独立4/4，evidence/s05b-codex-r2.log；真实临时Unix socket，Herdr响应为schema核对fixture，真实Herdr与正式插件/通知仍NOT_COVERED。
-
-## 2026-10-27 接续索引：聊天分享设置与事实关联
-
-- POL-SHARESETTING-001～005：唯一Contract在[s03k-plan.md](s03k-plan.md)，Runner为tests/acceptance/chat-sharing-setting.spec.cjs和chat-sharing-setting-ui.spec.cjs；版本、独立结果及边界见[s03k-review.md](s03k-review.md)，已按其范围受托接受。
-- SEM-001～008：唯一Contract在[s03l-plan.md](s03l-plan.md)，此批为存量记忆事实范围的补建基线，全部P0/必需，2026-10-27 v1由Codex依用户master授权确认。来源为PRD引用memory-and-sharing.md“同步纠正”“怎样同步生效”“删除边界”；真实SQLite+正式memory业务服务，构造数据、无模型/无GUI。Runner tools/memory-tuning/semantic-baseline.cjs，入口node tools/memory-tuning/semantic-baseline.cjs --out <结果路径>；业务Expected由计划定义，工具只评分，不能把当前行为当正确答案。Codex已独立执行v1：SEM-001～007 FAIL、SEM-008 PASS，0ERROR；实际结果与后续修复顺序见s03l-review.md。补建工具已接受，产品关联能力未通过。
-
-POL-FACTID-001～006：唯一业务与技术Contract见[s03l-identity-plan.md](s03l-identity-plan.md)，2026-10-27 v1由Codex受托确认，P0必需；正式memory管理服务及真实SQLite/迁移/派生/控制/回滚，Runner tests/acceptance/memory-fact-identity.spec.cjs。本片PASS，独立16身份场景、合计119领域tests、19unit与10GUI tests通过；逐Case观察、证据及边界见[s03l-identity-review.md](s03l-identity-review.md)。SEM-003/004/008原Expected复验PASS；不同措辞SEM-001/002/005/006/007仍FAIL并保留为下一语义关联必需范围，不将本片视为完整S03l。
-
-S03l-b语义判定前置对照：固定16对Contract见[s03l-semantic-probe-plan.md](s03l-semantic-probe-plan.md)，对应tools/memory-tuning/semantic-pairs.json的01～16；Runner semantic-probe.cjs只验证构造输入→真实模型关系建议→独立评分，不替代产品SEM。两策略各15PASS1FAIL，均0ERROR/0错误合并/0同义正例遗漏；完整结果、失败和后续条件见[s03l-semantic-probe-review.md](s03l-semantic-probe-review.md)。
-
-## S03l-b 独立留出补充
-
-POL-SEM-HOLD-001及01～16子项见[s03l-holdout-plan.md](s03l-holdout-plan.md)，真实Runner为tools/memory-tuning/semantic-probe.cjs --dataset holdout；Expected调用前冻结。结果与边界见[s03l-holdout-review.md](s03l-holdout-review.md)：14PASS2FAIL、总体FAIL；不得替代原SEM产品Case。
-
-## S03l-b 已核实事实的原子关联
-
-POL-ASSOC-001～005，P0必需、Codex受托确认v1，唯一Contract见[s03l-association-plan.md](s03l-association-plan.md)。Runner tests/acceptance/memory-association.spec.cjs，9项领域测试；整体及邻接最终123项领域、19unit独立通过，逐项依据见[s03l-association-review.md](s03l-association-review.md)。等价关系由构造Fixture提供，本片只验真实事务与管理链，不能替代尚未通过的模型语义/原SEM Case。
-
-## S03l-b 结构化事实核验
-
-POL-REL-001～004，P0/v1/Codex受托确认，唯一Contract见[s03l-grounding-plan.md](s03l-grounding-plan.md)。tests/acceptance/memory-relation-protocol.spec.cjs承担确定性build/parse边界，独立8PASS；tools/memory-tuning/semantic-probe.cjs --policy grounded承担真实模型两数据集对照，baseline16PASS、holdout14PASS2FAIL，整体语义验收FAIL。详[s03l-grounding-review.md](s03l-grounding-review.md)，不替代原SEM产品验收。
-
-POL-MODEL-COMP-001：同grounded协议模型对照，Contract见[s03l-model-comparison-plan.md](s03l-model-comparison-plan.md)；工具semantic-probe.cjs --model deepseek-v4-pro，真实两批各13PASS3FAIL，整体FAIL。逐项结果及不切换模型的决定见[s03l-model-comparison-review.md](s03l-model-comparison-review.md)，不替代语义产品Case。
-
-## S03l-b 聊天来源上下文
-
-POL-SOURCECTX-001～006，P0/v1/Codex受托确认，Contract见[s03l-source-context-plan.md](s03l-source-context-plan.md)，Runner tests/acceptance/memory-source-context.spec.cjs。真实store/chat→memory→来源→管理失效链，专属6项及相关领域合计74PASS、19unit PASS。边界与证据见[s03l-source-context-review.md](s03l-source-context-review.md)；只验证来源链，不冒称语义分类或自动关联已完成。
-
-## S03l-b 来源感知关系核验
-
-POL-SOURCE-REL-001～004，P0/v1/Codex受托确认，唯一Contract见[s03l-source-grounding-plan.md](s03l-source-grounding-plan.md)。Runner tests/acceptance/memory-source-relation.spec.cjs；真实store/chat/source及协议，模型响应构造。本片4Case及相关18场景PASS，19unit PASS；独立结果见[s03l-source-grounding-review.md](s03l-source-grounding-review.md)，不替代真实模型语义或产品自动关联验收。
-
-## S03l-b 真实来源关系对照
-
-POL-SOURCE-LIVE-001，P0/v1/Codex受托确认，12个必需子项Expected见[s03l-source-live-plan.md](s03l-source-live-plan.md)。Runner tools/memory-tuning/source-probe.cjs：正式聊天/SQLite/来源协议，聊天提炼构造、关系核验真实模型；真实10PASS2FAIL/0ERROR，整体FAIL；证据与来源身份缺陷见[s03l-source-live-review.md](s03l-source-live-review.md)，不替代产品自动关联验收。
+- POL-FACTID-002：v1 的“严格同文可复用身份”机制 PASS 已失效；v2 计划已由 Codex 于 2026-10-27 受托确认并作为当前设计依据，未独立验收的是实现，不是计划待确认。不得把 POL-FACTID-001～006 全写成 v1 或据旧 PASS 代表当前。
+- POL-SOURCE-ID-001～004：计划已由 Codex 于 2026-10-27 受托确认；实现尚未独立验收。该 plan 可按 master 批准作为后续流程文档提交依据，产品源码与测试仍不提交，不得据其宣称已交付。
+- POL-ANALYSIS-007/009/010：master 已核实原规则到 ID 的映射（007 预算收尾失败与补核；009 在途改写不发布与映射发布回滚；010 8 区段/4MiB 验证上限），现正式登记；不伪称历史编号确认时间，不新增或削弱 Expected。此前 r2 的“查无定义”判断据此更正。
+- 尚无完整业务 Contract 的范围：REQ-40 造型维度/310 目录（仅工具）、36 动作/正式服装的逐项语义（animation-plan 为规划）、S08 全部设置页/Spaces/fullscreen/Retina、真实模型+隔离 Herdr 端到端、最终交付文档与 snap 清理。上述列为缺口，不从实现反推 Expected。

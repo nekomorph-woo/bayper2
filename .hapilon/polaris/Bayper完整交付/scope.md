@@ -59,9 +59,9 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 
 产品 S03 冻结，产品开发未恢复。master 已审查审计三册、AGENTS 与现行 skill diff，接受问题清单作为补齐依据，不接受任何产品完成结论。
 
-- 当前只做流程补齐：先统一 Case/计划入口并修正设计冲突，再处理验收矩阵、证据保留、父级闭环与未编号约束，最终由 master 验收后决定恢复。
+- 当前只做流程补齐：Case/计划入口与设计冲突已由 master 接受；继续处理验收矩阵、证据保留、父级闭环与未编号约束，最终由 master 验收后决定恢复。
 - 完整 Goal 与 S01～S08 全部产品待办保持，不因流程补齐缩小或改写 PRD/Expected；上表切片范围仍是产品依据。
 - S03 当前冻结：来源身份 v2 尚未独立验收，POL-FACTID-002 旧机制 PASS 失效，6 个旧机制 FAIL 与存量误合组未迁移；后续由 master 按顺序处理，不要求先修产品代码/测试才允许流程恢复。
-- [s03l-source-identity-plan.md](s03l-source-identity-plan.md) 与相关实现/测试目前只在工作区存在，**不属于本次提交**；不得据未提交内容宣称已交付。
+- [s03l-source-identity-plan.md](s03l-source-identity-plan.md) 与 [s03l-identity-plan.md](s03l-identity-plan.md) 的既有修订已获 master 批准，作为当前设计依据随本次流程文档提交；产品源码/测试不提交，实现未独立验收。
 - 剩余产品路径不缩小：S03 异 factKey 语义闭环与正式主题自动分享 GUI；S06 自动邀请、正式活动→相遇、服装解锁/穿用；S07 36 动作/服装/过渡中断；S08 其余设置、Spaces/fullscreen/Retina、真实模型+隔离 Herdr 端到端与交付文档。
 - skill 修订记录见 [../北极星迭代/parent-slice-continuity.md](../北极星迭代/parent-slice-continuity.md)；S-01/S-02 暂在项目统一入口落实，S-03 不新增规则。
