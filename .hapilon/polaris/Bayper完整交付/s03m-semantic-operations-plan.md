@@ -631,3 +631,59 @@ Mock 只替换聊天与关系模型 HTTP；不 mock 核心 store/chat/memory/sou
 - 历史保留：开发首次清理遗漏（SIGKILL 管理主进程后桌面 overlay 与 helper 残留）、master 退回、r52 精确 PID TERM、r53 完整 token 与仅候选 PID 读环境修正，以及全部旧 attempt/失败证据均保留，不覆盖。
 - 仍未完成：真实模型 L1/L2、正式资源、完整父级 S03 与 `POL-SEMOP-001～008` 聚合；跨角色独立同义、UI IPC/live 另列。下一步直接接已批准的真实模型 L1/L2 效果验证，不另起大型规划或内部探针。
 - 本批仅文档与版本 `0.1.196 → 0.1.197`（10 文件 11 处），未改生产/测试/依赖；Polaris 复盘无新 skill 缺陷，不修改 skill。
+
+### 13.15 B2 真实聊天操作 probe 与 dry 结果（2026-10-27 r57）
+
+工具：`tools/memory-tuning/chat-operation-probe.cjs` + `chat-operation-cases.json`；从正式 `createStore`/`chat.sendMessage` 入口执行，不直接调用 `applyConfirmed...` 或手写 proof。L1 聊天 envelope 构造、关系真实；L2 聊天与关系真实；dry 使用本机 fixture chat/relation 并强制 loopback，核心 SQLite/store/chat/memory 真实。输出显式新 `--out`、拒绝覆盖、逐 Case 独立库。
+
+| Case | 映射 | 场景 | 期望/边界 |
+|---|---|---|---|
+| C01 | 001a/001c/004a | 不同 factKey 同义 correct | 关系 equivalent；B 同正文/identity；长期正确更新 |
+| C02 | 002a | 不同 factKey 同义 forget | 关系 equivalent；A 阶段 1 删、B 阶段 2 删 |
+| C03 | 001d | 今日临时偏好 | proof.mode=temporary；A/B 当日 current；长期整行不变；到期=日末 |
+| C04 | 001a/005d | 未知 C 不新增 | 仅断言 C 零记录/不进 pair；不伪造 C 记忆 |
+| C05 | 005a | 转述同句“我”主体不同 | A `我姐姐说：“我喜欢蓝色。”` vs B `我喜欢蓝色。`；Expected different |
+| C06 | 005a / source06 | `她喜欢蓝色` vs `我喜欢蓝色` | Expected uncertain；原话不变 |
+| C07 | 005a / source11 | `安静环境` vs `一个人待着` | Expected uncertain；原话不变 |
+| C08 | 005a 时间/kind | 原 A preference、B experience 红茶 | kind 不同被候选过滤属合理；**Oracle 改为 candidates=0、relationModel=not_exercised**；A 已本地改绿茶、B 整行不变；不声称 different 分类通过 |
+| C09 | 005a | 肯定 vs 否定爬山 | Expected different |
+| C10 | 005a 时间 | 原昨日经历“去看流星” | r57 为 **FAIL（产品缺陷）**；r58 kind-aware 事件时间修复后 dry 通过，原“昨天”不变（见 13.16） |
+| C11 | 005a 时间 | 同 kind=experience、不同年份 | r58 已批准并加入：A 2023、B 2024；Expected different、B 不变、candidate=1；实际 source 时间 2023/2024 |
+
+- dry 证据：[dry-report.md](evidence/s03m-b2/dry-report.md)；L1 `attempt-20261027-205424-dry-l1-restored/`（9 DRY-RUN、1 FAIL C10），L2 `attempt-20261027-205428-dry-l2-restored/`（同上），安全 `attempt-20261027-205453-dry-safety-restored/`。工具 867 行、dataset 266 行；dry 不是真实模型验收。
+- C10 最小修复方案 [c10-temporal-fix-plan.md](evidence/s03m-b2/c10-temporal-fix-plan.md)：只对 experience + 明确过去事件时间开放 replace；preference 的昨天/最近/以后仍澄清，today temporary 不变；预计生产 25～45 行、测试 100～140 行，本轮不改生产。
+- 未批准改 C08 为 experience、删 C10 “昨天”已退回；相关 diff 与旧 attempt 保留，`205053/205103` 仅作错误记录，不替代冻结原 Case。
+
+### 13.16 C10 kind-aware 事件时间最小修复（2026-10-27 r58，master 受托批准）
+
+master 已实际审查 C10 方案与 dry 证据，对比 204315 恢复 dataset 仅见获准 C08 改动，受托批准最小修复与必要 Case（不是用户亲自确认）。原失败保留：C10 原话 `我们昨天去看流星了。` 与操作 `不是看流星，我们昨天去看烟花了，请帮我改过来。` 不得改写；C08/C10 冻结，Expected 不迎合实现。此前擅自把 C08 改为 experience、C10 删“昨天”的改动已退回，旧 attempt 与 diff 保留。
+
+- 生产仅改 `app/chat-memory-operations.cjs`；kind-aware `temporalOf`：仅 target `experience` 且明确过去事件时间走 replace；`preference` 的 today temporary/vague、未来/模糊期限、非明确纠正、不同主体、target/evidence/意图授权保持现有检查。
+- 过去时间：昨日/上周/去年等显式过去词；四位年份仅 `< 当前年` 视为过去，当前年/未来年不放入 replace；`最近/以后/明天/2027年` 仍澄清。
+- 今日已完成经历：experience + TODAY + 完成标记（了/过/已经/刚/曾）走 replace；今日偏好仍 temporary。`今天上午/下午` 等 EARLY_DAY 仍按现有规则澄清，列为未解决边界，不静默放开。
+- 必要 Case：原昨日经历、今日偏好 temporary、今日已完成经历、模糊/未来（含未来年份）、非明确纠正、不同主体。新增 C11：A `我在2023年看过流星雨。`、B `我在2024年看过流星雨。`，同 kind experience；操作明确更正 A 当年事件且不改年份，Expected different、B 不变、candidate=1，需真实 source 时间引用。
+- 规模：生产预计 25～45 行（<100），测试 100～150 行；超出先报告。先跑新增失败基线并保留，再修后 focused + chat-memory-operations/memory-semantic-operations 相关套件，再 dry L1/L2 新 attempt；不 live/.env/API/GUI/版本/Git/skill。
+- r58 实际结果：生产 `app/chat-memory-operations.cjs` **+31/−11（42 changed，净增 20 行）**；测试新增 **138 行**，均在预估内。失败基线 `attempt-20261027-205841-c10-tests-baseline/` 3 PASS/3 FAIL（昨日经历、今日经历、未来年份未过；今日偏好、非明确纠正、不同主体通过）。修后聚焦 5 PASS/1 FAIL、完整 chat-memory **30/31 PASS**；`memory-semantic-operations` **93/93 PASS、exit 0**。唯一 FAIL 为“不同主体不写用户经历”：修复前被过宽时间澄清掩盖，修复后暴露既有主体漏洞，按约束未改测试绕过，列为未解决。
+- dry L1 `attempt-20261027-205928-c10fix-dry-l1/`、L2 `...-c10fix-dry-l2/` 均 **11/11 DRY-RUN、exit 0、before/after SHA 一致**；C10 原“昨天”本地更正生效、B 整行不变、关系 uncertain（fixture）；C11 A 2023/B 2024、关系 different（fixture）、B 不变、candidate=1；C08 仍 `not_exercised`。安全 `attempt-20261027-210021-c10fix-safety/`：拒绝覆盖 exit 1、loopback 阻止、22 个临时路径全部不存在。L1 live 上限 12（1 models + 11 relation），L2 live 上限 56（1 models + 44 chat + 11 relation）。
+- 未解决/边界：不同主体直接纠正仍写用户条目（真实 FAIL）；`今天上午/下午` 等 EARLY_DAY 经历仍走 vague；当前年/未来年份与精确月日不解析（只有明确过去词或 `<当前年` 年份走 event）；dry 为 fixture，不代表真实模型。
+
+### 13.17 C10 后续不同主体与混合未来修复（2026-10-27 r59，待 master 验收）
+
+master 独立反例 `evidence/master-c10-review-wUrw4v9P/` 证明 r58 修复后 A 原经历被 `我姐姐昨天去看烟花了` 覆盖；同时 today 分支可被“今天……已经……明天/未来年份”绕过。r59 只做最小切片：
+
+- 主体：仅 `kind=experience` 的 correct，在 target 正文为 `self`、新 excerpt 为 `other` 且无明确主体更正时，返回 `subjectClarification` 并零写。`other` 识别限于第三人称代词与 `我/用户 + 常见关系称谓`；`不是我，是……` 放行；同主体 `我/我们/用户` 保持 replace。
+- 时间：`hasFutureTime` 在 TODAY 分支前排除明确未来词与年份 `>= 当前年`；`explicitPastEvent` 同样先受约束；经验类 `打算/计划/准备/将要/即将` 在无过去时间时澄清。年份比较改用 `chat.cjs` 传入的现有 `currentMs()`，不混用系统时钟。
+- 结果：有效失败基线 `attempt-20261027-210820-c10b-subject-baseline2/` **9 tests / 6 pass / 3 fail / exit 1**（混合未来、姐姐、同事/她，均业务断言）；最终 focused `attempt-20261027-211049-c10b-focused-final2/` **9/9**；chat-memory `attempt-20261027-211052-c10b-chat-memory-operations-final2/` **34/34**；semantic `attempt-20261027-211053-c10b-memory-semantic-operations-final2/` **93/93**；均 exit 0。dry L1/L2 `attempt-20261027-211132-c10b-dry-l1-final2/`、`attempt-20261027-211133-c10b-dry-l2-final2/` 均 **11/11 DRY-RUN、exit 0、SHA 一致**；安全 `attempt-20261027-211140-c10b-safety-final2/` 拒绝覆盖、loopback 阻止、22 个临时路径不存在。
+- 规模：当前生产相对 HEAD **+101/−11（净增 90，含 r58 C10 净增 20；本轮约 70）**；测试相对 HEAD **+231（含 r58 +138；本轮约 +93）**；`chat.cjs` 仅 +1 行传入既有 `nowMs`。未改工具 Case/C08/C10/C11 原话/Expected。
+- 边界：EARLY_DAY 经历、当前年精确日期、裸姓名/复杂从句主体仍保守或 `unknown`；dry 为 fixture，未 live，不代表真实模型验收。报告 `evidence/s03m-b2/c10b-subject-time-report.md`。
+
+### 13.18 C10 主体边界返修（2026-10-27 r60，待 master 重新独立复验）
+
+master 独立两套件 **127/127 pass、0 skipped、exit 0**、before/after 相同、最终 4 文件 `shasum` OK，证据 `evidence/master-c10-boundaries-FB0l3vHi`；但 master 明确尚不接受，指出两缺口：unknown 主体未澄清、`不是我` 后 0～30 字符可误放行。旧证据/Expected 保留，不预写接受。
+
+- 反例基线 `attempt-20261027-211510-c10c-subject-boundary-baseline3/`：**6 tests / 4 pass / 2 fail / exit 1**；真实 chat 入口 + 模型错误提出 correct。改话题 `不是我之前说的那件事，是我姐姐……` 实际覆盖旧 `我们昨天去看流星了`；未知主体 `小明昨天去看烟花了` 实际覆盖旧 `用户昨天去看流星了`。`不是我，是我姐姐……` 与省略式 `不是看流星，是看烟花` 均 PASS。
+- 修复：`explicitSubjectCorrection` 只接受 `不是(我们|我|用户)` 后直接停顿/转折或紧接“是”；新增 `negatesOldContent`，未知主体只有在“不是”附近明确否定旧事实具体内容时才放行，否则 `subjectClarification` 零写。仍只对 `kind=experience`，不新增人名枚举或通用主体理解。
+- 结果：focused `attempt-20261027-211718-c10c-focused-final2/` **12/12**；chat-memory `attempt-20261027-211723-c10c-chat-memory-operations-final2/` **37/37**；semantic `attempt-20261027-211725-c10c-memory-semantic-operations-final2/` **93/93**；均 exit 0。dry L1/L2 `attempt-20261027-211801-c10c-dry-l1-final2/`、`attempt-20261027-211802-c10c-dry-l2-final2/` 均 **11/11 DRY-RUN、exit 0、SHA 一致**；安全 `attempt-20261027-211807-c10c-safety-final2/` 拒绝覆盖、loopback 阻止、22 个临时路径不存在、无残留进程。
+- 规模：本轮生产 **+22 行**（总计 +123/−11，含 r58/r59）；测试 **+51 行**（总计 +282）；未超 <40/<100。报告 `evidence/s03m-b2/c10c-subject-boundary-report.md`。
+- 接受结论（2026-10-27 r61）：master 实际审查最终 diff 并独立稳定复验 `evidence/master-c10-stable-oC19XDFt/`：tests **130/130 pass、0 skipped、exit 0**，L1/L2 dry 各 **11 DRY-RUN、exit 0**，before/after 完全一致，22 个临时路径无残留。据此**受托接受本批已测 C10 事件时间/主体授权有限修复与 B2 工具 dry 能力**；不是完整 S03、真实模型或用户人工确认。上一 `master-c10-final-tBIvlAZo` 虽全绿但 before/after 变动，不能作最终验收，保留说明。历史 FAIL/旧 Expected 不覆盖。
+- 收口：VERSION `0.1.197 → 0.1.198`（既有 10 文件 11 处字面量，不升级依赖/不重生成 lock），本轮只改文档/版本，待 master snap。snap 后直接接真实模型 L1/L2，不再扩内部探针；父级 S03 与 36 动画等待办保留。

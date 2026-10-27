@@ -186,3 +186,32 @@ node tools/memory-tuning/source-probe.cjs --out tools/memory-tuning/results/sour
 结果保留实际请求、模型原文、协议结构、逐项 Expected 评分、`falseMerge` / `missedEquivalent` / `uncertain`、1 次 models 与最多 1 次 chat 的调用数、各阶段耗时、工具/数据/生产模块 SHA、来源 `isCurrent` 前后结果、关系判定前后记忆条目数以及清理状态。结构失败记 `ERROR`，语义不符合 Expected 记 `FAIL`，两者不混用。真实 live 由 Codex 独立执行；工具内结果不代表生产接线或自动合并已通过。
 
 Codex独立真实结果`results/source-live-codex-v1.json`：10/12符合Expected，0错误合并、0同义正例遗漏；未知“她”和安静环境/独处仍误判different，整体FAIL。主体描述还有遗漏，暂不能用于自动合并或删除。1models+1chat，约2.99秒；12个临时库全部清理。`source-dry-codex-v1.json`为独立发送前核查。相同片段身份复用导致不同会话来源串用是另一个待修复产品缺陷，隔离试验不代表已修复。
+
+## 真实聊天操作 L1/L2 probe（S03m B2）
+
+`chat-operation-probe.cjs` 与 `chat-operation-cases.json` 从正式 `createStore`/`chat.sendMessage`
+入口执行 correct/forget/temporary 和负例，观察两阶段关系请求、proof、request、assistant、
+entries/identity/control/messages 与 source。它不直接调用 `applyConfirmed...` 或手写 proof。
+
+```sh
+node tools/memory-tuning/chat-operation-probe.cjs --mode l1 --dry-run --out <新文件>.json
+node tools/memory-tuning/chat-operation-probe.cjs --mode l2 --dry-run --out <新文件>.json
+node tools/memory-tuning/chat-operation-probe.cjs --mode l2 --out <新文件>.json
+```
+
+- `--mode l1`：聊天 envelope 构造，关系 HTTP 真实（live 时）；`--mode l2`：聊天与关系都真实。
+- `--dry-run`：不读 `.env`、不访问外部网络；chat/relation 为本机 fixture，fetch spy 强制只允许 loopback。
+  核心 store/chat/memory/SQLite 仍真实。dry 结果只验证入口/清理，不代表真实模型效果。
+- 输出必须显式新 `--out`，已存在拒绝覆盖；工具自建临时库逐 Case 关闭并删除，结果记录路径与 `existsAfter`。
+- live 调用上限由数据推导：L1 为 1 次 models + 每 Case 最多 1 次关系（当前 11 Case 共 12）；
+  L2 为 1 次 models + seed/操作聊天 + 关系（当前 56）。关系沿用生产 15s、无重试；聊天用生产默认超时。
+- `expected.candidates=0` 的 Case（如 C08）明确 `relationModel=not_exercised`，不以关系分类计入 PASS；
+  C10 原“昨天”经历、主体授权与 future/today 混合时间已做有限修复；C11 同 kind 不同年份经历验证关系时间。
+  不同/未知主体与明确主体更正已通过真实 chat 入口测试，`chat-memory-operations` 当前 37/37。master 2026-10-27
+  独立稳定复验 **130/130 PASS、0 skip、exit 0**、L1/L2 dry 各 11 DRY-RUN、22 临时路径无残留后，受托接受本批已测
+  C10 事件时间/主体授权有限修复与 B2 工具 dry 能力（`master-c10-stable-oC19XDFt`；不是用户亲自确认、不是真实模型/
+  完整 S03）；上一 `master-c10-final-tBIvlAZo` 因 before/after 变动不作最终验收。真实模型 L1/L2 仍未运行，dry 的
+  chat/relation 为 fixture。详见
+  [主体边界报告](../../.hapilon/polaris/Bayper完整交付/evidence/s03m-b2/c10c-subject-boundary-report.md)、
+  [C10 修复报告](../../.hapilon/polaris/Bayper完整交付/evidence/s03m-b2/c10fix-report.md) 与
+  [计划 §13.17/§13.18](../../.hapilon/polaris/Bayper完整交付/s03m-semantic-operations-plan.md)。

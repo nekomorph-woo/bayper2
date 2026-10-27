@@ -1,0 +1,292 @@
+{
+  "version": "s03m-b2-chat-operation-v2",
+  "fixedNow": "2026-10-27T10:00:00.000Z",
+  "note": "L1 使用 l1 区块构造聊天 envelope；L2 只使用 prelude/utterance/operation.text/privateMarkerUtterance，不把 l1/Expected/aBodyTokens 发送给模型。match 与 aBodyTokens 仅用于事后定位/粗筛。",
+  "cases": [
+    {
+      "id": "C01",
+      "goal": "correct_synonym",
+      "expected": { "relation": "equivalent", "effect": "correct_propagate", "candidates": 1, "aBodyTokens": ["茶"] },
+      "a": {
+        "prelude": [],
+        "utterance": "我平时喝咖啡一定要加糖。",
+        "match": ["加糖", "甜", "糖"],
+        "l1": { "factKey": "b2-c01-a", "body": "我平时喝咖啡一定要加糖。", "kind": "preference", "evidence": "我平时喝咖啡一定要加糖。" }
+      },
+      "b": {
+        "prelude": [],
+        "utterance": "我的咖啡都要甜的。",
+        "match": ["甜", "糖"],
+        "privateMarker": "PRIVATE-B-C01-7F3A",
+        "privateMarkerUtterance": "私人提醒：PRIVATE-B-C01-7F3A，只是记给我自己，不用记住。",
+        "l1": { "factKey": "b2-c01-b", "body": "我的咖啡都要甜的。", "kind": "preference", "evidence": "我的咖啡都要甜的。" }
+      },
+      "operation": {
+        "text": "不是咖啡，我更喜欢茶，请帮我改过来。",
+        "action": "correct",
+        "targetNeedle": "加糖",
+        "excerpt": "我更喜欢茶",
+        "evidence": "请帮我改过来"
+      }
+    },
+    {
+      "id": "C02",
+      "goal": "forget_synonym",
+      "expected": { "relation": "equivalent", "effect": "forget_delete", "candidates": 1 },
+      "a": {
+        "prelude": [],
+        "utterance": "我平时喝咖啡一定要加糖。",
+        "match": ["加糖", "甜", "糖"],
+        "l1": { "factKey": "b2-c02-a", "body": "我平时喝咖啡一定要加糖。", "kind": "preference", "evidence": "我平时喝咖啡一定要加糖。" }
+      },
+      "b": {
+        "prelude": [],
+        "utterance": "我的咖啡都要甜的。",
+        "match": ["甜", "糖"],
+        "privateMarker": "PRIVATE-B-C02-7F3A",
+        "privateMarkerUtterance": "私人提醒：PRIVATE-B-C02-7F3A，只是记给我自己，不用记住。",
+        "l1": { "factKey": "b2-c02-b", "body": "我的咖啡都要甜的。", "kind": "preference", "evidence": "我的咖啡都要甜的。" }
+      },
+      "operation": {
+        "text": "请忘记我喜欢咖啡这件事。",
+        "action": "forget",
+        "targetNeedle": "加糖",
+        "evidence": "请忘记我喜欢咖啡这件事"
+      }
+    },
+    {
+      "id": "C03",
+      "goal": "temporary_today",
+      "expected": { "relation": "equivalent", "effect": "temporary_copy", "candidates": 1, "aBodyTokens": ["茶"] },
+      "a": {
+        "prelude": [],
+        "utterance": "我平时喝咖啡一定要加糖。",
+        "match": ["加糖", "甜", "糖"],
+        "l1": { "factKey": "b2-c03-a", "body": "我平时喝咖啡一定要加糖。", "kind": "preference", "evidence": "我平时喝咖啡一定要加糖。" }
+      },
+      "b": {
+        "prelude": [],
+        "utterance": "我的咖啡都要甜的。",
+        "match": ["甜", "糖"],
+        "privateMarker": "PRIVATE-B-C03-7F3A",
+        "privateMarkerUtterance": "私人提醒：PRIVATE-B-C03-7F3A，只是记给我自己，不用记住。",
+        "l1": { "factKey": "b2-c03-b", "body": "我的咖啡都要甜的。", "kind": "preference", "evidence": "我的咖啡都要甜的。" }
+      },
+      "operation": {
+        "text": "不是咖啡，我今天想喝茶，请帮我改过来。",
+        "action": "correct",
+        "targetNeedle": "加糖",
+        "excerpt": "我今天想喝茶",
+        "evidence": "请帮我改过来"
+      }
+    },
+    {
+      "id": "C04",
+      "goal": "correct_unknown_holder",
+      "expected": { "relation": "equivalent", "effect": "correct_propagate", "candidates": 1, "unknownC": "c", "aBodyTokens": ["茶"] },
+      "a": {
+        "prelude": [],
+        "utterance": "我平时喝咖啡一定要加糖。",
+        "match": ["加糖", "甜", "糖"],
+        "l1": { "factKey": "b2-c04-a", "body": "我平时喝咖啡一定要加糖。", "kind": "preference", "evidence": "我平时喝咖啡一定要加糖。" }
+      },
+      "b": {
+        "prelude": [],
+        "utterance": "我的咖啡都要甜的。",
+        "match": ["甜", "糖"],
+        "privateMarker": "PRIVATE-B-C04-7F3A",
+        "privateMarkerUtterance": "私人提醒：PRIVATE-B-C04-7F3A，只是记给我自己，不用记住。",
+        "l1": { "factKey": "b2-c04-b", "body": "我的咖啡都要甜的。", "kind": "preference", "evidence": "我的咖啡都要甜的。" }
+      },
+      "operation": {
+        "text": "不是咖啡，我更喜欢茶，请帮我改过来。",
+        "action": "correct",
+        "targetNeedle": "加糖",
+        "excerpt": "我更喜欢茶",
+        "evidence": "请帮我改过来"
+      }
+    },
+    {
+      "id": "C05",
+      "goal": "negative_subject_reported_speech",
+      "expected": { "relation": "different", "effect": "no_propagate", "candidates": 1, "aBodyTokens": ["绿色"] },
+      "a": {
+        "prelude": [],
+        "utterance": "我姐姐说：“我喜欢蓝色。”",
+        "match": ["姐姐", "蓝色"],
+        "l1": { "factKey": "b2-c05-a", "body": "我姐姐说：“我喜欢蓝色。”", "kind": "preference", "evidence": "我姐姐说：“我喜欢蓝色。”" }
+      },
+      "b": {
+        "prelude": [],
+        "utterance": "我喜欢蓝色。",
+        "match": ["蓝色"],
+        "privateMarker": "PRIVATE-B-C05-7F3A",
+        "privateMarkerUtterance": "私人提醒：PRIVATE-B-C05-7F3A，只是记给我自己，不用记住。",
+        "l1": { "factKey": "b2-c05-b", "body": "我喜欢蓝色。", "kind": "preference", "evidence": "我喜欢蓝色。" }
+      },
+      "operation": {
+        "text": "不是蓝色，我姐姐更喜欢绿色，请帮我改过来。",
+        "action": "correct",
+        "targetNeedle": "姐姐",
+        "excerpt": "我姐姐更喜欢绿色",
+        "evidence": "请帮我改过来"
+      }
+    },
+    {
+      "id": "C06",
+      "goal": "negative_source06_uncertain",
+      "expected": { "relation": "uncertain", "effect": "no_propagate", "candidates": 1, "aBodyTokens": ["绿色"] },
+      "a": {
+        "prelude": [],
+        "utterance": "她喜欢蓝色。",
+        "match": ["她", "蓝色"],
+        "l1": { "factKey": "b2-c06-a", "body": "她喜欢蓝色。", "kind": "preference", "evidence": "她喜欢蓝色。" }
+      },
+      "b": {
+        "prelude": [],
+        "utterance": "我喜欢蓝色。",
+        "match": ["蓝色"],
+        "privateMarker": "PRIVATE-B-C06-7F3A",
+        "privateMarkerUtterance": "私人提醒：PRIVATE-B-C06-7F3A，只是记给我自己，不用记住。",
+        "l1": { "factKey": "b2-c06-b", "body": "我喜欢蓝色。", "kind": "preference", "evidence": "我喜欢蓝色。" }
+      },
+      "operation": {
+        "text": "不是蓝色，她更喜欢绿色，请帮我改过来。",
+        "action": "correct",
+        "targetNeedle": "她",
+        "excerpt": "她更喜欢绿色",
+        "evidence": "请帮我改过来"
+      }
+    },
+    {
+      "id": "C07",
+      "goal": "negative_source11_uncertain",
+      "expected": { "relation": "uncertain", "effect": "no_propagate", "candidates": 1, "aBodyTokens": ["热闹"] },
+      "a": {
+        "prelude": [],
+        "utterance": "我喜欢安静的环境。",
+        "match": ["安静"],
+        "l1": { "factKey": "b2-c07-a", "body": "我喜欢安静的环境。", "kind": "preference", "evidence": "我喜欢安静的环境。" }
+      },
+      "b": {
+        "prelude": [],
+        "utterance": "我喜欢一个人待着。",
+        "match": ["一个人", "独处", "待着"],
+        "privateMarker": "PRIVATE-B-C07-7F3A",
+        "privateMarkerUtterance": "私人提醒：PRIVATE-B-C07-7F3A，只是记给我自己，不用记住。",
+        "l1": { "factKey": "b2-c07-b", "body": "我喜欢一个人待着。", "kind": "preference", "evidence": "我喜欢一个人待着。" }
+      },
+      "operation": {
+        "text": "不是安静环境，我更喜欢热闹一点，请帮我改过来。",
+        "action": "correct",
+        "targetNeedle": "安静",
+        "excerpt": "我更喜欢热闹一点",
+        "evidence": "请帮我改过来"
+      }
+    },
+    {
+      "id": "C08",
+      "goal": "negative_time",
+      "expected": { "relation": "different", "relationModel": "not_exercised", "effect": "no_propagate", "candidates": 0, "aBodyTokens": ["绿茶"] },
+      "a": {
+        "prelude": [],
+        "utterance": "我平时最爱喝红茶。",
+        "match": ["红茶", "平时"],
+        "l1": { "factKey": "b2-c08-a", "body": "我平时最爱喝红茶。", "kind": "preference", "evidence": "我平时最爱喝红茶。" }
+      },
+      "b": {
+        "prelude": [],
+        "utterance": "我在2024年5月1日品尝过红茶。",
+        "match": ["2024", "品尝"],
+        "privateMarker": "PRIVATE-B-C08-7F3A",
+        "privateMarkerUtterance": "私人提醒：PRIVATE-B-C08-7F3A，只是记给我自己，不用记住。",
+        "l1": { "factKey": "b2-c08-b", "body": "我在2024年5月1日品尝过红茶。", "kind": "experience", "evidence": "我在2024年5月1日品尝过红茶。" }
+      },
+      "operation": {
+        "text": "不是红茶，我平时更爱喝绿茶，请帮我改过来。",
+        "action": "correct",
+        "targetNeedle": "红茶",
+        "excerpt": "我平时更爱喝绿茶",
+        "evidence": "请帮我改过来"
+      }
+    },
+    {
+      "id": "C09",
+      "goal": "negative_negation",
+      "expected": { "relation": "different", "effect": "no_propagate", "candidates": 1, "aBodyTokens": ["游泳"] },
+      "a": {
+        "prelude": [],
+        "utterance": "我喜欢爬山。",
+        "match": ["爬山"],
+        "l1": { "factKey": "b2-c09-a", "body": "我喜欢爬山。", "kind": "preference", "evidence": "我喜欢爬山。" }
+      },
+      "b": {
+        "prelude": [],
+        "utterance": "我不喜欢爬山。",
+        "match": ["不喜欢", "爬山"],
+        "privateMarker": "PRIVATE-B-C09-7F3A",
+        "privateMarkerUtterance": "私人提醒：PRIVATE-B-C09-7F3A，只是记给我自己，不用记住。",
+        "l1": { "factKey": "b2-c09-b", "body": "我不喜欢爬山。", "kind": "preference", "evidence": "我不喜欢爬山。" }
+      },
+      "operation": {
+        "text": "不是爬山，我更喜欢游泳，请帮我改过来。",
+        "action": "correct",
+        "targetNeedle": "爬山",
+        "excerpt": "我更喜欢游泳",
+        "evidence": "请帮我改过来"
+      }
+    },
+    {
+      "id": "C10",
+      "goal": "negative_participant",
+      "expected": { "relation": "uncertain", "effect": "no_propagate", "candidates": 1, "aBodyTokens": ["烟花"] },
+      "a": {
+        "prelude": [],
+        "utterance": "我们昨天去看流星了。",
+        "match": ["流星"],
+        "l1": { "factKey": "b2-c10-a", "body": "我们昨天去看流星了。", "kind": "experience", "evidence": "我们昨天去看流星了。" }
+      },
+      "b": {
+        "prelude": [],
+        "utterance": "我们昨天一起看了流星。",
+        "match": ["流星", "一起"],
+        "privateMarker": "PRIVATE-B-C10-7F3A",
+        "privateMarkerUtterance": "私人提醒：PRIVATE-B-C10-7F3A，只是记给我自己，不用记住。",
+        "l1": { "factKey": "b2-c10-b", "body": "我们昨天一起看了流星。", "kind": "experience", "evidence": "我们昨天一起看了流星。" }
+      },
+      "operation": {
+        "text": "不是看流星，我们昨天去看烟花了，请帮我改过来。",
+        "action": "correct",
+        "targetNeedle": "流星",
+        "excerpt": "我们昨天去看烟花了",
+        "evidence": "请帮我改过来"
+      }
+    },
+    {
+      "id": "C11",
+      "goal": "negative_same_kind_year",
+      "expected": { "relation": "different", "effect": "no_propagate", "candidates": 1, "aBodyTokens": ["烟花", "2023"] },
+      "a": {
+        "prelude": [],
+        "utterance": "我在2023年看过流星雨。",
+        "match": ["2023", "流星雨"],
+        "l1": { "factKey": "b2-c11-a", "body": "我在2023年看过流星雨。", "kind": "experience", "evidence": "我在2023年看过流星雨。" }
+      },
+      "b": {
+        "prelude": [],
+        "utterance": "我在2024年看过流星雨。",
+        "match": ["2024", "流星雨"],
+        "privateMarker": "PRIVATE-B-C11-7F3A",
+        "privateMarkerUtterance": "私人提醒：PRIVATE-B-C11-7F3A，只是记给我自己，不用记住。",
+        "l1": { "factKey": "b2-c11-b", "body": "我在2024年看过流星雨。", "kind": "experience", "evidence": "我在2024年看过流星雨。" }
+      },
+      "operation": {
+        "text": "不是流星雨，我在2023年看的是烟花，请帮我改过来。",
+        "action": "correct",
+        "targetNeedle": "流星雨",
+        "excerpt": "我在2023年看的是烟花",
+        "evidence": "请帮我改过来"
+      }
+    }
+  ]
+}

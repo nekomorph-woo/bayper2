@@ -1431,6 +1431,7 @@ function createChatService({
         currentCharacterId: request.characterId,
         userText,
         recentText: operationContext.recentText,
+        nowMs: currentMs(),
       });
 
       const operation = operationPlan.kind === "execute" ? operationPlan.operation : null;

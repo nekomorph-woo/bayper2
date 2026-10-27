@@ -38,6 +38,36 @@ const OTHER_TEMPORAL =
   /(?:昨天|前天|上周|上个月|去年|以前|之前|那时|当时|明天|明日|后天|大后天|本周|这周|下周|周末|月底|下个月|以后|将来|过几天|过阵子|早上|上午|中午|下午|傍晚|晚上|夜里|深夜|凌晨|白天|周一|周二|周三|周四|周五|周六|周日|周天|下个星期|这个星期|上个星期|待会儿|一会儿|过会儿)/u;
 const REQUEST_FRAME =
   /(?:请|帮我|帮忙|麻烦|拜托|能不能|能否|可不可以|让你|愿意)/u;
+/* 经历的事件时间与偏好的有效期不同：只有明确已发生的过去事件才允许
+   走 replace；未来、当前年、模糊持续期仍由既有澄清路径处理。 */
+const EXPLICIT_PAST_EVENT =
+  /(?:昨天|前天|上周|上个月|去年|以前|之前|当时|那时)/u;
+const FUTURE_TIME =
+  /(?:明天|明日|后天|大后天|明年|下周|下个月|以后|将来|过几天|过阵子|待会儿|一会儿|过会儿)/u;
+/* 经验类正文里的未来计划语气；若同一句还有明确过去时间，仍按过去经历处理。 */
+const FUTURE_PLAN = /(?:打算|计划|准备|将要|即将)/u;
+const COMPLETED_EVENT = /(?:了|过|已经|刚刚|刚|曾)/u;
+const YEAR_TOKEN = /(\d{4})年/gu;
+function yearsIn(text) {
+  YEAR_TOKEN.lastIndex = 0;
+  return [...String(text).matchAll(YEAR_TOKEN)].map((match) => Number(match[1]));
+}
+function yearOf(nowMs) {
+  const date = new Date(nowMs);
+  return Number.isNaN(date.getTime()) ? null : date.getFullYear();
+}
+/* 当前年与未来年份都不能证明是已发生事件；年份混在句中任一处也按未来处理。 */
+function hasFutureTime(text, nowYear) {
+  if (hasMatch(FUTURE_TIME, text)) return true;
+  const years = yearsIn(text);
+  return years.length > 0 && (nowYear === null || years.some((year) => year >= nowYear));
+}
+function explicitPastEvent(text, nowYear) {
+  if (hasFutureTime(text, nowYear)) return false;
+  if (hasMatch(EXPLICIT_PAST_EVENT, text)) return true;
+  const years = yearsIn(text);
+  return nowYear !== null && years.length > 0 && years.every((year) => year < nowYear);
+}
 const LEADING_CONNECTOR = /^(?:也|再|然后|并且|而且|同时|还有|另外|所以)/u;
 const SELF_PREFIX =
   /^(?:只你|只有你|就你|仅你|你自己|只让|仅让|只在你|仅在你)/u;
@@ -48,6 +78,19 @@ const NEGATED_BEFORE = /(?:不|别|没|未|勿|无需|不必|不用|不是|没�
 const NEGATED_COMMAND_BEFORE = /(?:不是|没有|没)让你.{0,2}$/u;
 const CLAUSE_SPLIT = /[。！？!?；;，,\n]+/u;
 const EXPLICIT_CORRECTION = /不是[^。！？!?；;\n]{1,30}?(?:而是|是)/u;
+/* 经历更正仍须指向用户本人。明确在讲别人的内容不能改写成用户经历；
+   这里只识别第三人称代词和“我/我的 + 常见关系称谓”，不引入分词器。
+   “不是我，是……”是用户明确改正主体，另由 explicitSubjectCorrection 放行。 */
+const RELATION_NOUN =
+  /(?:爸|妈|父|母|哥|姐|弟|妹|爷|奶|姥|叔|姨|舅|姑|伯|婶|嫂|家人|亲戚|朋友|同事|同学|老师|领导|老板|室友|邻居|对象|男友|女友|男朋友|女朋友|老公|老婆|丈夫|妻子|儿子|女儿|孩子)/u;
+const OTHER_SUBJECT = new RegExp(
+  `^(?:他|她|他们|她们|别人|人家|(?:我|用户)(?:的)?${RELATION_NOUN.source})`,
+  "u",
+);
+const SELF_SUBJECT = /^(?:我|我们|咱们|用户|自己|本人)/u;
+const LEADING_FILLER = /^(?:其实|就是|而是|是)/u;
+const LEADING_TIME =
+  /^(?:(?:在)?\d{4}年|今天|今日|今晚|今夜|昨天|前天|上周|上个月|去年|以前|之前|当时|那时|最近|近来|这几天|这阵子|现在|目前|早上|上午|中午|下午|傍晚)/u;
 
 const REPLIES = Object.freeze({
   notProcessed: "我这次没有改动任何记忆。",
@@ -56,6 +99,8 @@ const REPLIES = Object.freeze({
     "这句话里包含不止一个操作，我这次先不改动记忆；你想先纠正、忘记、禁止分享，还是只留给当前角色记得哪一件事？",
   temporalClarification:
     "你说的这个时间范围我还不确定，先不改动长期记忆；能说清楚是今天，还是到什么时候吗？",
+  subjectClarification:
+    "这句话不是明确在说你自己的经历，我先没有改动你的记忆；如果要更正的是你自己的经历，请明确说“不是我，是……”。",
   uncertaintyClarification:
     "这句话里有不确定的表达，我先不把它记成确定事实；你能确认一下具体意思吗？",
   relayClarification:
@@ -251,6 +296,41 @@ function explicitCorrectionOf(text) {
     }
   }
   return null;
+}
+
+/* 逐分句判断主体，跳过“不是看流星”这类没有主体的否定分句；
+   无法从明确代词或关系称谓判断时返回 unknown，不擅自补主体。 */
+function subjectKindOf(text) {
+  for (const clause of String(text).split(CLAUSE_SPLIT)) {
+    const core = normalizeGrounding(clause)
+      .replace(LEADING_FILLER, "")
+      .replace(LEADING_TIME, "")
+      .replace(LEADING_FILLER, "");
+    if (OTHER_SUBJECT.test(core)) return "other";
+    if (SELF_SUBJECT.test(core)) return "self";
+  }
+  return "unknown";
+}
+
+/* 只有“不是我/我们/用户”后直接转折或紧接“是”才算主体更正；
+   “不是我之前说的那件事，是……”是在换话题，不能据此放行。 */
+function explicitSubjectCorrection(text) {
+  return /不是(?:我们|我|用户)\s*(?:[，,。；;]\s*)?(?:而是|是)/u.test(String(text));
+}
+
+/* 省略主语时，只有本轮明确否定旧事实里的具体内容，才能认定仍指同一条
+   已证实经历；否则主体未知，先澄清。 */
+function negatesOldContent(oldBody, text) {
+  const oldTokens = substantiveTokensOf(oldBody).filter((token) => token.length >= 2);
+  const plain = String(text);
+  return oldTokens.some((token) => {
+    let index = plain.indexOf(token);
+    while (index !== -1) {
+      if (/不是[^。！？!?；;\n]{0,8}$/u.test(plain.slice(0, index))) return true;
+      index = plain.indexOf(token, index + 1);
+    }
+    return false;
+  });
 }
 
 /* 返回本轮原话中实际成立的命令；普通叙述“我忘了带钥匙”没有请求框架，
@@ -603,14 +683,25 @@ function validEvidence(action, evidence, userText, authorizedText) {
 
 /* 纠正正文必须是一个完整的安全分句，而不是模型改写的摘要。
    这样主体、否定、不确定词和时效词都来自用户原话。 */
-function temporalOf(text) {
-  return hasMatch(VAGUE, text)
-    ? "vague"
-    : hasMatch(TODAY, text) && !hasMatch(EARLY_DAY, text)
-      ? "today"
-      : hasMatch(TODAY, text) || hasMatch(OTHER_TEMPORAL, text)
-        ? "vague"
-        : "none";
+function temporalOf(text, kind, nowYear) {
+  if (hasMatch(VAGUE, text)) return "vague";
+  // 未来时间优先于“今天 + 了/已经”：今天的计划不能当成已发生经历。
+  if (hasFutureTime(text, nowYear)) return "vague";
+  if (
+    kind === "experience" &&
+    hasMatch(FUTURE_PLAN, text) &&
+    !hasMatch(EXPLICIT_PAST_EVENT, text)
+  ) {
+    return "vague";
+  }
+  if (hasMatch(TODAY, text) && !hasMatch(EARLY_DAY, text)) {
+    return kind === "experience" && hasMatch(COMPLETED_EVENT, text) ? "event" : "today";
+  }
+  const years = yearsIn(text);
+  if (hasMatch(TODAY, text) || hasMatch(OTHER_TEMPORAL, text) || years.length > 0) {
+    return kind === "experience" && explicitPastEvent(text, nowYear) ? "event" : "vague";
+  }
+  return "none";
 }
 
 /* excerpt 只是模型指到新内容的位置；本地用包含它的完整内容分句
@@ -669,7 +760,7 @@ function substantiveTokensOf(text) {
   );
 }
 
-function correctionBody({ anchor, clauses }) {
+function correctionBody({ anchor, clauses, kind, nowYear }) {
   if (substantiveTokensOf(anchor.text).length === 0) {
     return clauses.some((clause) => hasMatch(UNCERTAINTY, clause))
       ? { needsClarification: true }
@@ -695,7 +786,7 @@ function correctionBody({ anchor, clauses }) {
   return {
     body,
     trust: hasMatch(UNCERTAINTY, body) ? "inferred" : "stated",
-    temporal: temporalOf(body),
+    temporal: temporalOf(body, kind, nowYear),
   };
 }
 
@@ -711,6 +802,7 @@ function planOperation({
   currentCharacterId = null,
   userText,
   recentText,
+  nowMs = null,
 }) {
   if (intent.reason === "multiple_actions") {
     return { kind: "respond", reply: REPLIES.multipleActions };
@@ -774,7 +866,27 @@ function planOperation({
     if (resolved.target !== target.target) {
       return { kind: "respond", reply: REPLIES.notProcessed };
     }
-    const info = correctionBody({ anchor, clauses: intent.clauses });
+    /* 用户自己的经历不能被“别人的事”覆盖；明确主体更正才放行。
+       新内容主体未知且没有否定旧事实内容时，同样先澄清。 */
+    if (
+      target.entry.kind === "experience" &&
+      subjectKindOf(target.entry.body) === "self"
+    ) {
+      const newSubject = subjectKindOf(anchor.text);
+      const intentText = intent.clauses.join(" ");
+      const explicit = explicitSubjectCorrection(intentText);
+      const unknown = newSubject === "unknown" &&
+        !negatesOldContent(target.entry.body, intentText);
+      if ((newSubject === "other" && !explicit) || unknown) {
+        return { kind: "respond", reply: REPLIES.subjectClarification };
+      }
+    }
+    const info = correctionBody({
+      anchor,
+      clauses: intent.clauses,
+      kind: target.entry.kind,
+      nowYear: yearOf(nowMs),
+    });
     if (!info) {
       return { kind: "respond", reply: REPLIES.notProcessed };
     }

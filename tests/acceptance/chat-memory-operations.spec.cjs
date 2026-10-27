@@ -1027,6 +1027,288 @@ test("POL-CHATMEM-001 “最近”期限不明确时最小澄清，不发明天�
   assert.equal(countRows(store.dbPath, "memory_entries"), entriesBefore);
 });
 
+function seedOperationFact(store, { factKey, body, kind }) {
+  store.memory.remember({ characterId: "a", factKey, body, kind, sourceId: `seed-${factKey}` });
+}
+
+async function sendOperation(
+  ctx,
+  {
+    factKey,
+    text,
+    excerpt,
+    needle,
+    target,
+    requestId,
+    operation = true,
+    evidence = "请帮我改过来",
+  },
+) {
+  const { store, server } = ctx;
+  const conversation = openConversation(store);
+  if (operation) {
+    server.enqueue(({ body, res }) => sendEnvelope(res, {
+      reply: "已经更新。",
+      memoryCandidates: [],
+      memoryOperation: {
+        action: "correct",
+        target: target ?? targetFromRequest(body, needle),
+        excerpt,
+        evidence,
+      },
+    }));
+  } else {
+    server.enqueue(({ res }) => sendEnvelope(res, {
+      reply: "我记下了。", memoryCandidates: [], memoryOperation: null,
+    }));
+  }
+  const before = entryOf(store, "a", factKey);
+  const result = await store.chat.sendMessage({
+    characterId: "a", conversationId: conversation.id, text, requestId,
+  });
+  return { result, before, after: entryOf(store, "a", factKey) };
+}
+
+test("POL-CHATMEM-001 昨日已完成经历更正走 replace，不进入临时偏好", async (t) => {
+  const ctx = await setupContext(t, "POL-CHATMEM-001-yesterday-experience");
+  seedOperationFact(ctx.store, { factKey: "exp.meteor", body: "我们昨天去看流星了", kind: "experience" });
+  const { result, before, after } = await sendOperation(ctx, {
+    factKey: "exp.meteor",
+    text: "不是看流星，我们昨天去看烟花了，请帮我改过来。",
+    excerpt: "我们昨天去看烟花了",
+    needle: "流星",
+    requestId: "yesterday-experience",
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.reply.includes("时间范围我还不确定"), false);
+  assert.match(after.body, /烟花/u);
+  assert.equal(after.kind, "experience");
+  assert.ok(after.version > before.version);
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+  assert.equal(
+    ctx.store.memory.listMemories("a").some((entry) => entry.factKey.includes(".current.")),
+    false,
+  );
+});
+
+test("POL-CHATMEM-001 今日已完成经历走 replace，不当作今日临时偏好", async (t) => {
+  const ctx = await setupContext(t, "POL-CHATMEM-001-today-experience");
+  seedOperationFact(ctx.store, { factKey: "exp.today", body: "今天我去看了流星", kind: "experience" });
+  const { result, before, after } = await sendOperation(ctx, {
+    factKey: "exp.today",
+    text: "不是流星，今天我去看了烟花，请帮我改过来。",
+    excerpt: "今天我去看了烟花",
+    needle: "流星",
+    requestId: "today-experience",
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.reply.includes("时间范围我还不确定"), false);
+  assert.match(after.body, /烟花/u);
+  assert.ok(after.version > before.version);
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+});
+
+test("POL-CHATMEM-001 今日偏好仍进入 temporary，长期不变", async (t) => {
+  const ctx = await setupContext(t, "POL-CHATMEM-001-today-preference");
+  seedOperationFact(ctx.store, { factKey: "pref.coffee", body: "用户喜欢咖啡", kind: "preference" });
+  const { result, after } = await sendOperation(ctx, {
+    factKey: "pref.coffee",
+    text: "不是咖啡，我今天想喝茶，请帮我改过来。",
+    excerpt: "我今天想喝茶",
+    needle: "咖啡",
+    requestId: "today-preference",
+  });
+  assert.equal(result.status, "completed");
+  const temp = temporaryEntryOf(ctx.store, "a");
+  assert.ok(temp, "今日偏好仍应写入临时 current");
+  assert.match(temp.body, /茶/u);
+  assert.equal(after.body, "用户喜欢咖啡");
+  assert.equal(after.version, 1);
+});
+
+test("POL-CHATMEM-001 模糊/未来时间与未来年份仍澄清，不永久改写", async (t) => {
+  const ctx = await setupContext(t, "POL-CHATMEM-001-future-temporal");
+  seedOperationFact(ctx.store, { factKey: "pref.coffee", body: "用户喜欢咖啡", kind: "preference" });
+  seedOperationFact(ctx.store, { factKey: "exp.meteor", body: "我在2023年看过流星雨", kind: "experience" });
+  const cases = [
+    { text: "不是咖啡，我以后想喝茶，请帮我改过来。", excerpt: "我以后想喝茶", needle: "咖啡", factKey: "pref.coffee" },
+    { text: "不是咖啡，我最近想喝茶，请帮我改过来。", excerpt: "我最近想喝茶", needle: "咖啡", factKey: "pref.coffee" },
+    { text: "不是流星雨，我在2027年看的是烟花，请帮我改过来。", excerpt: "我在2027年看的是烟花", needle: "流星雨", factKey: "exp.meteor" },
+    { text: "不是流星雨，今天我们已经约好明天去看烟花，请帮我改过来。", excerpt: "今天我们已经约好明天去看烟花", needle: "流星雨", factKey: "exp.meteor" },
+    { text: "不是流星雨，今天我们已经约好2027年去看烟花，请帮我改过来。", excerpt: "今天我们已经约好2027年去看烟花", needle: "流星雨", factKey: "exp.meteor" },
+    { text: "不是流星雨，昨天我们约好2027年去看烟花，请帮我改过来。", excerpt: "昨天我们约好2027年去看烟花", needle: "流星雨", factKey: "exp.meteor" },
+  ];
+  for (const [index, item] of cases.entries()) {
+    const { result } = await sendOperation(ctx, {
+      factKey: item.factKey, text: item.text, excerpt: item.excerpt, needle: item.needle,
+      requestId: `future-temporal-${index}`,
+    });
+    assert.equal(result.status, "completed");
+    assert.match(result.reply, /时间范围我还不确定/u);
+  }
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee").body, "用户喜欢咖啡");
+  assert.equal(entryOf(ctx.store, "a", "exp.meteor").body, "我在2023年看过流星雨");
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+});
+
+test("POL-CHATMEM-001 非明确纠正即使模型提出 correct 也不执行", async (t) => {
+  const ctx = await setupContext(t, "POL-CHATMEM-001-not-explicit");
+  seedOperationFact(ctx.store, { factKey: "exp.meteor", body: "我们昨天去看流星了", kind: "experience" });
+  const { result, after } = await sendOperation(ctx, {
+    factKey: "exp.meteor",
+    text: "我们昨天去看烟花了",
+    excerpt: "我们昨天去看烟花了",
+    evidence: "我们昨天去看烟花了",
+    needle: "流星",
+    target: "M1",
+    requestId: "not-explicit-correction",
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(after.body, "我们昨天去看流星了");
+  assert.equal(after.version, 1);
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+});
+
+test("POL-CHATMEM-001 不同主体不写用户经历", async (t) => {
+  const ctx = await setupContext(t, "POL-CHATMEM-001-different-subject");
+  seedOperationFact(ctx.store, { factKey: "exp.meteor", body: "我们昨天去看流星了", kind: "experience" });
+  const { result, after } = await sendOperation(ctx, {
+    factKey: "exp.meteor",
+    text: "我姐姐昨天去看烟花了，请帮我改过来。",
+    excerpt: "我姐姐昨天去看烟花了",
+    needle: "流星",
+    requestId: "different-subject",
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(after.body, "我们昨天去看流星了");
+  assert.equal(after.version, 1);
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+});
+
+test("POL-CHATMEM-001 其他主体表达同样不写用户经历", async (t) => {
+  const ctx = await setupContext(t, "POL-CHATMEM-001-other-subjects");
+  seedOperationFact(ctx.store, { factKey: "exp.meteor", body: "我们昨天去看流星了", kind: "experience" });
+  const cases = [
+    { text: "我同事昨天去看烟花了，请帮我改过来。", excerpt: "我同事昨天去看烟花了" },
+    { text: "她昨天去看烟花了，请帮我改过来。", excerpt: "她昨天去看烟花了" },
+  ];
+  for (const [index, item] of cases.entries()) {
+    const { result, after } = await sendOperation(ctx, {
+      factKey: "exp.meteor",
+      text: item.text,
+      excerpt: item.excerpt,
+      needle: "流星",
+      requestId: `other-subject-${index}`,
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(after.body, "我们昨天去看流星了");
+    assert.equal(after.version, 1);
+    assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+  }
+});
+
+test("POL-CHATMEM-001 明确纠正主体时允许更新用户经历", async (t) => {
+  const ctx = await setupContext(t, "POL-CHATMEM-001-explicit-subject");
+  seedOperationFact(ctx.store, { factKey: "exp.meteor", body: "我们昨天去看流星了", kind: "experience" });
+  const { result, before, after } = await sendOperation(ctx, {
+    factKey: "exp.meteor",
+    text: "不是我，是我姐姐昨天去看烟花了，请帮我改过来。",
+    excerpt: "我姐姐昨天去看烟花了",
+    needle: "流星",
+    requestId: "explicit-subject-correction",
+  });
+  assert.equal(result.status, "completed");
+  assert.match(after.body, /烟花/u);
+  assert.ok(after.version > before.version);
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+});
+
+test("POL-CHATMEM-001 改话题不覆盖已证实的用户经历", async (t) => {
+  const ctx = await setupContext(t, "POL-CHATMEM-001-topic-change");
+  seedOperationFact(ctx.store, { factKey: "exp.meteor", body: "我们昨天去看流星了", kind: "experience" });
+  const { result, after } = await sendOperation(ctx, {
+    factKey: "exp.meteor",
+    text: "不是我之前说的那件事，是我姐姐昨天去看烟花了，请帮我改过来。",
+    excerpt: "我姐姐昨天去看烟花了",
+    needle: "流星",
+    requestId: "topic-change-subject",
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(after.body, "我们昨天去看流星了");
+  assert.equal(after.version, 1);
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+  assert.equal(result.reply.includes("已按你给的原话更新"), false);
+});
+
+test("POL-CHATMEM-001 未知主体不覆盖已证实的用户经历", async (t) => {
+  const ctx = await setupContext(t, "POL-CHATMEM-001-unknown-subject");
+  seedOperationFact(ctx.store, { factKey: "exp.meteor", body: "用户昨天去看流星了", kind: "experience" });
+  const { result, after } = await sendOperation(ctx, {
+    factKey: "exp.meteor",
+    text: "小明昨天去看烟花了，请帮我改过来。",
+    excerpt: "小明昨天去看烟花了",
+    needle: "流星",
+    requestId: "unknown-subject-guard",
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(after.body, "用户昨天去看流星了");
+  assert.equal(after.version, 1);
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+  assert.equal(result.reply.includes("已按你给的原话更新"), false);
+});
+
+test("POL-CHATMEM-001 省略主语的同类事件更正仍可更新", async (t) => {
+  const ctx = await setupContext(t, "POL-CHATMEM-001-elliptical-correction");
+  seedOperationFact(ctx.store, { factKey: "exp.meteor", body: "我们昨天去看流星了", kind: "experience" });
+  const { result, before, after } = await sendOperation(ctx, {
+    factKey: "exp.meteor",
+    text: "不是看流星，是看烟花，请帮我改过来。",
+    excerpt: "是看烟花",
+    needle: "流星",
+    requestId: "elliptical-correction",
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.reply.includes("别人的事"), false);
+  assert.match(after.body, /烟花/u);
+  assert.ok(after.version > before.version);
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+});
+
+test("POL-CHATMEM-001 同主体我/用户经历更正保持 replace", async (t) => {
+  const cases = [
+    {
+      name: "self",
+      factKey: "exp.meteorSelf",
+      body: "我昨天去看流星了",
+      text: "不是流星，我昨天去看烟花了，请帮我改过来。",
+      excerpt: "我昨天去看烟花了",
+    },
+    {
+      name: "user",
+      factKey: "exp.meteorUser",
+      body: "用户昨天去看了极光",
+      text: "不是极光，用户昨天去看烟花了，请帮我改过来。",
+      excerpt: "用户昨天去看烟花了",
+      needle: "极光",
+    },
+  ];
+  for (const item of cases) {
+    const ctx = await setupContext(t, `POL-CHATMEM-001-self-subject-${item.name}`);
+    seedOperationFact(ctx.store, { factKey: item.factKey, body: item.body, kind: "experience" });
+    const { result, before, after } = await sendOperation(ctx, {
+      factKey: item.factKey,
+      text: item.text,
+      excerpt: item.excerpt,
+      needle: item.needle ?? "流星",
+      requestId: `self-subject-${item.name}`,
+    });
+    assert.equal(result.status, "completed");
+    assert.match(after.body, /烟花/u);
+    assert.ok(after.version > before.version);
+    assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+  }
+});
+
 test("POL-CHATMEM-002 默认忘记删除 A/B、旧来源与 FTS 不能恢复，无关记录不变", async (t) => {
   const ctx = await setupContext(t, "POL-CHATMEM-002-all");
   const { store, server } = ctx;

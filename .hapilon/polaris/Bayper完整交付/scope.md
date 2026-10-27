@@ -76,7 +76,15 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 
 工具组织REQ-41贯穿所有切片：现有SQLite/造型目录工具是已存在能力，新增项目工具仍须自包含审查，不将此横向约束标作一次性完成。
 
-## 当前阶段：S03m temporary/forget 生命周期与 Electron GUI 有限能力已受托接受；下一步接真实模型 L1/L2（2026-10-27 r54）
+## 当前阶段：S03m B2 C10 事件时间/主体授权有限修复与 B2 工具 dry 能力已受托接受；下一步真实模型 L1/L2（2026-10-27 r61）
+
+master 实际审查最终 diff 并独立稳定复验 `master-c10-stable-oC19XDFt`：tests **130/130 pass、0 skip、exit 0**，L1/L2 dry 各 **11 DRY-RUN、exit 0**，before/after 完全一致，22 个临时路径无残留。据此**受托接受本批已测 C10 事件时间/主体授权有限修复与 B2 工具 dry 能力**（不是用户亲自确认、不是真实模型/GUI/人类体验，不接受完整 S03/Goal）。上一 `master-c10-final-tBIvlAZo` 全绿但 before/after 变动，不作最终验收，保留说明。
+
+- 已验边界：C10 昨日/今日已完成经历 replace、未来/当前年保守澄清、同主体我/用户/我们、明确主体更正、不同/未知主体零写澄清、省略式同类更正；B2 dry L1/L2 入口/清理/预算/loopback。真实依赖为正式 store/chat/memory/SQLite；聊天/关系为构造/fixture。
+- 未覆盖：真实模型 L1/L2、正式资源、UI IPC/live、跨角色独立同义、完整 S03 与 `POL-SEMOP-001～008` 聚合；父级 S03 与 36 动画等待办全部保留；历史原 FAIL 不覆盖。
+- 本轮只改文档/版本 `0.1.197 → 0.1.198`（10 文件 11 处），待 master snap；未改代码/测试/工具逻辑、未跑测试/API/GUI、未 Git/skill、未用子代理。snap 后直接接真实模型 L1/L2，不再扩内部探针。
+
+## 历史阶段：S03m temporary/forget 生命周期与 Electron GUI 有限能力已受托接受（2026-10-27 r54）
 
 master 独立三套件 **111/111 PASS、0 skip、exit 0、before/after 一致**（[master-chat-lifecycle-EDScQrNM](evidence/master-chat-lifecycle-EDScQrNM/)）并实际查看 temporary/forget/recovery 截图；异常退出清理复验 **1/1 PASS、exit 0、无 Electron 残留**（[master-lifecycle-cleanup-fpxOn887](evidence/master-lifecycle-cleanup-fpxOn887/)）。据此**受托接受本批已测 temporary/forget 生命周期与 Electron GUI 有限能力**（不是用户亲自确认、不是人类体验、不是真实模型语义，也不接受 S03/完整 Goal）。2c-1 的 295/295、2c-2a 的 335/335、2c-2b 的 358/358 有限接受历史保留。
 
