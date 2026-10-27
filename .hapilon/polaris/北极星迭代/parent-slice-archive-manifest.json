@@ -1,0 +1,17 @@
+{
+  "archive": ".agents/skills/polaris/archived/20261027-115231-parent-slice-continuity",
+  "files": {
+    "SKILL.md": "e5893f796f32756a1914b3d75c7b15fced7d792ede5240084206d1464d521293",
+    "references/prd.md": "9c6a21317bbbd2737f20467b2fc00b79e5e5679ce23c3506e2358ec5f072dbd7",
+    "references/acceptance-plan.md": "210cf2672ab68c1ebe415397712b2c3bd5b346f3b156788b4a6f54b404d91800",
+    "references/slices.md": "d5b38afd676349fbf7c8c5aa5518b8be921ebeccf667c9aa6d796d7e27446fb5",
+    "references/execution.md": "7751a9582dd62e8a9491bc31b78910447a3e20e709d38eb5c108130b0c5214e7",
+    "references/work-records.md": "c7fb93a33ec0183bb204e041628b66aaeb1166bd63084c4d38d237d692095ad1",
+    "references/business-design.md": "1ead4df62f7c04a488acdfdb7abfe80fd0d7c8416f7d0e0f39b639d9a9d08711",
+    "references/scenario_acceptance_spec.md": "672104b304a98cdc9c94a09179cfdaa0db07b4624c221b44e63a4094f19c9f4a",
+    "references/cases.md": "f60bd25c9cdfae8dddc4b5b23e50b20c6b27ad3bdcb1a319928471f351b256af",
+    "references/experience.md": "42fd25b8e6e957796b7ae203d641a2febecd9395c82951acd1583e9e30c9cdc1",
+    "references/modes.md": "810ae900a879a5cffc506a6187cbd763c076f80342a7d993d3a84ef2e33a3d72"
+  },
+  "verified": true
+}
