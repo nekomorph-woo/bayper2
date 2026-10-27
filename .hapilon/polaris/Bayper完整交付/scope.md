@@ -76,14 +76,14 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 
 工具组织REQ-41贯穿所有切片：现有SQLite/造型目录工具是已存在能力，新增项目工具仍须自包含审查，不将此横向约束标作一次性完成。
 
-## 当前阶段：来源身份 v2 有限能力已受托接受（2026-10-27 r8）
+## 当前阶段：存量误合身份组迁移 v1 已受托确认，准备实施（2026-10-27 r9）
 
-S03 仍在实施与验收。master 独立运行 **17 套件 163/163 PASS、0 skipped、真实 exit 0**，受托接受来源身份 v2 有限能力：新独立来源同文不归组；缺身份迁移只按明确派生；显式 `associateFacts` 后管理传播；相关回归通过。真实 SQLite/chat 核心，聊天模型 HTTP 为构造；未取得 UI/真实模型/live 证据。产品未交付，非 S03/Goal 完成。
+S03 仍在实施与验收。master 联合审查通过 [s03l-identity-migration-plan.md](s03l-identity-migration-plan.md) 并受托确认 POL-MIG-001～006 v1（不是用户亲自确认）；实现未开始，evaluation 全部 NOT_COVERED。产品未交付，非 S03/Goal 完成。
 
-- 证据：`evidence/master-source-final-aYYduWmG/`；首次 35/35、前次 128/125/3 保留，失败原件未覆盖；命令与摘要见 `evidence/source-identity-v2-acceptance-20261027/`。
-- 未闭：存量已有误合身份组未迁移；异 factKey 语义纠正/删除/共享闭环、正式主题自动分享 GUI、语义模型闭环与正式资源未完成。
-- 下一最小步骤（只设计、不编码）：存量误合组安全迁移，区分可证明派生与无持久关联证据的旧组，控制不丢失，不臆测旧关联来源。
-- 完整 Goal 与 S01～S08 待办保持；本轮开发 attempt 已用新目录防覆盖与真实退出码，未改 skill。
+- 迁移范围：所有旧 identity 中无证明关联按派生/关系边分组件；控制与全部历史 alias 受保护，孤儿身份/控制/alias 原样保留；关系边持久；先全局求组件再唯一分配 identity；成员变化即递增版本/context。
+- 后续实现范围：`app/memory-identity-migration.cjs`、`app/memory-store.cjs`、`app/memory.cjs`、新 `tests/acceptance/memory-identity-migration.spec.cjs`；先写 Runner 失败基线再实现，本轮不执行。
+- 此前来源身份 v2 有限能力已受托接受（17 套件 163/163）；不得据此宣称存量误合组已迁移。
+- 完整 Goal 与 S01～S08 待办保持；Polaris 审查已捕获方案错误，无需改 skill。
 
 ## 历史阶段：流程补齐已受托验收（2026-10-27 时点，保留）
 

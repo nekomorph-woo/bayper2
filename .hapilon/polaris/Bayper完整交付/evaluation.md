@@ -5,7 +5,7 @@
 本文件是当前唯一逐 Case 结果入口。各 review 保留原始判断、失败过程和长证据说明，本文只登记可定位的结果，不复制全文。状态仅用 execution.md 的五种：PASS、FAIL、ERROR、INCONCLUSIVE、NOT_COVERED；不使用 PARTIAL，也不把多个 Case 压成平均分或“最差状态”。
 
 - 分组：仅当版本、状态、证据和执行边界相同时，一个精确 ID 范围可共用一行；任一 Case 或必需子项有差异即拆行。`001～003` 只表示这些 ID 满足本行，不覆盖范围外或未执行项。
-- 版本：历史行以对应 review/evidence 的验收基线与源摘要定位，未记录 commit 的不补猜。已提交快照为 `4597953`（当时 VERSION `0.1.183`）；本批准备 VERSION `0.1.184` 待 master snap。工作区未提交 memory 源码/测试的当前 SHA 见各 attempt 的 `code-sha256.txt`；[process-freeze.json](evidence/process-freeze.json) 仅保留流程补齐时点，不再作为当前实现基线。
+- 版本：历史行以对应 review/evidence 的验收基线与源摘要定位，未记录 commit 的不补猜。已提交快照为 `1783ec8`（VERSION `0.1.184`）；本批准备 VERSION `0.1.185` 待 master snap。工作区未提交 memory 源码/测试的当前 SHA 见各 attempt 的 `code-sha256.txt`；[process-freeze.json](evidence/process-freeze.json) 仅保留流程补齐时点，不再作为当前实现基线。
 - master 已受托验收 7 个最终 Contract v1/Part A-B，GAP-14 流程补齐通过；GAP-01～14 流程处置完成（GAP-06 仅流程记录、产品修复未完成；GAP-08 原证据未找回限制保留）。master 另于 2026-10-27 受托接受**来源身份 v2 有限能力**，非 S03/Goal 完成；产品未交付。
 - 历史 PASS 只证明该验收基线，不证明当前未提交工作区。2026-10-27 master 最终 17 套件 163/163 已重跑对应领域/服务 Runner；未在该批执行的 UI、真实模型、holdout/source-live/pro 组保持历史状态与各自未覆盖边界，不写成当前通过。没有重跑就不写当前 PASS；当前工作区未验收也不能推断历史产品从未通过。
 - Runner 退出码、编译成功、开发报告全绿或 review 中的切片受托接受，均不自动升级为父级或整 Case 通过。体验记录已标明实际操作者、方法与局限；Codex 受托体验不是人类亲自体验，已有授权不要求真人重新批准。
@@ -85,6 +85,14 @@
 | POL-SOURCE-REL-001～004（v1） | PASS | 2026-10-27 source-grounding r3；当前待回归 | `memory-source-relation.spec.cjs`、`memory-relation-protocol.spec.cjs` | [s03l-source-grounding-codex.log](evidence/s03l-source-grounding-codex.log) 18/18 | 构造模型输出；抗注入/主体推断未验 |
 | POL-SOURCE-LIVE-001（01～12） | FAIL | 2026-10-27 真实 DeepSeek 单批；当前未重跑 | `tools/memory-tuning/source-probe.cjs` | [source-live-codex-v1.json](tools/memory-tuning/results/source-live-codex-v1.json) | 10 PASS/2 FAIL（06、11）；falseMerge=0、missedEquivalent=0；不证明泛化/抗注入 |
 | POL-SOURCE-ID-001～004（v1 计划） | PASS（有限能力） | 2026-10-27 master 17 套件最终批 163/163；真实 store/chat 核心、模型 HTTP 构造 | `memory-source-identity.spec.cjs` 4/4；见上方来源身份矩阵 | [master-source-final-aYYduWmG/run.log](evidence/master-source-final-aYYduWmG/run.log) | 存量已有误合组未迁移；UI/真实模型/live未验 |
+| POL-MIG-001（v1） | NOT_COVERED | 计划 master 受托确认 2026-10-27；实现未开始 | `memory-identity-migration.spec.cjs`（待实施） | 无 | 多指纹/类别旧组全量拆分；正文不变；未执行 |
+| POL-MIG-002（v1） | NOT_COVERED | 同上 | 同上 | 无 | 旧根/中间端点已删、关系边、删除不召回正文；未执行 |
+| POL-MIG-003（v1） | NOT_COVERED | 同上 | 同上 | 无 | 双组件解除隔离、重新限制再解除、forget 不解除；未执行 |
+| POL-MIG-004（v1） | NOT_COVERED | 同上 | 同上 | 无 | 新显式关联、三角色 scope:self、防回流；未执行 |
+| POL-MIG-005（v1） | NOT_COVERED | 同上 | 同上 | 无 | 跨 identity 证实/非卷入/原子重试/版本；未执行 |
+| POL-MIG-006（v1） | NOT_COVERED | 同上 | 同上 | 无 | 派生环剔除环边、单组件不变；未执行 |
+
+POL-MIG-001～006 全部 NOT_COVERED：计划 v1 已由 master 联合审查受托确认（不是用户亲自确认），实现未开始，不得写 PASS 或宣称存量误合组已迁移。
 
 #### 来源身份 v2 有限能力验收矩阵（2026-10-27 master 最终批）
 
