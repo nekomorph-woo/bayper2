@@ -417,3 +417,7 @@ master独立最新4文件158/158（新Runner29项）、exit0/0skip/SHA一致，�
 ## S03s 真实模型明确记忆：NOT_COVERED
 
 POL-REMEMBER-LIVE-001～005尚未执行；S03r构造模型结果不得填入此表。见[s03s-live-remember-plan.md](s03s-live-remember-plan.md)。
+
+## S03s真实明确记忆基线（2026-10-28）
+
+按[s03s-master-review.md](s03s-master-review.md)记录，真实deepseek-flash样本001/003/005通过，004分离候选通过但宽候选在dry中FAIL，002句号差异导致未提升FAIL。工具已独立执行，产品S03未接受；证据路径、调用预算与清理见审查记录。下一步定向修复，不改Expected消除失败。

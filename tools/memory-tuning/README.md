@@ -235,3 +235,9 @@ node tools/memory-tuning/chat-operation-probe.cjs --mode l2 --out <新文件>.js
   L1 两轮通过，L2 模型直删、两轮未覆盖，详[独立审查](../../.hapilon/polaris/Bayper完整交付/s03o-live-clarification-review.md)。
 - 证据：`.hapilon/polaris/Bayper完整交付/evidence/s03o-live-clarification/`；旧 11 Case
   原话、Expected 与输出语义不变。
+
+## 明确记住闭环基线
+
+`node tools/memory-tuning/remember-probe.cjs --out tools/memory-tuning/results/<新批次>.json`默认仅loopback构造响应。显式增加`--live`才使用根`.env`的OpenAI兼容服务；先确认`/models`实际包含deepseek-flash。Case数据在同目录remember-cases.json。每个Case独立临时SQLite，事实经真实chat产生；召回重开库并新建对话，不手工seed记忆。
+
+预算为1models+9chat，意外关系调用至多2，总HTTP不超过12；不自动重试。输出必须为新路径，保留构造请求/模型响应、SQLite/来源/隔离检查、SHA及清理结果，不保存凭据。FAIL需审查业务失败，REVIEW也不代表语义验收通过。当前基线发现重复事实句号差异无法提升与宽候选漏拦，详见Polaris S03s审查记录；历史结果不覆盖。
