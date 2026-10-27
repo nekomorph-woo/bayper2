@@ -315,6 +315,104 @@ test("POL-CHAT-008 无记忆时标注检索边界，对照例不进入记忆且�
   assert.ok(prompt.includes("想不起来"));
 });
 
+test("POL-HISTORY-001 新会话只声明真实可见的较早消息数并隔离旧会话", async (t) => {
+  const ctx = await setupChatTest(t);
+  const { store, server } = ctx;
+  const previous = store.chat.openConversation({ characterId: "rin" }).conversation;
+  server.enqueue(({ res }) => sendEnvelope(res, { reply: "旧会话回复。", memoryCandidates: [] }));
+  assert.equal((await store.chat.sendMessage({
+    characterId: "rin", conversationId: previous.id, text: "旧会话标记蓝鲸。",
+  })).status, "completed");
+
+  const current = store.chat.openConversation({ characterId: "rin" }).conversation;
+  assert.notEqual(current.id, previous.id);
+  const question = "我家的门牌是多少？";
+  server.enqueue(({ res }) => sendEnvelope(res, { reply: "这个我现在没有记录。", memoryCandidates: [] }));
+  assert.equal((await store.chat.sendMessage({
+    characterId: "rin", conversationId: current.id, text: question,
+  })).status, "completed");
+  assert.equal(server.requests.length, 2);
+
+  const request = server.requests[1];
+  const memoryContext = request.messages.filter((message) => message.role === "system")[1].content;
+  assert.match(memoryContext, /本轮没有更早的可见对话消息（不含本轮提问）/u);
+  assert.match(memoryContext, /本轮提问在最后单独提供/u);
+  assert.match(memoryContext, /未显示的内容不代表没有发生/u);
+  assert.match(memoryContext, /不能据此推断用户从未说过/u);
+  const body = JSON.stringify(request);
+  assert.equal(body.includes("旧会话标记蓝鲸"), false);
+  assert.equal(body.includes("旧会话回复"), false);
+  const userMessages = request.messages.filter((message) => message.role === "user");
+  assert.deepEqual(userMessages.map((message) => message.content), [question]);
+  assert.equal(request.messages.at(-1).content, question);
+  const stored = store.chat.getConversation({ characterId: "rin", conversationId: current.id });
+  assert.deepEqual(stored.messages.map((message) => message.content), [question, "这个我现在没有记录。"]);
+});
+
+test("POL-HISTORY-002 同会话可见历史与有效记忆仍传入且可正常回答", async (t) => {
+  const ctx = await setupChatTest(t);
+  const { store, server } = ctx;
+  const conversation = store.chat.openConversation({ characterId: "rin" }).conversation;
+  store.memory.remember({
+    characterId: "rin", factKey: "pref.visible.tea", body: "用户喜欢温茶",
+    kind: "preference", sourceId: "seed-visible-tea",
+  });
+  server.enqueue(({ res }) => sendEnvelope(res, { reply: "你好。", memoryCandidates: [] }));
+  assert.equal((await store.chat.sendMessage({
+    characterId: "rin", conversationId: conversation.id, text: "今天好。",
+  })).status, "completed");
+
+  const question = "你还记得温茶吗？";
+  server.enqueue(({ res }) => sendEnvelope(res, { reply: "记得，你喜欢温茶。", memoryCandidates: [] }));
+  assert.equal((await store.chat.sendMessage({
+    characterId: "rin", conversationId: conversation.id, text: question,
+  })).status, "completed");
+  assert.equal(server.requests.length, 2);
+
+  const request = server.requests[1];
+  const memoryContext = request.messages.filter((message) => message.role === "system")[1].content;
+  assert.match(memoryContext, /用户喜欢温茶/u);
+  assert.match(memoryContext, /本轮只提供最近 2 条较早对话消息（不含本轮提问）/u);
+  assert.match(memoryContext, /如果本轮提供的可见消息或记忆明确支持过去的事实，可以正常回答/u);
+  const body = JSON.stringify(request);
+  assert.ok(body.includes("今天好。") && body.includes("你好。"));
+  const userMessages = request.messages.filter((message) => message.role === "user");
+  assert.deepEqual(userMessages.map((message) => message.content), ["今天好。", question]);
+});
+
+test("POL-HISTORY-003 无记忆历史表达不被本地替换、裁剪或额外持久化", async (t) => {
+  const ctx = await setupChatTest(t);
+  const { store, server } = ctx;
+  const conversation = store.chat.openConversation({ characterId: "rin" }).conversation;
+  const memoryBefore = countRows(store.dbPath, "memory_entries");
+  const cases = [
+    { text: "今天好。", reply: "今天也不错。" },
+    { text: "我们之前没聊过这个吧。", reply: "嗯，我们之前没聊过这个，你愿意现在说说吗？" },
+    { text: "如果我之前没跟你说过，你会怎么想？", reply: "就算你之前没跟我说过，我也会当成新的开始。" },
+    { text: "凛说：\"你没提过这件事。\"", reply: "凛说你没提过，那我记下了。" },
+  ];
+  for (const item of cases) {
+    server.enqueue(({ res }) => sendEnvelope(res, { reply: item.reply, memoryCandidates: [] }));
+  }
+  for (const item of cases) {
+    const before = server.requests.length;
+    const result = await store.chat.sendMessage({
+      characterId: "rin", conversationId: conversation.id, text: item.text,
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(result.reply, item.reply);
+    assert.equal(server.requests.length, before + 1);
+  }
+  assert.equal(server.requests.length, cases.length);
+  assert.equal(countRows(store.dbPath, "memory_entries"), memoryBefore);
+  const stored = store.chat.getConversation({ characterId: "rin", conversationId: conversation.id });
+  const userTexts = stored.messages
+    .filter((message) => message.role === "user")
+    .map((message) => message.content);
+  assert.deepEqual(userTexts, cases.map((item) => item.text));
+  assert.equal(stored.messages.length, cases.length * 2);
+});
+
 test("POL-CHAT-002 用户明确事实写一次，助手建议与模型授权不写入", async (t) => {
   const ctx = await setupChatTest(t);
   const { store, server } = ctx;
