@@ -199,3 +199,8 @@ POL-SLEEPUI-001、002、003、004A、004B、005、005B、005C、006、007 与公
 ## S05通知连续可读补充
 
 POL-NOTIFY-UI-012 v1及回执稳定布局修订的完整契约见[s05k-notification-height-review.md](s05k-notification-height-review.md)。Runner为`tests/acceptance/desktop-notifications.spec.cjs`；复用010/011分页契约，不改变六秒业务要求。
+
+
+## S03q 普通细节上下文与淡化
+
+POL-DETAIL-001～005 v1由master受托确认，Given/When/Expected/Oracle与边界见[s03q-detail-recall-plan.md](s03q-detail-recall-plan.md)。尚未实现/执行，不预填通过。

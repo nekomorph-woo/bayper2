@@ -382,3 +382,8 @@ master独立POL-SLEEPUI-001/002/003/004A/004B/005/005B/005C/006/007共10/10 PASS
 ## S05通知高度与回执稳定布局（2026-10-28）
 
 高度漏算与回执后异步扩窗裁切分别取得实际失败，Claude最小修复后完整通知12/12；master独立010/011/012 3/3、0skip、SHA一致，完整hold范围298采样无不可见，清理无异常。受托接受已测修复，证据与历史局限见[s05k-notification-height-review.md](s05k-notification-height-review.md)。旧010无现场失败不宣称唯一因果已证实；全S05/最终原生体验仍按父级待办。
+
+
+## S03q 普通细节上下文：NOT_COVERED
+
+POL-DETAIL-001～005 v1仅完成计划，尚未执行；不能将importance保护当作自然语言“请记住”已实现。父级MEMORY-006仍未完成，见[s03q-detail-recall-plan.md](s03q-detail-recall-plan.md)。

@@ -116,3 +116,8 @@ S08 最终验收入口的 Part B 已在该 Contract 文件内按 setup/driver/ob
 ## S05通知高度与回执布局回归
 
 使用`node --test --test-concurrency=1 --test-timeout=240000 tests/acceptance/desktop-notifications.spec.cjs`执行12项。master独立聚焦010/011/012，来源/边界/证据及受托结论见[s05k-notification-height-review.md](s05k-notification-height-review.md)。真实隔离Herdr/Electron/SQLite，不调用模型或用户会话。
+
+
+## S03q 普通细节上下文
+
+技术及验收联合计划见[s03q-detail-recall-plan.md](s03q-detail-recall-plan.md)，master已受托批准首片；真实SQLite/chat、本地HTTP构造模型，先缺失基线后实现，独立Case Runner；自然语言明确记住、自动整理及真实模型为后续必做。
