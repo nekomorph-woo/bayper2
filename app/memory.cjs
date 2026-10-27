@@ -271,10 +271,15 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     return [...identityIds].sort();
   }
 
-  /* 禁分享按身份判范围；无法定位身份的历史控制仅在仍是孤儿时按旧键兼容。 */
+  /* 禁分享按身份判范围；拆分身份只看自身控制，非拆分保持同指纹整组保守
+     检查；无法定位身份的孤儿旧键仍按既有兼容边界阻断。 */
   function isShareRestricted(entry) {
+    const ownIdentity = entry.factIdentityId ?? null;
+    const identityIds = ownIdentity && store.isSplitIdentity(ownIdentity)
+      ? [ownIdentity]
+      : relatedIdentityIds(entry);
     if (
-      relatedIdentityIds(entry).some((identityId) =>
+      identityIds.some((identityId) =>
         store.hasShareIdentityControl(identityId),
       )
     ) {
@@ -1045,6 +1050,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
           updatedAt: nowMs,
         };
         store.insertEntry(entry, tokenizeForIndex(entry.body));
+        store.insertRelationEdge(original.id, entry.id, "share", nowMs);
         shared.push({ sourceEntryId: original.id, entryId: entry.id, alreadyHeld: false });
         created += 1;
       }
@@ -1167,6 +1173,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
           updatedAt: nowMs,
         };
         store.insertEntry(entry, tokenizeForIndex(entry.body));
+        store.insertRelationEdge(original.id, entry.id, "relay", nowMs);
         shared.push({ sourceEntryId: original.id, entryId: entry.id, alreadyHeld: false });
         created += 1;
       }
@@ -1216,6 +1223,11 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       const held = selectedHeldEntry(input, characterId);
       const identityId = identityOfEntry(held, nowMs);
       const hash = factKeyHash(held.factKey);
+      // 迁移拆分出的身份只解除自己的 share 控制；不删除其他组件控制。
+      if (store.isSplitIdentity(identityId)) {
+        const lifted = store.removeShareIdentityControl(identityId);
+        return { factKeyHash: hash, lifted, holders: holdersOfIdentity(identityId) };
+      }
       // 歧义指纹关联多个受限身份时不能挑一个解除；保守保持原限制。
       const relatedRestricted = relatedIdentityIds(held).filter((id) =>
         store.hasShareIdentityControl(id),
@@ -1262,8 +1274,18 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
 
       const leftIdentityId = identityOfEntry(left, nowMs);
       const rightIdentityId = identityOfEntry(right, nowMs);
-      // 已同一身份：当前版本重复确认是幂等的，不重复写控制或递增版本。
+      const [edgeFrom, edgeTo] = left.id < right.id ? [left.id, right.id] : [right.id, left.id];
+      // 已同一身份仍需通过整组核验资格；不合格条目不能成为新的核实证据。
       if (leftIdentityId === rightIdentityId) {
+        const entries = store.listEntriesByIdentity(leftIdentityId);
+        assertAssociableEntries(entries, nowMs);
+        if (store.hasForgetIdentityReference(leftIdentityId)) {
+          throw new MemoryError(
+            "ASSOCIATION_FORGET_RESTRICTED",
+            "待关联记忆上存在删除限制，不能关联。",
+          );
+        }
+        store.insertRelationEdge(edgeFrom, edgeTo, "explicit", nowMs);
         return {
           associated: false,
           alreadyAssociated: true,
@@ -1300,6 +1322,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
         store.reassignEntryIdentity(entry.id, canonicalIdentityId, nowMs);
       }
       store.mergeFactIdentities(mergedIdentityId, canonicalIdentityId);
+      store.insertRelationEdge(edgeFrom, edgeTo, "explicit", nowMs);
 
       const affectedCharacters = [
         ...new Set(entries.map((entry) => entry.characterId)),

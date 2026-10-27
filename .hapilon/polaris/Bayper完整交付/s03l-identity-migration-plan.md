@@ -1,6 +1,6 @@
 # S03l 存量误合身份组安全迁移（POL-MIG-001～006 v1，master 受托确认）
 
-2026-10-27，HEAD `1783ec8`，VERSION `0.1.184`（本批同步 `0.1.185` 待 snap）。master 联合审查 r3 业务/Case/Part A-B 通过，受托确认 v1；不是用户亲自确认。本文件只正式化设计，不写代码/测试。r1 旧稿在 `evidence/s03l-identity-migration-plan-r1/`。
+2026-10-27，验收基线为 HEAD `c3c6bec`（VERSION `0.1.185`）加本轮未提交实现；`c3c6bec` 不含本次迁移代码，具体实现 SHA 见 `evidence/master-migration-YKY21Zj2/`。master 以该工作区独立验收 POL-MIG-001～006 v1 为有限能力。本轮只收口文档与版本（准备 `0.1.186`），不改代码/测试。r1 旧稿在 `evidence/s03l-identity-migration-plan-r1/`。
 
 Polaris 联合审查捕获了 r1/r2 方案错误（只拆同指纹、allowSharing 跨组件解除、断根重建、逐旧 identity 分配互相覆盖等）；本轮已在 r3 修正，无需修改 skill。
 
@@ -128,8 +128,8 @@ Polaris 联合审查捕获了 r1/r2 方案错误（只拆同指纹、allowSharin
 ### 4.5 后续实现范围与顺序
 
 - 允许改动：`app/memory-store.cjs`、`app/memory.cjs`、专责 `app/memory-identity-migration.cjs`、新 `tests/acceptance/memory-identity-migration.spec.cjs`；不改 skill/PRD/版本以外文件。
-- 实施顺序：先写新 acceptance Runner 并运行，保存失败基线；再实现迁移/控制/关系边/版本；修改后重跑该 spec 与受影响旧套件。失败原件不覆盖，使用新 attempt 目录与真实退出码。
-- 本轮不执行实现；`evaluation` 中 POL-MIG 全部 NOT_COVERED，不写 PASS。
+- 派发时顺序：先写新 acceptance Runner 并运行，保存失败基线；再实现迁移/控制/关系边/版本；修改后重跑该 spec 与受影响旧套件。失败原件不覆盖，使用新 attempt 目录与真实退出码。
+- 该范围已按授权实现，并由 master 独立验收；结果与边界见 §6 与 [evaluation.md](evaluation.md)。
 
 ## 5. Part B：验收计划
 
@@ -138,13 +138,12 @@ Polaris 联合审查捕获了 r1/r2 方案错误（只拆同指纹、allowSharin
 - Observation：identity、entry/version、body/factKey/source、FTS、derivation、relation edge、alias/conflict、share 控制计数、forget/删除指纹、marker、context version。
 - Oracle：迁移前后 SQLite 快照 + 真实 correct/forget/share/relay/associateFacts/allowSharing 业务结果；不以实现内部函数自证。
 - Failure/restart/cleanup：triggers 注入后断言全回滚、无 marker；移除后重试；关闭重开断言正常重复启动无额外变化；每个 Case 关闭 DB、删临时目录。
-- 证据：实现批次使用全新 attempt 唯一目录、直接重定向完整 stdout/stderr、真实 node 退出码、code SHA；禁止 tee/tail；失败原件不覆盖。实现需 master 另行授权。
+- 证据：实现批次使用全新 attempt 唯一目录、直接重定向完整 stdout/stderr、真实 node 退出码、code SHA；禁止 tee/tail；失败原件不覆盖。实现已按授权执行，master 独立证据见 §6。
 - 既有影响：FACTID-005 DDL rollback 测试需纳入新表/列；既有 alias/control、allowSharing 歧义测试必须保持；新迁移只影响旧库，新建库业务 Expected 不变。
 
 ## 6. 状态
 
-- 已接受：持久关系边删除不消失；旧缺失边不恢复；有向派生环先剔除环边再 union 有效边；无证据旧组全量拆分且正文不变；拆分身份 own-identity share 读取；非拆分身份保留现有保守检查并标为语义边界。
-- r3 修正：`allowSharing` 对选中身份自己的 share 限制（迁移继承或用户新限制）均可明确解除，只清 share，不清 forget/source/deleted fingerprint；不引入 origin。合并取两组当前 share 限制并集、保留精确作用域。先全局求组件再一次分配 identity，旧 identity 不被两个组件复用；跨 identity 证实合并也递增版本/上下文。
-- Cases 003/004/005 已按退回意见调整。
-- **master 联合审查通过并受托确认 POL-MIG-001～006 v1（不是用户亲自确认）**。本文件正式化供 snap；仅在有非空旧 identity→目标映射且全部控制/历史 alias 已复制时清理空源，孤儿原样保留、不按同键重新归因；复制别名含全部历史指纹；全局图含全部 entries；成员变化即递增版本/context。
-- 实现未开始：evaluation 中 POL-MIG-001～006 全部 NOT_COVERED，不写 PASS；后续按 4.5 先失败 Runner 基线再实现。
+- **master 已独立运行 18 套件 170/170 PASS、0 skipped、exit 0，受托接受 POL-MIG-001～006 v1 的真实 SQLite/构造旧库有限能力**（不是用户亲自确认，非 S03 完成或人工体验）；证据 `evidence/master-migration-YKY21Zj2/`，before/after SHA 一致。逐 Case 映射、真实依赖与无 GUI/API 边界见 [evaluation.md](evaluation.md)。
+- 保留边界：缺失历史关系边不恢复；无映射孤儿的 identity/控制/alias 原样保留；孤儿旧键保持兼容、不按当前 factKey 重新归因；非拆分身份保留同指纹整组保守检查；异 factKey 语义纠正/删除/共享生产入口与语义策略仍未完成。
+- 迁移身份相关的 DDL/控制/alias 等在同一保存点内回滚已经由 POL-MIG-005 两类 trigger 验证。after4 空原型比较夹具错误、after5 旧 fixture 缺现有 index 与派生来源回填导致快照差异，均为测试夹具补旧 schema 形状，不是迁移实现改变；不宣称所有更早 schema 升级全部原子。
+- 本轮无 skill 新缺陷，无需修改 skill。下一步接真实语义纠正/删除/共享生产入口，不宣称 S03/Goal 完成。

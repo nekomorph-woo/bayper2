@@ -18,7 +18,7 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 | --- | --- | --- |
 | S01 首次相遇 | 独立启动、配置模型、表达愿望、接纳首位、重启保持关系；REQ-05/21/45/55 | 当前切片6项Case PASS，受托接受；不覆盖这些REQ在后续切片的其余部分 |
 | S02 桌面陪伴 | 小窝、每日名单、固定安排、临时聊天、自然轮换、数值恢复；REQ-01/03/44/47/48/50/56/57 | S02a安排/轮换、S02b凛画布、S02c关系数值基础已接受；正式活动接线见S06d。数值基础不等于所有有效互动/共同故事触发均完成，完整成长路径与最终原生体验仍需逐项闭环 |
-| S03 有记忆的对话 | 模型回应、人格、独属记忆、定向共享、纠正删除防回流；REQ-09/18/49/51/60/61 | 对话、条目式纠正删除与防回流已部分接受（969c391/e87d332/9c8e505）；真实模型构造链路见state.md；明确转告/禁分享本地领域已独立58/58接受（s03d-review.md）；S03e正式共享入口独立23项GUI与41项领域通过（s03e-review.md）；S03f聊天纠正/忘记/禁分享及正式GUI已通过（s03f-review.md），明确聊天转告与独属控制的领域/正式GUI/真实模型已在各自边界接受（s03g/s03h-review.md）；S03i持久自动共享开关已独立65领域、19unit、14GUI通过（s03i-review.md）。S03j主题新活动→定向记忆共享链与来源归因已在构造发布目录的领域链、正式记忆UI和正式未发布门中接受（s03j-review.md）；S03k聊天全局关闭/恢复及失败GUI重试已独立94领域、19unit、1专属GUI和12邻接检查接受（s03k-review.md）；来源身份 v2 有限能力已由 master 17 套件 163/163 受托接受（2026-10-27），真实SQLite/chat核心、模型HTTP构造；存量误合组迁移、语义模型闭环/GUI/正式资源仍未完成 |
+| S03 有记忆的对话 | 模型回应、人格、独属记忆、定向共享、纠正删除防回流；REQ-09/18/49/51/60/61 | 对话、条目式纠正删除与防回流已部分接受（969c391/e87d332/9c8e505）；真实模型构造链路见state.md；明确转告/禁分享本地领域已独立58/58接受（s03d-review.md）；S03e正式共享入口独立23项GUI与41项领域通过（s03e-review.md）；S03f聊天纠正/忘记/禁分享及正式GUI已通过（s03f-review.md），明确聊天转告与独属控制的领域/正式GUI/真实模型已在各自边界接受（s03g/s03h-review.md）；S03i持久自动共享开关已独立65领域、19unit、14GUI通过（s03i-review.md）。S03j主题新活动→定向记忆共享链与来源归因已在构造发布目录的领域链、正式记忆UI和正式未发布门中接受（s03j-review.md）；S03k聊天全局关闭/恢复及失败GUI重试已独立94领域、19unit、1专属GUI和12邻接检查接受（s03k-review.md）；来源身份 v2 有限能力（17套件163/163）与 POL-MIG v1 迁移有限能力（18套件170/170，真实SQLite/构造旧库）已由 master 受托接受；异 factKey 语义纠正/删除/共享生产入口、语义模型闭环/GUI/正式资源仍未完成 |
 | S04 外部来源 | 发现 Coding Agent，默认不分析、逐目录授权与撤销，来源分析与预算；REQ-13 | 权限/reader/提炼防回流、S04d正式授权设置及S04e生产心跳分析已接受；S04e独立25/25（含来源12、设置3、聊天UI10），见s04e-review.md。本地HTTP与构造目录不证明全部真实来源语义效果；原生目录对话框人工体验尚未取得 |
 | S05 工作陪伴 | Herdr 插件、双向启动、独立 Agent、重连对账、普通和加急通知；REQ-06/21/28/35/58 | 正式插件登记/发现、adapter恢复、stop证据及S05i连接设置已接受，见s05h/s05i-review.md。S05j正式气泡已受托接受：当前11项通知GUI分两批独立通过，桌面/连接设置17项回归通过，见s05j-review.md；超量延迟如实审计，自动化窗口不替代最终原生体验 |
 | S06 低频故事 | 自动机会、并发预算、探索退出/接替、连续线索、邀请与服装解锁；REQ-46/48/52/53/54/59 | S06a/b预算与机会、S06c活动领域、S06d生产用途路由/暂停及探索接替已接受相应边界；S06h凛真实日常已独立活动6/6、桌面11/11接受，Hu/Cheng日常候选接线见S07b，透明输入S07c已独立验收，探索缺出发/返回动画。S06e/f/g故事/发现领域及4故事8节点作者目录已验，正式assetAvailable均false，S06i main活动→故事运行接线已独立54项Node/7项GUI通过，正式目录仍false；故事回看/可见手动邀请及接纳窗口已在S06j接受（s06j-review.md），自动邀请与服装窗口仍待闭环；见s06i/s06j-review.md |
@@ -35,7 +35,7 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 | --- | --- | --- | --- |
 | S01 首次相遇 | REQ-05/21/45/55；[cases.md](cases.md) ONBOARD-001～006 | 6 项当前切片 PASS 并受托接受；首次配置/愿望/接纳/重启/真实服务核实 | S01 切片接受有效；这些 REQ 在桌面、聊天、Herdr、最终体验中的剩余义务由相应父级承担，不要求重做 S01 |
 | S02 桌面陪伴 | REQ-01/03/44/47/48/50/56/57；COMPANION、DESKTOP、RELATION | 安排/轮换/数值、关系事件、Rin 画布与生命周期基础已接受 | DESKTOP-002 已由 S07c 1 test/3 Case 覆盖真实点击；003 Spaces/全屏、006 真实锁屏、004 托盘点击未闭；正式活动接线在 S06 |
-| S03 有记忆的对话 | REQ-09/18/49/51/60/61；MEMORY/CHAT/MEMUI/SHARING/SHAREUI/CHATMEM/CHATRELAY/EXCLUSIVE/AUTOSHARE/THEME/SHARESETTING/SEM/FACTID/ASSOC/SOURCE-* | 基础记忆、聊天、条目管理、转告、独属、自动共享开关、主题定向共享、正式 GUI 与部分真实模型构造链已按切片接受；来源身份 v2 有限能力已受托接受 | 来源身份 v2 有限能力已受托接受（master 17 套件 163/163）；FACTID-002 v1 机制 PASS 仍失效；存量已有误合组未迁移；SEM 5 FAIL、holdout 2 FAIL、source-live 2 FAIL 未重跑；异 factKey 语义闭环、正式主题自动分享 GUI 未闭 |
+| S03 有记忆的对话 | REQ-09/18/49/51/60/61；MEMORY/CHAT/MEMUI/SHARING/SHAREUI/CHATMEM/CHATRELAY/EXCLUSIVE/AUTOSHARE/THEME/SHARESETTING/SEM/FACTID/ASSOC/SOURCE-* | 基础记忆、聊天、条目管理、转告、独属、自动共享开关、主题定向共享、正式 GUI 与部分真实模型构造链已按切片接受；来源身份 v2 与 POL-MIG v1 迁移有限能力已受托接受 | 来源身份 v2（17套件163/163）与迁移 v1（18套件170/170）已接受有限能力；FACTID-002 v1 机制 PASS 仍失效；缺失历史边不恢复、孤儿旧键兼容、非拆分身份保守检查；SEM 5 FAIL、holdout 2 FAIL、source-live 2 FAIL 未重跑；异 factKey 语义闭环、正式主题自动分享 GUI 未闭 |
 | S04 外部来源 | REQ-13；SOURCE/ANALYSIS/SOURCE-UI/SOURCE-AUTO | 权限/读取/分析、设置、正式心跳自动分析已接受 | 真实来源语义质量、跨文件同义防回流、原生目录 dialog 人工体验未验证；上游记忆改动待回归 |
 | S05 工作陪伴 | REQ-06/21/28/35/58；CONNECTOR/TRANSPORT/HERDR-LIVE/HERDR-ID/REGISTER/ADAPTER/RUNTIME/NOTIFY/UI | 账本/传输、真实隔离 Herdr、登记、适配、运行、停止证据、通知队列与正式气泡/连接设置已按切片接受 | 最终真实模型＋隔离 Herdr 端到端、插件安装入口与跨重启恢复仍需整体复验；不得读取用户真实工作会话 |
 | S06 低频故事 | REQ-46/48/52/53/54/59；BUDGET/OPPORTUNITY/ACTIVITY/STORY/DISCOVERY/CONTENT/STORYRUN/STORYUI | 预算/机会、活动生命周期、探索、故事/发现/作者目录领域、main 消费与故事窗口已接受相应边界 | 正式四故事 assetAvailable=false；自动邀请、正式活动→相遇、服装 72h 解锁/穿用、发布后 GUI 全链未闭 |
@@ -76,14 +76,14 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 
 工具组织REQ-41贯穿所有切片：现有SQLite/造型目录工具是已存在能力，新增项目工具仍须自包含审查，不将此横向约束标作一次性完成。
 
-## 当前阶段：存量误合身份组迁移 v1 已受托确认，准备实施（2026-10-27 r9）
+## 当前阶段：POL-MIG v1 迁移有限能力已受托接受（2026-10-27 r10）
 
-S03 仍在实施与验收。master 联合审查通过 [s03l-identity-migration-plan.md](s03l-identity-migration-plan.md) 并受托确认 POL-MIG-001～006 v1（不是用户亲自确认）；实现未开始，evaluation 全部 NOT_COVERED。产品未交付，非 S03/Goal 完成。
+S03 仍在实施与验收。master 独立运行 **18 套件 170/170 PASS、0 skipped、exit 0**，受托接受 POL-MIG-001～006 v1 的真实 SQLite/构造旧库**有限能力**（不是用户亲自确认，非 S03 完成或人工体验）；独立验收运行前后代码 SHA 一致，证据 `evidence/master-migration-YKY21Zj2/`。
 
-- 迁移范围：所有旧 identity 中无证明关联按派生/关系边分组件；控制与全部历史 alias 受保护，孤儿身份/控制/alias 原样保留；关系边持久；先全局求组件再唯一分配 identity；成员变化即递增版本/context。
-- 后续实现范围：`app/memory-identity-migration.cjs`、`app/memory-store.cjs`、`app/memory.cjs`、新 `tests/acceptance/memory-identity-migration.spec.cjs`；先写 Runner 失败基线再实现，本轮不执行。
-- 此前来源身份 v2 有限能力已受托接受（17 套件 163/163）；不得据此宣称存量误合组已迁移。
-- 完整 Goal 与 S01～S08 待办保持；Polaris 审查已捕获方案错误，无需改 skill。
+- 逐 Case 映射与边界见 [evaluation.md](evaluation.md)；真实依赖为真实 SQLite/构造旧库，无 GUI/API/真实模型。
+- 保留边界：缺失历史关系边不恢复；无映射孤儿的 identity/控制/alias 原样保留；孤儿旧键保持兼容、不按当前 factKey 重新归因；非拆分身份保留同指纹整组保守检查；迁移身份相关 DDL/控制/alias 同一保存点回滚已验证。
+- after4 空原型比较夹具错误、after5 旧 fixture 缺现有 index 与派生来源回填导致快照差异，均为测试夹具旧 schema 形状补充，不是迁移实现改变；不宣称所有更早 schema 升级全部原子。
+- 下一步接 S03 真实语义纠正/删除/共享生产入口；异 factKey 语义策略仍未完成。完整 Goal 与 S01～S08 待办保持；本轮无 skill 新缺陷。
 
 ## 历史阶段：流程补齐已受托验收（2026-10-27 时点，保留）
 
@@ -91,7 +91,7 @@ GAP-01～14 流程处置均已完成（GAP-06 仅流程记录、产品修复未�
 
 - master 已受托验收 7 个最终 Contract v1 与 Part A/B（[final-acceptance-contract.md](final-acceptance-contract.md)），GAP-14 流程补齐通过；Contract 执行结果仍未产生，归 S08 最终验收入口、跨链既有父级。已提交快照 fdf7144（当时 VERSION 0.1.181，领先 origin/main 133，未推送）；本批拟 snap VERSION 0.1.182，未产生新 hash。
 - 完整 Goal 与 S01～S08 全部产品待办保持，不因流程补齐缩小或改写 PRD/Expected；上表切片范围仍是产品依据。
-- S03 暂不改产品（待 snap）：来源身份 v2 尚未独立验收（时点记录；后由 r8 接受有限能力），POL-FACTID-002 旧机制 PASS 失效，6 个旧机制 FAIL 与存量误合组未迁移；snap 后按顺序接回，不要求先修产品代码/测试才允许流程恢复。
+- S03 暂不改产品（待 snap）：来源身份 v2 尚未独立验收（时点记录；后由 r8 接受有限能力），POL-FACTID-002 旧机制 PASS 失效，6 个旧机制 FAIL 与存量误合组未迁移（时点记录；迁移后由 r11 有限接受）；snap 后按顺序接回，不要求先修产品代码/测试才允许流程恢复。
 - [s03l-source-identity-plan.md](s03l-source-identity-plan.md) 与 [s03l-identity-plan.md](s03l-identity-plan.md) 的既有修订已获 master 批准，作为当前设计依据随本次流程文档提交；产品源码/测试不提交，实现未独立验收（时点记录；后由 r8 接受有限能力）。
 - 下一最小切片（只记录、不实施）：来源身份 v2 的 6 处旧同文 fixture 适配及独立回归；随后立即处理存量错误身份组迁移，并接回 S03 语义纠正/删除/共享闭环。
 - 剩余产品路径不缩小：S03 异 factKey 语义闭环与正式主题自动分享 GUI；S06 自动邀请、正式活动→相遇、服装解锁/穿用；S07 36 动作/服装/过渡中断；S08 其余设置、Spaces/fullscreen/Retina、真实模型+隔离 Herdr 端到端与交付文档。

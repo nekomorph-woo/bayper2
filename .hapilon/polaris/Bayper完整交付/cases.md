@@ -114,8 +114,8 @@ POL-COMPANION-004/006同时验证事务失败不留下精力已改但结算时�
 | S03 来源上下文 | POL-SOURCECTX-001～006（v1） | [s03l-source-context-plan.md](s03l-source-context-plan.md) | REQ-18/51/61 | 真实 store/chat/source | Codex 受托 v1 2026-10-27 |
 | S03 来源关系协议 | POL-SOURCE-REL-001～004（v1） | [s03l-source-grounding-plan.md](s03l-source-grounding-plan.md) | REQ-18/51 | 构造模型响应 | Codex 受托 v1 2026-10-27 |
 | S03 真实来源对照 | POL-SOURCE-LIVE-001（子项 01～12，v1） | [s03l-source-live-plan.md](s03l-source-live-plan.md) | REQ-18/51 | 正式聊天/真实模型 | Codex 受托 v1 2026-10-27 |
-| S03 来源身份 | POL-SOURCE-ID-001～004（v1） | [s03l-source-identity-plan.md](s03l-source-identity-plan.md) | REQ-09/18/51/60/61 | 真实 store/chat；模型 HTTP 构造；master 17 套件批次独立验收（有限能力） | 计划 Codex 受托确认 2026-10-27；实现 master 受托接受 2026-10-27；存量已有误合组未迁移；UI/真实模型未验 |
-| S03 存量误合组迁移 | POL-MIG-001～006（v1） | [s03l-identity-migration-plan.md](s03l-identity-migration-plan.md) | REQ-09/18/51/60/61 | 真实 SQLite/构造旧库；计划 master 受托确认 v1 2026-10-27；实现未开始，evaluation 全部 NOT_COVERED | master 联合审查通过，不是用户亲自确认；尚未实现 |
+| S03 来源身份 | POL-SOURCE-ID-001～004（v1） | [s03l-source-identity-plan.md](s03l-source-identity-plan.md) | REQ-09/18/51/60/61 | 真实 store/chat；模型 HTTP 构造；master 17 套件批次独立验收（有限能力） | 计划 Codex 受托确认 2026-10-27；实现 master 受托接受 2026-10-27；存量误合组迁移 v1 已另有限接受；UI/真实模型未验 |
+| S03 存量误合组迁移 | POL-MIG-001～006（v1） | [s03l-identity-migration-plan.md](s03l-identity-migration-plan.md) | REQ-09/18/51/60/61 | 真实 SQLite/构造旧库；master 独立 18 套件 170/170 验收为有限能力（2026-10-27） | master 已受托接受 v1 有限能力，不是用户亲自确认；无 GUI/API/真实模型；缺失历史边/孤儿旧键等边界保留 |
 | S04 来源权限基础 | POL-SOURCE-001～006（v1） | [s04a-plan.md](s04a-plan.md) | REQ-13 | 真实 SQLite/临时目录 | Codex 受托 v1（plan 首段） |
 | S04 会话读取 | POL-SOURCE-007～012（v1） | [s04b-reader-plan.md](s04b-reader-plan.md)；[s04b-review.md](s04b-review.md) | REQ-13 | 真实临时文件/SQLite | Codex 受托 v1（plan/review） |
 | S04 来源分析 | POL-ANALYSIS-001～011；POL-SOURCE-013（v1） | [s04c-analysis-plan.md](s04c-analysis-plan.md)（001～005）；[s04c-provenance-plan.md](s04c-provenance-plan.md)（006、008；009 见「方案」第3/7条及「验收」在途改写条；010 见「方案」第6条）；[s04c-review.md](s04c-review.md)（007 复现与补核、011、SOURCE-013）；[s03l-association-review.md](s03l-association-review.md)（010 业务 Expected 保留） | REQ-13 | 真实临时文件/SQLite/本机 HTTP | Codex 受托 v1（plans/review）；007/009/010 为 master 2026-10-27 核实的原规则到 ID 映射，不伪称历史编号确认时间 |
@@ -150,7 +150,7 @@ S08 是最终验收入口，不新增 S09 父级；7 个 `POL-FINAL` ID 是既�
 ## 版本与缺口
 
 - POL-FACTID-002：v1 的“严格同文可复用身份”机制 PASS 已失效；v2 计划已由 Codex 于 2026-10-27 受托确认。v2 实现已由 master 17 套件批次独立验收为**有限能力**（2026-10-27）；真实模型语义与存量已有误合组迁移仍未覆盖。不得把 POL-FACTID-001～006 全写成 v1 或据旧 PASS 代表当前。
-- POL-SOURCE-ID-001～004：计划已由 Codex 于 2026-10-27 受托确认；实现已由 master 17 套件批次独立验收为**有限能力**（2026-10-27，真实 SQLite/chat 核心、模型 HTTP 构造）。存量已有误合组未迁移，UI/真实模型未验；不得据其宣称 S03 或产品已交付。
-- POL-MIG-001～006：迁移计划 v1 已由 master 联合审查并受托确认（2026-10-27，不是用户亲自确认）。实现未开始，evaluation 全部 NOT_COVERED；不得写 PASS 或宣称存量误合组已迁移。
+- POL-SOURCE-ID-001～004：计划已由 Codex 于 2026-10-27 受托确认；实现已由 master 17 套件批次独立验收为**有限能力**（2026-10-27，真实 SQLite/chat 核心、模型 HTTP 构造）。存量误合组迁移 v1 已另由 master 18 套件 170/170 有限接受；UI/真实模型未验；不得据其宣称 S03 或产品已交付。
+- POL-MIG-001～006：迁移 v1 已由 master 独立 18 套件 170/170 验收为**有限能力**（2026-10-27，真实 SQLite/构造旧库，无 GUI/API/模型）。缺失历史关系边不恢复、孤儿旧键保持兼容边界、非拆分身份保守检查；不得据此宣称 S03/Goal 或语义策略完成。
 - POL-ANALYSIS-007/009/010：master 已核实原规则到 ID 的映射（007 预算收尾失败与补核；009 在途改写不发布与映射发布回滚；010 8 区段/4MiB 验证上限），现正式登记；不伪称历史编号确认时间，不新增或削弱 Expected。此前 r2 的“查无定义”判断据此更正。
 - GAP-14 最终范围已登记为 POL-FINAL-001 系列（7 组，见 [final-acceptance-contract.md](final-acceptance-contract.md)），归 S08 最终验收入口；master 已受托验收 v1/Part A-B，流程补齐通过。造型资料、正式动画覆盖、故事/服装、全页面单屏、原生证据门、真实模型＋隔离 Herdr、交付纪律均未执行，evaluation 记 NOT_COVERED；动画采用 24＋12 语义覆盖，不要求 36 张或 36 fps；本轮不新增其他业务概念或 Case。snap 后接回 S03。

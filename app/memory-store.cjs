@@ -5,6 +5,7 @@
    是否还存在；这样 A 仅自己忘记时不会抹掉 B 的派生性质。 */
 const crypto = require("node:crypto");
 const { factKeyHash, identityFingerprint } = require("./memory-fact-identity.cjs");
+const { migrateLegacyIdentityGroups } = require("./memory-identity-migration.cjs");
 
 const FACT_IDENTITY_MIGRATION_SAVEPOINT = "memory_fact_identity_migration";
 
@@ -50,6 +51,16 @@ const FACT_IDENTITY_SCHEMA = `
     fingerprint TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     PRIMARY KEY (character_id, fingerprint)
+  );
+
+  /* 分享/转告/显式关联的最小无正文关系边；无外键，条目删除后仍保留以
+     支撑断根/多跳证明，不保存正文、来源内容或模型解释。 */
+  CREATE TABLE IF NOT EXISTS memory_fact_relation_edges (
+    from_entry_id TEXT NOT NULL,
+    to_entry_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('share', 'relay', 'explicit')),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (from_entry_id, to_entry_id, kind)
   );
 `;
 
@@ -221,6 +232,7 @@ function createMemoryStore(db) {
     db.exec(FACT_IDENTITY_SCHEMA);
     ensureFactIdentityColumns(db);
     migrateFactIdentities(db);
+    migrateLegacyIdentityGroups(db, { nowMs: Date.now() });
     db.exec(`RELEASE SAVEPOINT ${FACT_IDENTITY_MIGRATION_SAVEPOINT}`);
   } catch (error) {
     db.exec(`ROLLBACK TO SAVEPOINT ${FACT_IDENTITY_MIGRATION_SAVEPOINT}`);
@@ -327,6 +339,27 @@ function createMemoryStore(db) {
     `),
     reassignLegacyShareControls: db.prepare(`
       UPDATE memory_share_controls SET identity_id = ? WHERE identity_id = ?
+    `),
+    copyForgetIdentityControls: db.prepare(`
+      INSERT OR IGNORE INTO memory_forget_identity_controls (
+        character_id, identity_id, created_at
+      )
+      SELECT character_id, ?, created_at
+      FROM memory_forget_identity_controls
+      WHERE identity_id = ?
+    `),
+    getIdentityLegacy: db.prepare(`
+      SELECT legacy_identity_id FROM memory_fact_identities WHERE identity_id = ?
+    `),
+    setIdentityLegacyIfNull: db.prepare(`
+      UPDATE memory_fact_identities
+      SET legacy_identity_id = ?
+      WHERE identity_id = ? AND legacy_identity_id IS NULL
+    `),
+    insertRelationEdge: db.prepare(`
+      INSERT OR IGNORE INTO memory_fact_relation_edges (
+        from_entry_id, to_entry_id, kind, created_at
+      ) VALUES (?, ?, ?, ?)
     `),
     insertFactIdentity: db.prepare(`
       INSERT OR IGNORE INTO memory_fact_identities (identity_id, created_at)
@@ -619,10 +652,28 @@ function createMemoryStore(db) {
     statements.copyShareIdentityControl.run(toIdentityId, fromIdentityId);
     statements.removeShareIdentityControl.run(fromIdentityId);
     statements.reassignLegacyShareControls.run(toIdentityId, fromIdentityId);
+    statements.copyForgetIdentityControls.run(toIdentityId, fromIdentityId);
+    const canonicalLegacy = statements.getIdentityLegacy.get(toIdentityId)?.legacy_identity_id ?? null;
+    const mergedLegacy = statements.getIdentityLegacy.get(fromIdentityId)?.legacy_identity_id ?? null;
+    if (canonicalLegacy === null && mergedLegacy !== null) {
+      statements.setIdentityLegacyIfNull.run(mergedLegacy, toIdentityId);
+    }
   }
 
   function insertFactIdentity(identityId, createdAt) {
     statements.insertFactIdentity.run(identityId, createdAt);
+  }
+
+  function insertRelationEdge(fromEntryId, toEntryId, kind, createdAt) {
+    statements.insertRelationEdge.run(fromEntryId, toEntryId, kind, createdAt);
+  }
+
+  function getIdentityLegacyId(identityId) {
+    return statements.getIdentityLegacy.get(identityId)?.legacy_identity_id ?? null;
+  }
+
+  function isSplitIdentity(identityId) {
+    return getIdentityLegacyId(identityId) !== null;
   }
 
   /* 与某指纹相关的全部身份（含歧义组）；控制检查必须逐个覆盖。 */
@@ -796,6 +847,9 @@ function createMemoryStore(db) {
     reassignEntryIdentity,
     mergeFactIdentities,
     insertFactIdentity,
+    insertRelationEdge,
+    getIdentityLegacyId,
+    isSplitIdentity,
     listAliasIdentityIds,
     registerAlias,
     listActiveEntries,
@@ -862,6 +916,7 @@ function ensureColumn(db, table, name, definition) {
    用 identity_migrated 标记是否已处理，避免每次打开按当前键重新归因。 */
 function ensureFactIdentityColumns(db) {
   ensureColumn(db, "memory_entries", "fact_identity_id", "TEXT");
+  ensureColumn(db, "memory_fact_identities", "legacy_identity_id", "TEXT");
   ensureColumn(db, "memory_forget_controls", "identity_id", "TEXT");
   ensureColumn(
     db,
