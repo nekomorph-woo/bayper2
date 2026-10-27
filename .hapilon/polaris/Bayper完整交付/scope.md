@@ -76,13 +76,13 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 
 工具组织REQ-41贯穿所有切片：现有SQLite/造型目录工具是已存在能力，新增项目工具仍须自包含审查，不将此横向约束标作一次性完成。
 
-## 当前阶段：S03m 2b forget 后端有限能力已受托接受，下一批 temporary（2026-10-27 r26）
+## 当前阶段：S03m temporary §12 r3 方向已受托批准，2c-1 待实施（2026-10-27 r30）
 
-master 独立运行 **19 套件 185/185 PASS、0 skipped、exit 0**，before/after SHA 一致，证据 [master-corrected-source-TxA5THg1](evidence/master-corrected-source-TxA5THg1/stdout.log)；受托接受首批来源追溯与协议的**已测有限能力**，不是用户亲自确认。008 聚合仍 **NOT_COVERED（部分已验）**。2a 长期 correct 确定性业务流程已由 master 独立 28/28、GUI14/14 受托接受为**已测有限能力**（不是用户亲自确认、不是真实模型语义/人类体验）。2b forget 确定性后端已由 master 独立 20 相关套件 **235/235 PASS、0 skipped、exit 0**、before/after SHA 一致受托接受为**已测有限能力**，证据 [master-forget-core-QlvxfnTU](evidence/master-forget-core-QlvxfnTU/stdout.log)；不是真实模型语义、不是人类体验，接受范围限已运行分支（002c 只运行 different/截断，网络失败仅共享 correct 回归），忘记专属 GUI 与真实 L1/L2 未验。聚合 POL-SEMOP-001～008 仍 NOT_COVERED；本批只做文档与版本，VERSION `0.1.191` 待 master snap；下一批 temporary。
+master 独立运行 **19 套件 185/185 PASS、0 skipped、exit 0**，before/after SHA 一致，证据 [master-corrected-source-TxA5THg1](evidence/master-corrected-source-TxA5THg1/stdout.log)；受托接受首批来源追溯与协议的**已测有限能力**，不是用户亲自确认。008 聚合仍 **NOT_COVERED（部分已验）**。2a 长期 correct 确定性业务流程已由 master 独立 28/28、GUI14/14 受托接受为**已测有限能力**（不是用户亲自确认、不是真实模型语义/人类体验）。2b forget 确定性后端已由 master 独立 20 相关套件 **235/235 PASS、0 skipped、exit 0**、before/after SHA 一致受托接受为**已测有限能力**，证据 [master-forget-core-QlvxfnTU](evidence/master-forget-core-QlvxfnTU/stdout.log)，并已 snap `27ad18d`（VERSION `0.1.191`）。master 2026-10-27 受托批准 §12 r3 的 2c-1/2c-2 方向（不是用户亲自确认）；temporary 尚未实施，2c-1 先真实 chat 入口 + memory 管理领域，2c-2 独立同义阶段 2；未跑真实 UI IPC 不得标 UI IPC 已验。聚合 POL-SEMOP-001～008 仍 NOT_COVERED；本批只做文档与版本 `0.1.192`，待 master snap。
 
 - 已验：008a 连续/多分句、C++/C 逐字、重复歧义；008b 真实 relay 传播副本、锚版本/删除/正文/歧义/权限、revision 历史/未来/溢出；segments/digest 篡改、消息变动、旧 direct、跨片段引用；008c 当日到期与伪造跨角色 current；2a 长期 correct 两阶段流程、同角色独立同义候选、真实 association 后来源、取消/重启/系统暂停与最小 GUI；2b forget 的 self/all、单条消息原位更新、取消/重启文案、新身份重学使旧核验失效、FTS/旧来源/relay/share 防回流。
-- 未覆盖：temporary（001d）、真实模型 L1/L2、跨角色临时传播、忘记专属 GUI/完整产品级 GUI 生命周期；现有 correct GUI 4/4 为旧源码时点，本批未重跑，不能算 forget GUI 通过。
-- 下一批 temporary；真实模型/GUI 全链随后推进，不继续无边界来源探针。本轮仅文档/版本，VERSION `0.1.191` 待 master snap。
+- 未覆盖：temporary（001d）、真实模型 L1/L2、跨角色临时传播、忘记专属 GUI/完整产品级 GUI 生命周期；现有 correct GUI 4/4 为旧源码时点，未重跑，不能算 forget/temporary GUI 通过。temporary 的 S1～S12/D1～D5 仅为计划 Case，未运行不填 PASS。
+- 下一批 2c-1（阶段 1/操作/检索），随后 2c-2（独立同义阶段 2）；GUI/live 为后续门禁。本批仅文档与版本 `0.1.192`，HEAD 基线 `27ad18d`/`0.1.191` 已提交。
 
 ## 历史阶段：POL-MIG v1 迁移有限能力已受托接受（2026-10-27 r10）
 

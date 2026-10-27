@@ -1,8 +1,10 @@
 # S03m 显式纠正/忘记的语义核验最小纵向切片（v1）
 
-2026-10-27，master 受托确认 POL-SEMOP-001～008 v1 及 Part A/B（不是用户亲自确认）。两阶段：阶段 1 本地已完成；阶段 2 系统核验独立候选，合格关联/操作在第二事务原子。阶段 2 失败不回滚阶段 1；只更新同一条 assistant 消息，不追加第二条。自动整理/定向共享/完整召回仍后续承接。本文件已并入 r3 审查的三处接口修正：关联后事务内版本重读、correct temporary 路径、corrected_v2 来源归属与 isCurrent。首批已按 §8 收口：master 19 套件 185/185 受托接受来源追溯与协议的已测有限能力；2a 长期 correct 两阶段的确定性业务流程亦已由 master 独立 28/28、0 skipped、exit 0 与 GUI 14/14 受托接受为**已测有限能力**。008 聚合仍 NOT_COVERED（部分已验），下一批 2b。
+2026-10-27，master 受托确认 POL-SEMOP-001～008 v1 及 Part A/B（不是用户亲自确认）。两阶段：阶段 1 本地已完成；阶段 2 系统核验独立候选，合格关联/操作在第二事务原子。阶段 2 失败不回滚阶段 1；只更新同一条 assistant 消息，不追加第二条。自动整理/定向共享/完整召回仍后续承接。本文件已并入 r3 审查的三处接口修正：关联后事务内版本重读、correct temporary 路径（最终以 §12 r3 为准）、corrected_v2 来源归属与 isCurrent。首批已按 §8 收口：master 19 套件 185/185 受托接受来源追溯与协议的已测有限能力；2a 长期 correct 两阶段的确定性业务流程亦已由 master 独立 28/28、0 skipped、exit 0 与 GUI 14/14 受托接受为**已测有限能力**。008 聚合仍 NOT_COVERED（部分已验）；2b 已提交为 `27ad18d`/`0.1.191`，下一批 2c-1 待实施。
 
-## 1. 实际契约与调查事实
+## 1. 实际契约与调查事实（实施前时点，非现状）
+
+> 本节记录 2a/2b/2c 实施前的调查基线；`associateFacts` 无 `inTransaction`、`memorySourceContext` 只接受直接来源等描述已被后续实现改变。现状以 §11/§12 与 state 为准。
 
 - `chat.cjs` 的 `sendMessage` 当前等完整请求返回；renderer `chat-panel.js` 在 `handleResult` 后 `refreshConversation`，没有聊天轮询。`preload.cjs` 已有 `onChatClosed`/`onMemoryChanged` 事件；`main.cjs` 用 `webContents.send` 推送。
 - `chat_requests` 有 status/context_version/assistant_message_id 等，无 verification 字段；`chat-store.cjs` 无消息正文更新接口。`cancelRequest` 只处理 pending；`closeConversation` 取消该会话 pending；`dispose` 取消全部 pending 并 `Promise.allSettled(inFlight)`；启动 `recoverInterruptedRequests` 只转 pending。
@@ -27,7 +29,7 @@
 - 排除同 identity、派生/转告/分享、过期、来源受限、主题/推断等不可关联项；同文/同 factKey 只召回，绝不直接关联。按 identity 去重，候选已有同 identity 只处理一次。
 - 执行门为保守门，不称语义证明：`effectiveRelation=equivalent`、主体非 null/一致、scope 已知/一致、event 时间一致、来源世界一致；`contextIncomplete` 只在主体/时间确需缺失前文时降级，自足命题不因布尔值误拒。
 - **correct 阶段 2（长期）**：事务前重核外部快照与 operation_proof。事务内依次对合格候选 identity 执行 `associateFacts(inTransaction)`；关联会递增锚与成员 version、可能更换 canonical identity，因此**每轮关联后重新读取事务内当前锚与成员版本/identity**，用当前版本调用窄接口，不使用关联前 expectedVersion。锚“不变”仅指正文/来源不重复 correct，不否认 association 必要的版本递增。任一候选关联失败整笔回滚阶段 2，不保留任何关联。
-- **correct temporary**：不得走长期 correct 的传播/合并路径，不得永久覆盖长期偏好。阶段 1 保留长期条目并创建/更新当前角色的有到期当前理解（现有 `.current` 行为）；阶段 2 只对已证明持有同一原事实的候选持有者创建/更新有到期的当前理解，不合并长期与临时 identity，不新增未知角色。临时来源使用真实的 `chat-current:` 带时效格式，来源快照可核验；到期后 `isCurrent=false`，长期条目与历史经历保留。
+- **correct temporary**：以 §12 r3 为准（master 2026-10-27 受托批准 2c-1/2c-2 方向，不是用户亲自确认）。阶段 1 同事务更新 initiator current 及已证明同一 T/长期 identity 的已知持有者，长期不动；阶段 2 只对独立同义候选一次核验后建/更新 current，不合并长期 identity，不新增未知角色。来源用 §12 A2 的 direct/copy/relay/edit 及 holderAnchor 体系，到期失效；旧“仅当前角色 `.current`/单一 `chat-current:`”描述已由 §12 取代。
 - **forget 阶段 2**：不关联已删锚；对每个去重后的合格候选 identity 直接执行 `forget`。self 只处理原角色自己持有的候选（`scope='self'`，不跨角色删除）；默认 all 才处理其他持有者（`scope='all'`）。多个候选同一第二事务，任一失败整笔回滚阶段 2。
 - 候选版本/来源/成员变化 → 该候选未确认；不报告全局成功。阶段 2 失败/取消/重启 → 只把同一 assistant 消息原位更新为“本地已完成；其他相近内容未继续核验”，阶段 1 数据保留。阶段 2 成功同样只原位更新该消息，不追加第二条。
 - 最小澄清直接说明具体事实，例如“如果你也想把另一条关于咖啡的内容一起处理，请直接告诉我它的说法”，不加按钮、不加待办。
@@ -38,7 +40,7 @@
 - 纠正正文可能由规范化分句拼接，不要求连续子串；来源证据用有限 `segments/offsets`（复用现有纠正提取逻辑重算），每段必须是原话实际片段，按生产 join("，") 逐字重建 `memory.body`（不删除 C++/C、小数、负号等词内符号）。不得假称拼接内容是连续原话，也不额外持久化正文；segments 只是内存证据，含原话。
 - `corrected_v2` 明确区分：`sourceAnchorEntryId`/`sourceAnchorVersion`/`sourceAnchorIdentityId`（来源锚）、`sourceCharacterId`（说出原话的角色）、`holderCharacterId`（持有条目的角色）、`entryId`（被核验条目）。`isCurrent` 必须以 `holderCharacterId + entryId` 定位并重解析，不能用来源角色去读持有者条目；digest 覆盖锚 identity/版本/segments/消息内容/持有者/条目版本。
 - 传播副本沿 identity/关系**实际核验**到当前 `chat-correct:` 锚；可由 derivation 或 relation edge/同一已证明 identity 证明，不能仅凭 sourceCharacterId≠holderCharacterId 推断派生。`direct=false`、`via="identity_correction"`；来源角色与持有角色相同也可为派生，需按关系判断，不冒充直接告知。
-- `chat-current:` 是本片临时纠正所需的真实带时效来源格式：解析内嵌 chat 消息、当前事实条目/版本、`expiresAt` 与 segments；到期后 unavailable，长期条目不受影响。外部来源仍 unsupported 边界。
+- 临时来源以 §12 A2 为准：direct `chat-current:`、copy/relay `chat-current-copy:`、edit `temporary-edit:`；解析 origin/holder anchor、`expiresAt` 与证据；到期 unavailable，长期条目不受影响。外部来源仍 unsupported 边界。
 - 旧来源删除/权限控制/消息变更/锚版本变化 → `isCurrent=false`；不另行持久化正文副本。
 
 ### 2.4 主体、删除与权限
@@ -119,7 +121,7 @@
 - `isCurrent(snapshot)` 先用 snapshot 自身字段重算 digest，再以 `holderCharacterId + entryId` 调用 `resolve`；比较 `sourceAnchorEntryId/Version/IdentityId`、segments、source 消息内容、entry/context 版本与来源控制；任一变化 false。不得用 `sourceCharacterId` 读持有者条目。
 - segments 由复用现有纠正提取逻辑的纯函数重算（如 `locateCorrectionSegments({userText, body})`），不额外持久化正文；只接受与生产 `correctionBody` 的 `join("，")` 逐字一致的重建，不删词内标点（C++/C、C#/C、小数、负号）。同一 body 有多个匹配位置或重复命题时视为歧义 → unavailable，不取第一个。
 - 解析 `chat-correct:`/`corrected:` 内嵌 revision 时必须为安全正整数且不超过当前 entry.version；未来或溢出拒绝。association 递增版本后，较早的历史 revision 仍可解析。
-- 传播副本通过 `factIdentityId` 找唯一当前 `chat-correct:` 锚，并核验 derivation/relation edge 或同一 identity；多个/缺失/关系不成立 → unavailable。`chat-current:` 支持带 `expiresAt` 的临时来源，到期 unavailable；外部来源仍 unsupported。
+- 传播副本通过 `factIdentityId` 找唯一当前 `chat-correct:` 锚，并核验 derivation/relation edge 或同一 identity；多个/缺失/关系不成立 → unavailable。临时来源（`chat-current:`/copy/relay/edit）按 §12 A2 解析，到期 unavailable；外部来源仍 unsupported。
 
 ### 4.3 关系协议兼容
 
@@ -136,9 +138,9 @@
 - `verifyOperationProof({action, scope, anchor, identityId, expectedVersion|controlHashes, nowMs})`：只读，correct 核条目/正文/identity；forget 核 identity/source/deleted 控制。
 - `listIdentityEntries(identityId)`：只读，供候选去重/成员版本捕获。
 - `applyConfirmedCorrectionToIdentityMembers({anchorEntryId, memberEntryIds, nowMs, inTransaction})`：仅内核验层调用；在事务内**重新读取当前锚与成员**（不接收关联前 expectedVersion），要求同一 identity、锚正文/信任/时效未变、成员仍存在且非锚、来源未被控制；只更新成员：body/trust/expiry 取当前锚，sourceKind=user，sourceId=`corrected:<member>:<currentVersion+1>`，sourceVersion=1，version+1，FTS/别名/旧来源控制；不碰锚、不接收调用者正文/来源。返回 affected/contextVersions/finalVersions。
-- `applyConfirmedTemporaryCorrectionToHolders({sourceCurrentEntryId, targetEntryIds, nowMs, inTransaction})`：临时纠正专用；重读来源当前事实（body/trust/expiresAt/来源消息），为每个已证明持有同一原事实的持有者创建/更新 `.current` 事实；不合并长期 identity，不新增未知角色；sourceId=`chat-current:<targetEntryId>:<nowMs>:chat:<messageId>`，带 `expiresAt`；返回 finalVersions。
+- `applyLocalTemporaryUnderstanding`/`applyConfirmedTemporaryCorrectionToHolders` 以 §12 A1/A3/A4 为准：随机 T、initiator/已知 holder/独立候选、copy/relay/edit 来源与 holderAnchor；不合并长期 identity，不新增未知角色，不用旧 `chat-current:<targetEntryId>` 公式；返回 finalVersions/sourceControls/contextVersions。
 - `forget` 继续用现有接口；阶段 2 按候选 identity 去重后调用，self/all 由操作 scope 决定。
-- `verifyOperationProof` 对 temporary 使用当前事实条目/版本与 `expiresAt`，不把长期锚当临时证明。
+- `verifyOperationProof` 对 temporary 使用 §12 A4 的 current/T/contextVersion/expiresAt 证明，不把长期锚当临时证明，也不沿用旧单 source 公式。
 
 ### 4.5 阶段 2 correct 具体步骤
 
@@ -155,9 +157,9 @@
 
 ### 4.7 阶段 2 temporary 步骤
 
-1. 阶段 1 已创建/更新当前角色的 `.current` 事实并保留长期条目；proof 记录当前事实 entry/version、长期条目、`expiresAt`、来源消息。
-2. 阶段 2 只对已证明持有同一原事实的候选持有者调用 `applyConfirmedTemporaryCorrectionToHolders`；不关联长期 identity，不改长期条目，不新增未知角色。
-3. 同一事务更新 assistant 消息与 verification_status；失败回滚阶段 2。到期后来源/当前理解不可用，长期偏好恢复为唯一有效长期内容。
+1. 按 §12 r3 A1/A3：阶段 1 已创建/更新 initiator current 与 T/已知 holder 的 current，长期不动；proof 记录 T、current/长期锚、`expiresAt`、contextVersionsAfterLocal/sourceControlsAfterLocal。
+2. 阶段 2 只对独立同义候选一次核验后调用 `applyConfirmedTemporaryCorrectionToHolders`；不关联长期 identity，不改长期条目，不新增未知角色；候选不按 holder 整组跳过。
+3. 同一事务更新 assistant 消息与 verification_status；失败回滚阶段 2。到期后来源/当前理解不可用，长期偏好恢复。来源与 holder 作用域按 §12 A2。
 
 ## 5. Part B：验收计划
 
@@ -169,7 +171,7 @@
 
 1. **来源追溯与协议兼容（首批）**：source-context corrected_v2/segments/传播追溯/`chat-current`、关系协议兼容分支、`locateCorrectionSegments` 与只读来源核验；先写失败测试，覆盖 008a/b/c 全部子项及旧 direct 兼容；不先造未使用的 request 状态字段。已有来源问题具备真实入口，可独立验证。
 2. **真实两阶段 correct+forget（含 temporary）**：request 字段/迁移、消息原地更新、阶段 1/2、proof、scope self/all、cancel/dispose/close/recover、sendMessage 提前返回、main/preload/renderer 最小事件；覆盖 001/002/003/004/005d/006/007 与专属 GUI；本批才接入状态字段。
-3. **真实模型 + GUI 联合**：L1/L2、正负对照、falseMerge 门禁、真实窗口阶段 1 显示与阶段 2 原位刷新；005/008 P0 纳入；不宣称 S03/语义完成。
+3. **真实模型 + GUI 联合**：L1/L2、正负对照、falseMerge 门禁、真实窗口阶段 1 显示与阶段 2 原位刷新；005/008 P0 纳入；temporary 以 §12 r3 为准；不宣称 S03/语义完成。
 
 ## 7. 回归、阻塞与待决
 
@@ -190,7 +192,7 @@
 为避免一次大批代码，第 2 批拆为两个最小纵向切片；2a 只做长期 correct，2b 再做 forget/temporary。现有本地 forget/temporary 功能保持，不因 2a 退化。
 
 - **2a（已受托接受已测有限能力）**：长期 `correct` 两阶段。阶段 0 仅内存捕获旧事实、目标 identity 与独立候选（3/角色、总 8）；阶段 1 同事务本地 correct/assistant/request/无正文 proof，`sendMessage` 提前返回；最多一次系统核验（15s、无重试、不占自动预算）；阶段 2 在同一事务逐个 `associateFacts(inTransaction)`，每轮重读当前锚/成员 version/identity，再用窄接口只更新候选成员；任何失败整笔回滚阶段 2，保留阶段 1；同一 assistant 原位更新；cancel/close/dispose/暂停/重启中断；`onVerificationSettled`→既有 `bayper:memory-changed`（kind=chat-updated）→当前会话刷新。
-- **2b（下一批）**：`forget` 的候选自身 identity 删除、`temporary` 的到期当前理解传播、对应来源/权限/版本语义、真实模型 L1/L2 与 GUI 全链；不在 2a 提前铺字段或实现。
+- **2b（下一批）**：`forget` 的候选自身 identity 删除、`temporary` 的到期当前理解传播（最终以 §12 r3 为准）、对应来源/权限/版本语义、真实模型 L1/L2 与 GUI 全链；不在 2a 提前铺字段或实现。
 - **2a Case 映射**：001a correct 正链路、001b 隔离、001c 传播来源；003a 提前返回/单消息、003b 提交前取消/阶段 1 后取消、003c dispose/close/暂停/重启；004a correct 锚失效、004b 候选变化、004c 阶段 2 故障回滚、004d 多候选连合；005a/b/c/d 主体/时间/权限正负；006a/b 请求频率/超时/取消；008 同角色派生实际路径与真实 association 后来源重解析。002、001d、004a 的 forget 部分留给 2b。Case 聚合不因 2a 子项通过而标整组 PASS。
 
 ### 9.1 2a 旧事实证据复核（master 中途审查修正）
@@ -358,5 +360,93 @@ HEAD `88ff9c7`（VERSION `0.1.189`，已由 master snap）。master 已受托审
 - 未覆盖：temporary（001d）、真实模型 L1/L2、跨角色临时传播、忘记专属 GUI 与完整产品级 GUI 生命周期。现有 correct GUI 4/4 对应旧源码时点，本批未重跑，不能算 forget GUI 通过。
 - 聚合 POL-SEMOP-001～008 仍 NOT_COVERED，不得由 2b 后端有限接受自动升级为整组 PASS；不宣称 S03m/S03/Goal 完成。
 - 生产净增约 356 行已由 master 评估为职责必要；correct/forget 共用请求/凭据/取消/候选/异常编排，仅动作 proof、候选资格与第二事务分支不同，不构成通用策略框架。
-- 下一批 temporary：沿用本计划两阶段、取消/重启/单消息与无正文证明结构；proof 按当前事实条目/版本/`expiresAt` 设计，不直接套用删除 proof；继续不增加 GUI/main/preload 范围，除非 master 另行派发。
+- 下一批 temporary：以 §12 r3 为准（随机 T/copy/relay/edit 来源、self/all/restrict/exclusive、阶段 2 contextVersion/原子回滚）；继续不增加 GUI/main/preload 范围，除非 master 另行派发。
 - 本批仅文档与版本收口：VERSION `0.1.190` -> `0.1.191`（同一 10 文件 11 处字面量，无依赖变化），不改源码/测试，不重跑测试/API/GUI，不 Git/子代理。初版中止、夹具错误、FAIL 与部分通过记录保留，不覆盖。
+
+## 12. 2c temporary 实施基线 r4（2026-10-27 master 受托批准 2c-1/2c-2 方向；未实现）
+
+master 2026-10-27 受托批准本方向，**不是用户亲自确认**。C2 旧 Expected 更新的业务理由：用户明确说“今天…”时，今日 current 与长期偏好含义不同；长期记录保留为长期，但不得在聊天上下文冒充今日状态，因此有效 current 优先、旧长期不并列注入。POL-SEMOP-001～008 聚合仍 **NOT_COVERED**；2c-1/2c-2 尚未实施、未运行测试/API/GUI，不填 PASS。r2 退回原因：固定“日期+长期 identity”的 T 无法满足全删后同日新陈述与第二持有人发起；sourceAnchor=A 长期使 B 依赖 A 存活；拒绝 temporary share/relay 与通用编辑不符合 PRD。r4 按最终 diff 审查补入最小无正文同锚防回流控制，删除“正文不同即新事实/换 T 绕过”边界；以下为已批准方向的最小设计，具体代码与实施结果待新派发。
+
+### 12.1 Part A：最小设计
+
+**A1 随机 T、无正文关联元数据、查找与控制**
+- 新建时 `T=crypto.randomUUID()` 并 `store.insertFactIdentity(T)`；initiator current 与所有 copy/relay/edit 共用 `factIdentityId=T`。不按正文、日期或长期 identity 归组。
+- 为每个临时条目记录无正文关联元数据：可复用现有表，或由 `memory-store` 新增窄表 `memory_temporary_links(temp_identity_id, long_identity_id, holder_character_id, expires_at)`；只存 id/时间，不存 body、excerpt 或 source 正文。`long_identity_id` 是该 temp 依附的长期 fact identity（origin、已核实候选或既有 link），不要求 holder 自身有 long 条目；`holder_character_id` 区分控制作用域。holder 自己的 long anchor 仅在 source/derivation/T 已证明同一事实时写入；收件人恰好有任意 long 不自动挂靠。该关系只用于查旧控制，不抑制长期、不建 overlay。
+- 查找：选中项本身是 temp → 直接 `T=entry.factIdentityId`。长期目标：优先自身唯一有效 current 所属 T；否则只接受同 holder、同 `long_identity_id`、同一有效时段且 source/derivation/link 可唯一证明的 T；出现多个仍无法唯一证明 → 沿既有最小澄清，零修改、零传播（S12）。不按 updatedAt/正文/角色猜组。
+- 查询必须覆盖 `chat-current:`、`chat-current-copy:`、`temporary-edit:`、既有临时 `relay:`/`share:`（后者限 `expires_at` 非空）及 `memory_temporary_links`；不能漏 copy 导致第二持有人新建 T。direct 不需要 derivation；copy/relay 必须有 derivation；source control 按 holder 作用域核对，A self 控制不得全局取消 B。
+- 防回流：同一有效时段且明确关联同一 `long_identity_id` 的重建，先查旧 T 的 forget/share/exclusive 控制。新的明确陈述只授权**发起人**建立新 T；其他 holder 是否获得 copy 由旧 link 控制决定：旧 forget 按 holder 保持、旧 share/exclusive 不自动解除；旧源始终阻断。同 body 与不同措辞都按可证明 link/long_identity 执行，不以正文相同归组或放行。不能证明的独立语义不宣称已解决，保留真实模型/召回门禁。
+- 全删后无 active 条但保留 link/control：同一有效时段+明确同 `long_identity_id` 的新明确陈述先查旧控制，再建**新 T**；新 T 只能由本轮发起人建立，其他 holder 不因 A 的新陈述获得建 T 授权，是否获得 copy 由旧 forget/share/exclusive 控制决定并保持；旧源仍阻断。过期后跨日新事实与旧临时状态分开，旧临时禁令不升级为长期禁令；无存活副本时不存正文/overlay。
+
+**A2 来源、快照与自删除验证**
+| 类型 | sourceId | 关键语义 |
+|---|---|---|
+| direct | `chat-current:<origin long>:<now>:chat:<msg>` | `direct=true`、`via=current_temporary`；`sourceAnchor=holderAnchor=origin long` |
+| copy/sync/relay | `chat-current-copy:<origin long>:<ov>:<origin current>:<cv>:<holder long 或 ->:<hv 或 0>:chat:<msg>` | `sourceCharacterId=origin`、`holderCharacterId=holder`、`direct=false`；**holder long 仅在该 holder 与 origin/long_identity 有明确事实关联（同 identity、已核实候选或既有 temp link）时写入，否则写 `-`**；identity copy/sync 用 `via=temporary_propagation`，显式 relay/share 即使有 holder long 也用 `via=temporary_relay`、`relayFrom=derivation.narrator`；收件人恰好有任意 long 不自动挂靠 |
+| edit | `temporary-edit:<origin long>:<ov>:<origin current>:<cv>:<holder long 或 ->:<hv 或 0>:chat:<msg>` | `via=temporary_edit`、`edited=true`；body 不要求与 msg segments 一致，不冒充聊天原话 |
+
+- 快照新增：`sourceAnchor*=origin long`（可 removed，仅溯源）；`temporarySource*=origin current`（可 removed）；`holderAnchor*=holder long`（仅明确事实关联时存在，否则 null）；`sourceAnchorStatus/temporarySourceStatus: live|removed`、`edited`、`relayFrom`。旧 direct/corrected 摘要不变，新字段只在临时来源进入 digest/isCurrent。
+- 每个 temp 条目（direct/copy/relay/edit）在同一事务写 `memory_temporary_links`；其 T/long_identity/holder/expires 必须与条目一致。删除正文不清 link/control，link 只存 ids/时间；link 缺失的旧临时条目保守处理，不凭收件人任意 long 补挂。
+- 验证始终核：holder long（若有）存在且版本匹配；T 共享；**direct 只核 origin current/消息，不要求 derivation；copy/relay 必须有 derivation**（identity copy parent=origin current、narrator=origin；relay/edit parent=immediate parent、narrator=`relayFrom`）；origin 消息存在且属于 origin；copy/relay 的 segments 按生产 join 逐字重建 body；edit 只核锚/消息归属，不核 body；expiry；source controls **逐 holder 作用域**核对，A 的 self/source 控制不能取消或阻断 B。
+- origin current 存在时要求版本**精确相等**且正文/trust/expiry 一致；不存在 → `removed` 仍有效；存在但版本/正文不符 → stale/unavailable。origin long 仅可选溯源，**不因 A 删除 current 或 long 使 B 失效**；holder long 版本变化才使该 copy stale。T 不重算，证明依赖 derivation、真实消息、holder long 与上述锚关系；接受本地 DB 可信边界，不做密码学签名。
+- 自删除：A `forget self` 删除 T 中所有 A 持有的临时条目（不仅选中 current）；B/C copy 继续用 holderAnchor+derivation+origin 消息验证。A 的 current/long **缺失**、或 A **long 版本变化**，不连带使 B 失效；仅当 origin current 仍存在且版本不等于副本记录时判 stale。removed 与 stale 的判别对所有 holder 一致。
+
+**A3 阶段 1 与真实调用**
+- 触发 target 为长期或临时；initiator 需持有有效长期 anchor（只有 relay 临时副本、无长期 anchor 时支持转告/删除/编辑，不造直接 current）。
+- 同一事务：长期不动；建/更新 initiator current（direct）；逐个更新 T 已有成员：**仅当该 holder 与 origin/long_identity 有明确事实关联时用 copy（写 holder long），否则用 relay/sync copy（写 `-`）**；再对 L 中尚未在 T 的已知 holder 按同一规则建 copy；跳过 T 控制/新 source 控制/该 body 删除指纹；所有 current 共用 T、`expiresAt`，derivation 指向 origin current，写 link，被替换 source 加控制。未知角色零新增。返回 versions/sourceControls/contextVersions。
+- 聊天：`chat-memory-operations.cjs:835` 的 temporary 改为调 memory narrow，`chat.cjs:1356` 的 applyChatOperation 仍处阶段 1；2c-1 不进入阶段 2。UI：`memory-panel.js:422 → preload.cjs:48 → main.cjs:1623 → memory.correct`（`memory.cjs:716`），`memory.correct` 检测 temp 后调 `correctTemporaryUnderstanding`，不新增 IPC。转告：`memory-panel.js:499 → main.cjs:1690 → memory.relay`（`memory.cjs:1132`）；分享/限制/独占沿用既有入口（`memory.cjs:1013` 等）。
+- 共享来源与 `memorySourceContext` 的 copy/relay/edit 分支同批接入；旧 direct/corrected/`POLICY_VERSION` 不变。2c-1 生产规模超 500 行先停报拆分。
+- UI 编辑：任一 holder 在面板保存临时条目均走同一窄路径；同一事务更新 T 内所有成员 body/version（含 B 编辑共享副本后 A/B 一致），保留 expiry/T/anchors，source 改 `temporary-edit`（origin 消息仅溯源，不声称 body 来自该消息），旧 source 加控制；不改长期、不调模型。编辑后的 temp 可检索、可转告，但不作为关系核验候选。
+
+**A4 操作兼容（D1/D2/D3/D4 已裁决）**
+- self：删 T 中所有 A 持有临时条目，B/C 副本保留并继续可验证；长期不动。all：删 T 中全部临时条目与 derivation，按 holder 写 source/identity/deleted 最小控制；长期不动；物理删除正文，不隐藏。两者都保留 `memory_temporary_links` 与既有控制行（只 ids/时间），供同长期锚重建查旧 forget/share/exclusive。
+- restrictSharing：只给 T 加 share control；A/B/C current 保留；share/relay 按既有 `isShareRestricted` 拒绝。控制跨重启；同一有效时段、明确同一 `long_identity_id` 的新 T 通过旧 link 查到旧 T share control，不自动解除，重试/换 source/换措辞均拒绝。不宣称 T 过期后对长期下禁令。
+- keepExclusive：保留选中 holder 的 current（版本+1），删 T 其他 holder 临时副本并写控制；长期不动。旧 T 的独占/share control 通过 link 对同锚重建继续生效；不升级为长期禁令。
+- share/relay：不为临时条目新增拒绝；share 仍按既有派生/权限与自动共享预算，不得把私聊偏好默认自动分享；relay 只在用户本轮明确授权转告时执行，不得误称“默认自动分享”。临时条目复制 `expiresAt`、T、derivation；**holder long 只在明确事实关联时写入，否则 `-`；不因收件人恰好有任意 long 自动挂靠**；identity copy/sync 用 propagation，显式 relay/share 用 `temporary_relay`（即使有 holder long），`direct=false`、`relayFrom` 真实；若父为 edit，目标用 `temporary-edit` 源且 `edited=true`，不声称 body 来自原聊天；已禁止分享/冲突按既有规则拒绝；父临时删除后下游 relay 仍用 origin 信息+derivation 验证，不依赖父行存活。
+- 重建控制：同一有效时段且明确同一 `long_identity_id` 的新 T，先按 holder 查旧 link 对应的 forget/share/exclusive 控制；initiator 可用本轮新 source+明确重新告知建新 T，其他 holder 的旧 forget 不解除、旧 share/exclusive 不自动解除；**旧 share/exclusive 存在时，新 T 不向其他 holder 建 copy、不 share/relay**；旧 source control 始终阻断。不能证明同锚的独立语义不虚称已解决。
+- 以长期条目为目标的现有 2b cancel/correct/forget 语义不变；temporary 操作不扩大到长期 identity。构造模型/GUI/live 仍另列，不把本轮当完成。
+
+**A5 检索与管理可见**
+- `searchMemories`/`buildContext`：active + 本地临时结构校验（T/anchors/derivation/expiry/source control；copy/relay segments；edit 的 edited 标记）。失效 current 不进入上下文或聊天候选；`listMemories` 不变，管理可见。chat 深校验用 `memorySourceContext.resolve`，edit 仅按本地规则接受。
+- 仅有效 current 抑制对应 holder 的长期 anchor；失效/移除后不设今日抑制墓碑，长期按长期恢复，不重建今日。`memory_temporary_links` 只用于控制查询，不参与抑制、不进入检索/上下文、不把临时禁令升级为长期禁令。同一 holder 多 current 同文同到期只注入一条，但保留全部行供 all/exclusive。
+- 标签：direct“用户今天明确说明”；copy/relay“经 origin 的今日说明同步/听 relayFrom 说，不是直接告知”；edit“用户在面板修改”。临时段注明优先于长期偏好。
+
+**A6 两批实现（每批接真实入口，不以拒绝 guard 收口）**
+| 批 | 允许文件 | 内容 | 生产规模 |
+|---|---|---|---|
+| 2c-1 | `memory-temporary-source.cjs`（新）、`memory.cjs`、`memory-store.cjs`（可新增 `memory_temporary_links` 窄表/迁移）、`memory-source-context.cjs`、`chat-memory-operations.cjs`、`chat.cjs`（仅阶段 1 接线）、测试 semantic/corrected-source | 随机 T/查找、link/控制查询、阶段 1 已知 holder、检索、self/all/restrict/exclusive、share/relay、UI 编辑、来源验证 | 350～500 |
+| 2c-2 | `chat.cjs`、`chat-memory-verification.cjs`、`memory.cjs`（proof/confirmed）、`memory-relation-protocol.cjs`、同 Runner | 独立同义候选一次核验、contextVersion 精确放行、原子回滚、第二候选 | 150～250 |
+
+- link 窄表只存 `temp_identity_id/long_identity_id/holder_character_id/expires_at`，不存 body；`CREATE TABLE IF NOT EXISTS` 旧库迁移，无 FK 级联删除；link 与临时条目同事务写入，失败整笔回滚；删除正文后 link/控制保留，重开验证仍能查旧 forget/share/exclusive。若现有表可满足同等无正文查询，可不建新表，但迁移/重开/回滚验收不变。
+
+2c-1 先做来源/操作/检索的业务路径与失败用例，必须是真实 chat 入口 + memory 管理领域；若本批未运行真实 UI IPC，只能记领域验证，**不得标 UI IPC 已验**。GUI/live 为后续门禁。2c-2 才接模型候选，不提前写 proof/UI。2c-1 的 temporary 仍不宣称独立同义完成；2c-2 完成后父合同才可能闭环。350～500/150～250 是审查信号而非硬上限；超出需说明职责必要性并由 master 审查，不为凑数压缩代码或断言。
+
+### 12.2 Part B：验收计划（真实 SQLite/chat/UI IPC + 构造模型）
+
+| ID | 批 | Given → When | Expected / 禁止 | Oracle |
+|---|---|---|---|---|
+| S1 self | 2c-1 | A/B 同 T；分别执行 A 删临时 current、A 删自己的长期 anchor | S1a：A 临时条目删、B copy 仍 resolve ok 且用 B long；S1b：A 长期删后 B copy 仍有效，不因 A 缺失失效；A/B 其他长期按实际保留；单消息 | entries/derivations/controls/source snapshot；两次独立 runner |
+| S2 all | 2c-1 | A/B 同 T；A `forget all` | A/B 临时行与 derivation 全删；控制保留；长期保留；旧源重扫不恢复 | 逐表快照、FTS、controls、重开 |
+| S3 restrict | 2c-1 | A/B 同 T | T 有 share control；current 全留；share/relay 被既有规则拒；重启仍拒；不删长期 | controls、share/relay 返回、重开 |
+| S4 exclusive | 2c-1 | A/B 同 T；A `keepExclusive` | A current 保留+1；B 临时删除并控制；长期不动 | entries/derivations/controls |
+| S5 同日改 | 2c-1 | A current+B copy | 再改口复用 T；A/B current 原地更新；旧 snapshot stale；无 `corrected:`；长期不变 | versions/sourceId/derivation；单 assistant |
+| S6 第二发起 | 2c-1 | B 的临时 copy 在 T；B 发起新陈述 | 复用 B 的 T，更新 A/B 已有关联副本，不另造组；A 若已 self 删除则不复活 | T 分组、entries/derivation、controls |
+| S7 share/relay | 2c-1 | 用户明确授权 A 转告 C；另测自动分享路径 | 显式 relay 继承 expiry/T、`direct=false`、relayFrom 真实；禁止分享时既有错误；**不得把私聊偏好误称默认自动分享**；share 资格/预算不变；父删后仍可用 origin 验证 | C entry/source snapshot/expiry、返回码、预算 |
+| S8 UI 编辑 | 2c-1 | 面板由 B 保存共享临时副本，A/B 同 T | 窄更新 T 全部 body，A/B 一致；expiry/T 不变；source 为 temporary-edit、edited=true，不冒充聊天原话；可检索/转告 | IPC 返回、entries/source snapshot、context |
+| S9 unknown | 2c-1 | C 未结识 | 不创建 C/关系/T copy；候选只已知 holder | relationships/entries |
+| S10 过期 | 2c-1 | current 接近到期 | 到期不进入 search/context；长期恢复；次日新 T；同 T 重试不复活 | 时钟、entries、context |
+| S11 同锚防回流 | 2c-1 | 同一有效时段、明确同一 `long_identity_id`；旧 T 已有 A/B 的 forget/share/exclusive；A 同日重新明确告知同 body，再用不同措辞；另重试旧 source | 新建 T 仅 A 获 current；旧 link 查到旧控制：B 的旧 forget 不解除、不被重建；旧 share/exclusive 不自动解除，B 不获 copy/不转告；旧 source 重试被 source control 阻断；body 不同但同锚同样执行；link 只存 ids/时间；重开仍阻断 | entries/identities/links/controls/source snapshot、旧库升级/重开、事务前后逐表与 link 写入失败回滚 |
+| S12 歧义 | 2c-1 | 长期目标存在多个无法唯一证明的 T | 沿既有最小澄清；零修改、零传播；不按 updatedAt/正文猜组 | entries/derivations/controls 前后完全一致、assistant 澄清 |
+| D1 独立同义 | 2c-2 | B 独立同义长事实 | 一次核验后建/更新 B current；不合并长期；单消息原位更新 | pair/HTTP、entries/identities |
+| D2 多锚 | 2c-2 | B 同 identity 多长条目+另一独立 identity | 阶段 1 每个 holder+identity 一条 current；阶段 2 不跳过另一 identity；无重复 | T 计数、pair、context |
+| D3 context | 2c-2 | 阶段 1 触碰 B，B 另有独立候选 | 只放行记录的 contextVersionsAfterLocal；额外变化 stale；候选证据仍 current 时完成 | contextVersions、proof |
+| D4 回滚 | 2c-2 | 第二候选写入失败 | 全部 stage2 current/derivation/source/context 回滚；阶段 1 保留；单条本地完成 | 逐表前后快照、trigger |
+| D5 未知 | 2c-2 | 候选检索含未结识角色 | 不新增关系/角色/T copy；pair 只含已知 holder | relationships、entries、HTTP |
+
+- 2c-1 不含独立同义阶段 2；2c-2 不重做 2c-1。**S11 为 2c-1 必需 Case，不得后移**；2c-1 必须经真实 chat 入口与 memory 管理领域；本批若未运行真实 UI IPC，不得标 UI IPC 已验，只记领域与既有 IPC 代码路径。关系模型为构造 HTTP；GUI/live 为后续门禁。真实模型 L1/L2、GUI 生命周期与 live 仍 NOT_COVERED，未运行不填 PASS。
+
+### 12.3 明确边界（本批不扩范围）
+- 多个 T 无法唯一证明时沿既有最小澄清：零修改、零传播，不按 updatedAt/正文/角色猜组，也不合并两组。选中 temporary 时直接用其 T；长期目标优先唯一有效 current，其次唯一可证明关联 T。
+- holder long 只在明确事实关联时存在；relay/edit 无关联时为 null，其验证依赖 origin 消息、derivation、T 与 expiry，不冒充直接告知。
+- 长期操作仍按 2b；temporary 的 restrict/exclusive 不扩大到长期 identity，也不声称 T 过期后长期受限。
+- `memory_temporary_links` 只用于查旧 forget/share/exclusive，不存正文、不抑制长期、不建 overlay；同一有效时段且明确同 `long_identity_id` 的新 T 不得通过换 source/措辞解除旧控制，旧源始终阻断。过期后跨日新事实与旧临时状态分开，旧临时禁令不升级为长期禁令。
+- 同锚关系无法证明的独立语义不虚称防回流已解决，保留真实模型与召回门禁；本批只落实可证明的同锚控制。
