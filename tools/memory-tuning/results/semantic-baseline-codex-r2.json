@@ -1,0 +1,1529 @@
+{
+  "tool": "semantic-baseline",
+  "generatedAt": "2026-10-27T01:00:27.579Z",
+  "scenarioTime": "2026-10-27T10:00:00.000Z",
+  "source": {
+    "sha": "d99ba09a1b75e4b04df094e9b1b1ba3cfab83e38",
+    "version": "0.1.168",
+    "node": "v24.13.1",
+    "files": {
+      "app/memory.cjs": "8a1a75cba95a451e533fc9551a6effe3f6841e14214d571be7a6e44600dbda7d",
+      "app/memory-store.cjs": "17acb8a2b96e1295f52182d81140b119a34a7bb209a47e3a50107731d8a6c275",
+      "app/memory-retrieval.cjs": "e03cbb18303dfb2e4a93f7bc960eaea3ce0b8b262077cd366f0c628422bc8cb5",
+      "tools/memory-tuning/semantic-baseline.cjs": "1c063139fe38415f3a58574eed4aacb434da9388a418ce1137f606f8a882e409"
+    }
+  },
+  "summary": {
+    "total": 8,
+    "passed": 1,
+    "failed": 7,
+    "error": 0,
+    "checksPassed": 42,
+    "checksFailed": 33
+  },
+  "scenarios": [
+    {
+      "id": "SEM-001",
+      "title": "不同键同义偏好：A 纠正后 A/B 同步，C 未知",
+      "status": "FAIL",
+      "details": null,
+      "states": {
+        "initial": {
+          "a": {
+            "characterId": "role-a",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "9cd1baf6-c599-4a6a-b424-f7547fccb707",
+                "factKey": "pref.a.coffee",
+                "body": "用户喜欢甜咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "98ace6ab-cd3b-401c-8b8c-2831b2e06f60",
+                "factKey": "pref.b.coffee",
+                "body": "用户喜欢加糖的咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        },
+        "after": {
+          "a": {
+            "characterId": "role-a",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "9cd1baf6-c599-4a6a-b424-f7547fccb707",
+                "factKey": "pref.a.coffee",
+                "body": "用户现在只喝纯黑咖啡",
+                "kind": "preference",
+                "version": 2,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "98ace6ab-cd3b-401c-8b8c-2831b2e06f60",
+                "factKey": "pref.b.coffee",
+                "body": "用户喜欢加糖的咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        }
+      },
+      "checks": [
+        {
+          "name": "A 当前偏好为新理解",
+          "expected": "用户现在只喝纯黑咖啡",
+          "actual": "用户现在只喝纯黑咖啡",
+          "status": "PASS"
+        },
+        {
+          "name": "B 当前偏好严格同步为新理解",
+          "expected": "用户现在只喝纯黑咖啡",
+          "actual": "用户喜欢加糖的咖啡",
+          "status": "FAIL"
+        },
+        {
+          "name": "A 版本递增",
+          "expected": 2,
+          "actual": 2,
+          "status": "PASS"
+        },
+        {
+          "name": "B 版本随同步递增",
+          "expected": 2,
+          "actual": 1,
+          "status": "FAIL"
+        },
+        {
+          "name": "A FTS 索引新正文",
+          "expected": true,
+          "actual": true,
+          "status": "PASS"
+        },
+        {
+          "name": "A FTS 不残留旧正文",
+          "expected": false,
+          "actual": false,
+          "status": "PASS"
+        },
+        {
+          "name": "B FTS 索引新正文",
+          "expected": true,
+          "actual": false,
+          "status": "FAIL"
+        },
+        {
+          "name": "B FTS 不残留旧正文",
+          "expected": false,
+          "actual": true,
+          "status": "FAIL"
+        },
+        {
+          "name": "C 无新增条目",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        },
+        {
+          "name": "C 无 FTS 记录",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        }
+      ],
+      "controls": {
+        "forgetControls": 0,
+        "sourceControls": 1,
+        "shareControls": 0,
+        "extractionBatches": 0
+      },
+      "cleanup": {
+        "path": "/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-semantic-baseline-EjPzUJ",
+        "removed": true,
+        "existsAfter": false
+      },
+      "startedAt": "2026-10-27T01:00:27.526Z",
+      "endedAt": "2026-10-27T01:00:27.537Z",
+      "durationMs": 9.87
+    },
+    {
+      "id": "SEM-002",
+      "title": "不同键同义偏好：A 默认删除后 A/B 正文与 FTS 消失，重启保持",
+      "status": "FAIL",
+      "details": null,
+      "states": {
+        "initial": {
+          "a": {
+            "characterId": "role-a",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "f3797ddf-e876-401c-b956-fee9eb2b078e",
+                "factKey": "pref.a.coffee",
+                "body": "用户喜欢甜咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "fe0b56f2-f719-4d49-bc7f-540e508ee0b3",
+                "factKey": "pref.b.coffee",
+                "body": "用户喜欢加糖的咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        },
+        "afterForget": {
+          "a": {
+            "characterId": "role-a",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "fe0b56f2-f719-4d49-bc7f-540e508ee0b3",
+                "factKey": "pref.b.coffee",
+                "body": "用户喜欢加糖的咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        },
+        "afterRestart": {
+          "a": {
+            "characterId": "role-a",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "fe0b56f2-f719-4d49-bc7f-540e508ee0b3",
+                "factKey": "pref.b.coffee",
+                "body": "用户喜欢加糖的咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        }
+      },
+      "checks": [
+        {
+          "name": "删除后 A 无条目",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        },
+        {
+          "name": "删除后 B 同义条目消失",
+          "expected": 0,
+          "actual": 1,
+          "status": "FAIL"
+        },
+        {
+          "name": "删除后 A FTS 行为空",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        },
+        {
+          "name": "删除后 B FTS 行为空",
+          "expected": 0,
+          "actual": 1,
+          "status": "FAIL"
+        },
+        {
+          "name": "删除后 C 无新增条目",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        },
+        {
+          "name": "删除后 C 无 FTS 记录",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        },
+        {
+          "name": "重启后 A 仍无条目",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        },
+        {
+          "name": "重启后 B 仍无条目",
+          "expected": 0,
+          "actual": 1,
+          "status": "FAIL"
+        },
+        {
+          "name": "重启后 A FTS 行为空",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        },
+        {
+          "name": "重启后 B FTS 行为空",
+          "expected": 0,
+          "actual": 1,
+          "status": "FAIL"
+        },
+        {
+          "name": "重启后 C 仍无条目",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        }
+      ],
+      "controls": {
+        "forgetControls": 1,
+        "sourceControls": 1,
+        "shareControls": 0,
+        "extractionBatches": 0
+      },
+      "cleanup": {
+        "path": "/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-semantic-baseline-AQJ9Ps",
+        "removed": true,
+        "existsAfter": false
+      },
+      "startedAt": "2026-10-27T01:00:27.537Z",
+      "endedAt": "2026-10-27T01:00:27.543Z",
+      "durationMs": 6.76
+    },
+    {
+      "id": "SEM-003",
+      "title": "同键不同主体：A 纠正只改 A，B 的姐姐偏好不变",
+      "status": "FAIL",
+      "details": null,
+      "states": {
+        "initial": {
+          "a": {
+            "characterId": "role-a",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "af2abcd4-6885-4b94-ba95-5c8555860097",
+                "factKey": "pref.coffee",
+                "body": "用户喜欢甜咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "9fc0066a-b78f-47e5-bda4-ea05437f1a21",
+                "factKey": "pref.coffee",
+                "body": "用户的姐姐喜欢甜咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        },
+        "after": {
+          "a": {
+            "characterId": "role-a",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "af2abcd4-6885-4b94-ba95-5c8555860097",
+                "factKey": "pref.coffee",
+                "body": "用户现在只喝纯黑咖啡",
+                "kind": "preference",
+                "version": 2,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "9fc0066a-b78f-47e5-bda4-ea05437f1a21",
+                "factKey": "pref.coffee",
+                "body": "用户现在只喝纯黑咖啡",
+                "kind": "preference",
+                "version": 2,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        }
+      },
+      "checks": [
+        {
+          "name": "A 正文更新",
+          "expected": "用户现在只喝纯黑咖啡",
+          "actual": "用户现在只喝纯黑咖啡",
+          "status": "PASS"
+        },
+        {
+          "name": "A 版本递增",
+          "expected": 2,
+          "actual": 2,
+          "status": "PASS"
+        },
+        {
+          "name": "B 正文保持原主体事实",
+          "expected": "用户的姐姐喜欢甜咖啡",
+          "actual": "用户现在只喝纯黑咖啡",
+          "status": "FAIL"
+        },
+        {
+          "name": "B 版本不变",
+          "expected": 1,
+          "actual": 2,
+          "status": "FAIL"
+        },
+        {
+          "name": "B FTS 保留原正文",
+          "expected": true,
+          "actual": false,
+          "status": "FAIL"
+        },
+        {
+          "name": "B FTS 不索引 A 的新正文",
+          "expected": false,
+          "actual": true,
+          "status": "FAIL"
+        },
+        {
+          "name": "C 无新增条目",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        }
+      ],
+      "controls": {
+        "forgetControls": 0,
+        "sourceControls": 2,
+        "shareControls": 0,
+        "extractionBatches": 0
+      },
+      "cleanup": {
+        "path": "/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-semantic-baseline-NauUay",
+        "removed": true,
+        "existsAfter": false
+      },
+      "startedAt": "2026-10-27T01:00:27.544Z",
+      "endedAt": "2026-10-27T01:00:27.549Z",
+      "durationMs": 5.503
+    },
+    {
+      "id": "SEM-004",
+      "title": "同键不同性质：A 当前偏好纠正不改 B 的历史经历",
+      "status": "FAIL",
+      "details": null,
+      "states": {
+        "initial": {
+          "a": {
+            "characterId": "role-a",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "f3b8e63d-7652-40db-8639-4bd636586792",
+                "factKey": "pref.coffee",
+                "body": "用户喜欢甜咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "4fd3694d-4f67-40af-95f3-53a124b99f55",
+                "factKey": "pref.coffee",
+                "body": "去年和用户一起喝甜咖啡",
+                "kind": "experience",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        },
+        "after": {
+          "a": {
+            "characterId": "role-a",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "f3b8e63d-7652-40db-8639-4bd636586792",
+                "factKey": "pref.coffee",
+                "body": "用户现在只喝纯黑咖啡",
+                "kind": "preference",
+                "version": 2,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "4fd3694d-4f67-40af-95f3-53a124b99f55",
+                "factKey": "pref.coffee",
+                "body": "用户现在只喝纯黑咖啡",
+                "kind": "experience",
+                "version": 2,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        }
+      },
+      "checks": [
+        {
+          "name": "A 正文已更新",
+          "expected": "用户现在只喝纯黑咖啡",
+          "actual": "用户现在只喝纯黑咖啡",
+          "status": "PASS"
+        },
+        {
+          "name": "A 版本已递增",
+          "expected": 2,
+          "actual": 2,
+          "status": "PASS"
+        },
+        {
+          "name": "A 性质仍为当前偏好",
+          "expected": "preference",
+          "actual": "preference",
+          "status": "PASS"
+        },
+        {
+          "name": "B 历史经历仍为原文",
+          "expected": "去年和用户一起喝甜咖啡",
+          "actual": "用户现在只喝纯黑咖啡",
+          "status": "FAIL"
+        },
+        {
+          "name": "B 版本不变",
+          "expected": 1,
+          "actual": 2,
+          "status": "FAIL"
+        },
+        {
+          "name": "B 性质仍为经历",
+          "expected": "experience",
+          "actual": "experience",
+          "status": "PASS"
+        },
+        {
+          "name": "B FTS 保留历史正文",
+          "expected": true,
+          "actual": false,
+          "status": "FAIL"
+        },
+        {
+          "name": "B FTS 不索引当前偏好正文",
+          "expected": false,
+          "actual": true,
+          "status": "FAIL"
+        },
+        {
+          "name": "C 无新增条目",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        }
+      ],
+      "controls": {
+        "forgetControls": 0,
+        "sourceControls": 2,
+        "shareControls": 0,
+        "extractionBatches": 0
+      },
+      "cleanup": {
+        "path": "/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-semantic-baseline-HsjgDI",
+        "removed": true,
+        "existsAfter": false
+      },
+      "startedAt": "2026-10-27T01:00:27.549Z",
+      "endedAt": "2026-10-27T01:00:27.554Z",
+      "durationMs": 5.367
+    },
+    {
+      "id": "SEM-005",
+      "title": "不同键同义：A 禁分享后 B 明确转告 C 仍必须拒绝",
+      "status": "FAIL",
+      "details": {
+        "relay": {
+          "rejected": false,
+          "reason": null,
+          "via": "result"
+        }
+      },
+      "states": {
+        "initial": {
+          "a": {
+            "characterId": "role-a",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "d3c81e25-83a3-4fd2-85a2-288497d1b34a",
+                "factKey": "pref.a.coffee",
+                "body": "用户喜欢甜咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "b2341f9e-145a-43f0-89d0-02b3dfb31820",
+                "factKey": "pref.b.coffee",
+                "body": "用户喜欢加糖的咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        },
+        "after": {
+          "a": {
+            "characterId": "role-a",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "d3c81e25-83a3-4fd2-85a2-288497d1b34a",
+                "factKey": "pref.a.coffee",
+                "body": "用户喜欢甜咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "b2341f9e-145a-43f0-89d0-02b3dfb31820",
+                "factKey": "pref.b.coffee",
+                "body": "用户喜欢加糖的咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "4722dd96-28e6-4015-9229-4f8fe27148ce",
+                "factKey": "pref.b.coffee",
+                "body": "用户喜欢加糖的咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": true,
+                "derivedFromEntryId": "b2341f9e-145a-43f0-89d0-02b3dfb31820"
+              }
+            ]
+          }
+        }
+      },
+      "checks": [
+        {
+          "name": "B 明确转告被业务规则拒绝",
+          "expected": true,
+          "actual": false,
+          "status": "FAIL"
+        },
+        {
+          "name": "C 无新增条目",
+          "expected": 0,
+          "actual": 1,
+          "status": "FAIL"
+        },
+        {
+          "name": "C 无 FTS 记录",
+          "expected": 0,
+          "actual": 1,
+          "status": "FAIL"
+        }
+      ],
+      "controls": {
+        "forgetControls": 0,
+        "sourceControls": 0,
+        "shareControls": 1,
+        "extractionBatches": 0
+      },
+      "cleanup": {
+        "path": "/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-semantic-baseline-UrVrDq",
+        "removed": true,
+        "existsAfter": false
+      },
+      "startedAt": "2026-10-27T01:00:27.555Z",
+      "endedAt": "2026-10-27T01:00:27.561Z",
+      "durationMs": 6.086
+    },
+    {
+      "id": "SEM-006",
+      "title": "不同键同义：A 要求只让 A 记得，B 删除且旧来源新键不能学回",
+      "status": "FAIL",
+      "details": {
+        "relearn": {
+          "rejected": false,
+          "reason": null,
+          "via": "result"
+        }
+      },
+      "states": {
+        "initial": {
+          "a": {
+            "characterId": "role-a",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "144d441e-9cc8-4224-9502-30f918fe3c53",
+                "factKey": "pref.a.coffee",
+                "body": "用户喜欢甜咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "5056e831-003b-4a2c-8a9c-829d35cf3c27",
+                "factKey": "pref.b.coffee",
+                "body": "用户喜欢加糖的咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        },
+        "afterExclusive": {
+          "a": {
+            "characterId": "role-a",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "144d441e-9cc8-4224-9502-30f918fe3c53",
+                "factKey": "pref.a.coffee",
+                "body": "用户喜欢甜咖啡",
+                "kind": "preference",
+                "version": 2,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "5056e831-003b-4a2c-8a9c-829d35cf3c27",
+                "factKey": "pref.b.coffee",
+                "body": "用户喜欢加糖的咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        },
+        "afterRelearn": {
+          "a": {
+            "characterId": "role-a",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "144d441e-9cc8-4224-9502-30f918fe3c53",
+                "factKey": "pref.a.coffee",
+                "body": "用户喜欢甜咖啡",
+                "kind": "preference",
+                "version": 2,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 2,
+            "ftsCount": 2,
+            "entries": [
+              {
+                "id": "7db5cc4f-17d9-4e35-8e0f-e14277c850c9",
+                "factKey": "pref.b.coffee.relearn",
+                "body": "用户喜欢加糖的咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              },
+              {
+                "id": "5056e831-003b-4a2c-8a9c-829d35cf3c27",
+                "factKey": "pref.b.coffee",
+                "body": "用户喜欢加糖的咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        }
+      },
+      "checks": [
+        {
+          "name": "A 保留原理解",
+          "expected": "用户喜欢甜咖啡",
+          "actual": "用户喜欢甜咖啡",
+          "status": "PASS"
+        },
+        {
+          "name": "B 正文条目被清除",
+          "expected": 0,
+          "actual": 1,
+          "status": "FAIL"
+        },
+        {
+          "name": "B 全部 FTS 被清除",
+          "expected": 0,
+          "actual": 1,
+          "status": "FAIL"
+        },
+        {
+          "name": "B 原条目 FTS 行被清除",
+          "expected": 0,
+          "actual": 1,
+          "status": "FAIL"
+        },
+        {
+          "name": "C 无新增条目",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        },
+        {
+          "name": "B 旧来源新键重学被业务规则拒绝",
+          "expected": true,
+          "actual": false,
+          "status": "FAIL"
+        },
+        {
+          "name": "B 最终未恢复旧理解",
+          "expected": 0,
+          "actual": 2,
+          "status": "FAIL"
+        },
+        {
+          "name": "B 最终全部 FTS 为空",
+          "expected": 0,
+          "actual": 2,
+          "status": "FAIL"
+        },
+        {
+          "name": "B 最终原条目无 FTS 残留",
+          "expected": 0,
+          "actual": 1,
+          "status": "FAIL"
+        }
+      ],
+      "controls": {
+        "forgetControls": 0,
+        "sourceControls": 0,
+        "shareControls": 1,
+        "extractionBatches": 0
+      },
+      "cleanup": {
+        "path": "/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-semantic-baseline-Z92Kvl",
+        "removed": true,
+        "existsAfter": false
+      },
+      "startedAt": "2026-10-27T01:00:27.561Z",
+      "endedAt": "2026-10-27T01:00:27.567Z",
+      "durationMs": 6.149
+    },
+    {
+      "id": "SEM-007",
+      "title": "不同键同义：A 默认删除后，B 用旧来源新键重提炼不能恢复",
+      "status": "FAIL",
+      "details": {
+        "relearn": {
+          "rejected": false,
+          "reason": null,
+          "via": "result"
+        }
+      },
+      "states": {
+        "initial": {
+          "a": {
+            "characterId": "role-a",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "fc016542-66ea-4d74-b204-149e5e11199c",
+                "factKey": "pref.a.coffee",
+                "body": "用户喜欢甜咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "e6f8d445-94a7-449a-a409-1e43d461f7d5",
+                "factKey": "pref.b.coffee",
+                "body": "用户喜欢加糖的咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        },
+        "afterForget": {
+          "a": {
+            "characterId": "role-a",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "e6f8d445-94a7-449a-a409-1e43d461f7d5",
+                "factKey": "pref.b.coffee",
+                "body": "用户喜欢加糖的咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        },
+        "afterRelearn": {
+          "a": {
+            "characterId": "role-a",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 2,
+            "ftsCount": 2,
+            "entries": [
+              {
+                "id": "2d30a784-102c-43eb-a5a1-49da5cbbc48b",
+                "factKey": "pref.b.coffee.relearn",
+                "body": "用户喜欢加糖的咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              },
+              {
+                "id": "e6f8d445-94a7-449a-a409-1e43d461f7d5",
+                "factKey": "pref.b.coffee",
+                "body": "用户喜欢加糖的咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        }
+      },
+      "checks": [
+        {
+          "name": "A 默认删除后无条目",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        },
+        {
+          "name": "B 同义条目被清除",
+          "expected": 0,
+          "actual": 1,
+          "status": "FAIL"
+        },
+        {
+          "name": "B 删除后全部 FTS 为空",
+          "expected": 0,
+          "actual": 1,
+          "status": "FAIL"
+        },
+        {
+          "name": "B 原条目 FTS 行被清除",
+          "expected": 0,
+          "actual": 1,
+          "status": "FAIL"
+        },
+        {
+          "name": "C 无新增条目",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        },
+        {
+          "name": "B 旧来源新键重提炼被业务规则拒绝",
+          "expected": true,
+          "actual": false,
+          "status": "FAIL"
+        },
+        {
+          "name": "B 重提炼后未恢复旧理解",
+          "expected": 0,
+          "actual": 2,
+          "status": "FAIL"
+        },
+        {
+          "name": "B 重提炼后全部 FTS 为空",
+          "expected": 0,
+          "actual": 2,
+          "status": "FAIL"
+        },
+        {
+          "name": "B 重提炼后原条目无 FTS 残留",
+          "expected": 0,
+          "actual": 1,
+          "status": "FAIL"
+        }
+      ],
+      "controls": {
+        "forgetControls": 1,
+        "sourceControls": 1,
+        "shareControls": 0,
+        "extractionBatches": 1
+      },
+      "cleanup": {
+        "path": "/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-semantic-baseline-K9sIzg",
+        "removed": true,
+        "existsAfter": false
+      },
+      "startedAt": "2026-10-27T01:00:27.567Z",
+      "endedAt": "2026-10-27T01:00:27.573Z",
+      "durationMs": 5.839
+    },
+    {
+      "id": "SEM-008",
+      "title": "同键真实派生正控制：纠正同步、删除防回流、C 未知",
+      "status": "PASS",
+      "details": {
+        "correction": {
+          "updated": 2,
+          "updatedDerived": 1,
+          "affectedCharacters": [
+            "role-a",
+            "role-b"
+          ]
+        },
+        "forget": {
+          "deleted": 2,
+          "affectedCharacters": [
+            "role-a",
+            "role-b"
+          ]
+        },
+        "relearn": {
+          "rejected": true,
+          "reason": "source",
+          "via": "result"
+        }
+      },
+      "states": {
+        "initial": {
+          "a": {
+            "characterId": "role-a",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "ec683878-9b4e-4ab6-87d2-6c94bb537a7f",
+                "factKey": "pref.coffee",
+                "body": "用户喜欢甜咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "a9c9e660-1c2f-44ae-a027-3d3ffc8ae8e0",
+                "factKey": "pref.coffee",
+                "body": "用户喜欢甜咖啡",
+                "kind": "preference",
+                "version": 1,
+                "derived": true,
+                "derivedFromEntryId": "ec683878-9b4e-4ab6-87d2-6c94bb537a7f"
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        },
+        "afterCorrect": {
+          "a": {
+            "characterId": "role-a",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "ec683878-9b4e-4ab6-87d2-6c94bb537a7f",
+                "factKey": "pref.coffee",
+                "body": "用户现在只喝纯黑咖啡",
+                "kind": "preference",
+                "version": 2,
+                "derived": false,
+                "derivedFromEntryId": null
+              }
+            ]
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 1,
+            "ftsCount": 1,
+            "entries": [
+              {
+                "id": "a9c9e660-1c2f-44ae-a027-3d3ffc8ae8e0",
+                "factKey": "pref.coffee",
+                "body": "用户现在只喝纯黑咖啡",
+                "kind": "preference",
+                "version": 2,
+                "derived": true,
+                "derivedFromEntryId": "ec683878-9b4e-4ab6-87d2-6c94bb537a7f"
+              }
+            ]
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        },
+        "afterDelete": {
+          "a": {
+            "characterId": "role-a",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        },
+        "afterRelearn": {
+          "a": {
+            "characterId": "role-a",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          },
+          "b": {
+            "characterId": "role-b",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          },
+          "c": {
+            "characterId": "role-c",
+            "count": 0,
+            "ftsCount": 0,
+            "entries": []
+          }
+        }
+      },
+      "checks": [
+        {
+          "name": "A 初始条目存在",
+          "expected": {
+            "body": "用户喜欢甜咖啡",
+            "version": 1
+          },
+          "actual": {
+            "body": "用户喜欢甜咖啡",
+            "version": 1
+          },
+          "status": "PASS"
+        },
+        {
+          "name": "B 建立同键真实派生",
+          "expected": {
+            "body": "用户喜欢甜咖啡",
+            "derived": true,
+            "version": 1,
+            "derivedFromEntryId": "ec683878-9b4e-4ab6-87d2-6c94bb537a7f"
+          },
+          "actual": {
+            "body": "用户喜欢甜咖啡",
+            "derived": true,
+            "version": 1,
+            "derivedFromEntryId": "ec683878-9b4e-4ab6-87d2-6c94bb537a7f"
+          },
+          "status": "PASS"
+        },
+        {
+          "name": "纠正后 A 正文同步",
+          "expected": "用户现在只喝纯黑咖啡",
+          "actual": "用户现在只喝纯黑咖啡",
+          "status": "PASS"
+        },
+        {
+          "name": "纠正后 A 版本递增",
+          "expected": 2,
+          "actual": 2,
+          "status": "PASS"
+        },
+        {
+          "name": "纠正后 B 派生正文同步",
+          "expected": "用户现在只喝纯黑咖啡",
+          "actual": "用户现在只喝纯黑咖啡",
+          "status": "PASS"
+        },
+        {
+          "name": "纠正后 B 派生版本递增",
+          "expected": 2,
+          "actual": 2,
+          "status": "PASS"
+        },
+        {
+          "name": "纠正后 B 仍为真实派生",
+          "expected": true,
+          "actual": true,
+          "status": "PASS"
+        },
+        {
+          "name": "纠正后 A FTS 索引新正文",
+          "expected": true,
+          "actual": true,
+          "status": "PASS"
+        },
+        {
+          "name": "纠正后 B 派生 FTS 索引新正文",
+          "expected": true,
+          "actual": true,
+          "status": "PASS"
+        },
+        {
+          "name": "默认删除后 A 无条目",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        },
+        {
+          "name": "默认删除后 B 无条目",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        },
+        {
+          "name": "默认删除后 A FTS 行为空",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        },
+        {
+          "name": "默认删除后 B FTS 行为空",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        },
+        {
+          "name": "C 全阶段无新增条目",
+          "expected": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "status": "PASS"
+        },
+        {
+          "name": "旧分享来源重学被业务规则拒绝",
+          "expected": true,
+          "actual": true,
+          "status": "PASS"
+        },
+        {
+          "name": "重学后 B 无条目",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        },
+        {
+          "name": "重学后 B 全部 FTS 为空",
+          "expected": 0,
+          "actual": 0,
+          "status": "PASS"
+        }
+      ],
+      "controls": {
+        "forgetControls": 2,
+        "sourceControls": 4,
+        "shareControls": 0,
+        "extractionBatches": 0
+      },
+      "cleanup": {
+        "path": "/var/folders/5n/2wyhxdq53ln2scvk29ppygrh0000gn/T/bayper-semantic-baseline-9opxb1",
+        "removed": true,
+        "existsAfter": false
+      },
+      "startedAt": "2026-10-27T01:00:27.573Z",
+      "endedAt": "2026-10-27T01:00:27.579Z",
+      "durationMs": 6.325
+    }
+  ],
+  "boundaries": [
+    "使用正式 createMemoryService 与真实 SQLite；每场景独立临时库，结束清理",
+    "不调用模型、不修改产品实现、不 mock 记忆操作；Expected 只用于事后评分",
+    "实际 FAIL 是语义关联缺口证据，执行异常单独记为 ERROR",
+    "未知异常不会被当作业务拒绝；源文件哈希用于复核实际运行内容",
+    "不包含真实用户内容；控制表只记录摘要计数",
+    "未验证真实模型提炼、真实聊天上下文、GUI 或权限目录"
+  ]
+}

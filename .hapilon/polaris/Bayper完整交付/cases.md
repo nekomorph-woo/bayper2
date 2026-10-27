@@ -112,3 +112,8 @@ POL-CONNECTOR-001～007：Contract见s05a-connector-ledger-plan.md及s05a-review
 S04c受托接受：POL-ANALYSIS-001～011、POL-SOURCE-013由tests/acceptance/source-analysis.spec.cjs与session-sources.spec.cjs执行，契约见s04c-analysis-plan.md、s04c-provenance-plan.md、s04c-review.md。与权限/预算共同独立32/32，evidence/s04c-codex-index-final.log。PASS仅限真实临时文件/SQLite/本机HTTP模型fixture服务链，正式GUI/自动调度/真实提炼语义仍NOT_COVERED。
 
 S05b传输模块：POL-TRANSPORT-001～004由tests/acceptance/herdr-transport.spec.cjs执行，契约见s05b-transport-plan.md与s05b-review.md。r2 Codex独立4/4，evidence/s05b-codex-r2.log；真实临时Unix socket，Herdr响应为schema核对fixture，真实Herdr与正式插件/通知仍NOT_COVERED。
+
+## 2026-10-27 接续索引：聊天分享设置与事实关联
+
+- POL-SHARESETTING-001～005：唯一Contract在[s03k-plan.md](s03k-plan.md)，Runner为tests/acceptance/chat-sharing-setting.spec.cjs和chat-sharing-setting-ui.spec.cjs；版本、独立结果及边界见[s03k-review.md](s03k-review.md)，已按其范围受托接受。
+- SEM-001～008：唯一Contract在[s03l-plan.md](s03l-plan.md)，此批为存量记忆事实范围的补建基线，全部P0/必需，2026-10-27 v1由Codex依用户master授权确认。来源为PRD引用memory-and-sharing.md“同步纠正”“怎样同步生效”“删除边界”；真实SQLite+正式memory业务服务，构造数据、无模型/无GUI。Runner tools/memory-tuning/semantic-baseline.cjs，入口node tools/memory-tuning/semantic-baseline.cjs --out <结果路径>；业务Expected由计划定义，工具只评分，不能把当前行为当正确答案。Codex已独立执行v1：SEM-001～007 FAIL、SEM-008 PASS，0ERROR；实际结果与后续修复顺序见s03l-review.md。补建工具已接受，产品关联能力未通过。

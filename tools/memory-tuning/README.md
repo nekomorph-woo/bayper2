@@ -111,3 +111,24 @@ Codex 场景 top1：`char` 0/3、`segment` 1/3、`expanded` 1/3、`hybrid` 3/3�
 - 派生持有者可以发起纠正和默认删除；自动二次分享仍拒绝，用户明确转告留给 S03b。
 - 不验证真实模型提炼、真实聊天取消、桌面 UI 或权限目录。
 - 工具全部通过也不等于 S03a 整体验收通过，最终结果由 Codex 独立运行和审查。
+
+## 语义关联真实服务基线（S03l 首步）
+
+`semantic-baseline.cjs` 使用正式 `createMemoryService` 和真实 SQLite，逐个独立执行
+SEM-001～SEM-008，观察各角色最终条目、FTS、版本、重启和控制表摘要，并捕获禁分享
+场景的真实 `relay` 拒绝或成功。它不调用模型、不修改产品实现、不 mock 记忆操作；
+`Expected` 只用于事后评分。实际不符合规格记为 `FAIL`，执行异常单独记为 `ERROR`。
+输出包含 Git HEAD、生产服务与 Runner 源文件的 SHA-256、每场景实际临时路径及清理校验；
+清理失败记为 `ERROR`，未知异常不会被当作业务拒绝。
+
+```bash
+node tools/memory-tuning/semantic-baseline.cjs
+node tools/memory-tuning/semantic-baseline.cjs --out /tmp/semantic-baseline.json
+```
+
+默认写入 `tools/memory-tuning/results/semantic-baseline-latest.json`，不覆盖检索基线
+`results/latest.json`。临时数据库位于系统临时目录，每个场景结束后删除并记录清理结果。
+
+Codex 独立基线（生产版本0.1.168）：`results/semantic-baseline-codex-r2.json`及同名`.log`，
+8个场景为1 PASS、7 FAIL、0 ERROR；表示发现了当前产品缺口，不是修复通过。
+源文件内容摘要与每场景临时路径/清理结果在报告内，旧轮结果不覆盖；技术决策由项目Polaris记录承接。
