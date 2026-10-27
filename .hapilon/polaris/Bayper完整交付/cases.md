@@ -135,3 +135,7 @@ POL-ASSOC-001～005，P0必需、Codex受托确认v1，唯一Contract见[s03l-as
 POL-REL-001～004，P0/v1/Codex受托确认，唯一Contract见[s03l-grounding-plan.md](s03l-grounding-plan.md)。tests/acceptance/memory-relation-protocol.spec.cjs承担确定性build/parse边界，独立8PASS；tools/memory-tuning/semantic-probe.cjs --policy grounded承担真实模型两数据集对照，baseline16PASS、holdout14PASS2FAIL，整体语义验收FAIL。详[s03l-grounding-review.md](s03l-grounding-review.md)，不替代原SEM产品验收。
 
 POL-MODEL-COMP-001：同grounded协议模型对照，Contract见[s03l-model-comparison-plan.md](s03l-model-comparison-plan.md)；工具semantic-probe.cjs --model deepseek-v4-pro，真实两批各13PASS3FAIL，整体FAIL。逐项结果及不切换模型的决定见[s03l-model-comparison-review.md](s03l-model-comparison-review.md)，不替代语义产品Case。
+
+## S03l-b 聊天来源上下文
+
+POL-SOURCECTX-001～006，P0/v1/Codex受托确认，Contract见[s03l-source-context-plan.md](s03l-source-context-plan.md)，Runner tests/acceptance/memory-source-context.spec.cjs。真实store/chat→memory→来源→管理失效链，专属6项及相关领域合计74PASS、19unit PASS。边界与证据见[s03l-source-context-review.md](s03l-source-context-review.md)；只验证来源链，不冒称语义分类或自动关联已完成。

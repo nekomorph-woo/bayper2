@@ -10,6 +10,7 @@ const { createNotificationPresentation } = require("./notification-presentation.
 const { createMemoryService } = require("./memory.cjs");
 const { createThemeMemorySharing } = require("./theme-memory-sharing.cjs");
 const { createChatService } = require("./chat.cjs");
+const { createMemorySourceContext } = require("./memory-source-context.cjs");
 const { createExternalSources } = require("./external-sources.cjs");
 const { createAutomaticBudget } = require("./automatic-budget.cjs");
 const { createSessionSourceReader } = require("./session-sources.cjs");
@@ -102,6 +103,8 @@ function createStore(dataDir, options = {}) {
     timeoutMs: options.chat?.timeoutMs,
     recoverInterrupted: options.chat?.recoverInterrupted,
   });
+  // S03l-b 来源上下文只读既有记忆/聊天表，组装为内部服务，不新增 IPC 或存储。
+  const memorySourceContext = createMemorySourceContext({ db, memory, now });
   // 来源授权与记忆/聊天共用同一 SQLite 连接；候选路径由主进程按已核实约定传入。
   const externalSources = createExternalSources({
     db,
@@ -256,6 +259,7 @@ function createStore(dataDir, options = {}) {
     memory,
     themeMemorySharing,
     chat,
+    memorySourceContext,
     externalSources,
     automaticBudget,
     sessionSources,
