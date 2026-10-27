@@ -17,7 +17,12 @@ const {
   parseRelationResponse,
 } = require("../../app/memory-relation-protocol.cjs");
 const { locateCorrectionSegments } = require("../../app/memory-correction-evidence.cjs");
-const { parseTemporarySource } = require("../../app/memory-temporary-source.cjs");
+const {
+  copiedTemporarySource,
+  parseTemporarySource,
+  temporaryFactKey,
+} = require("../../app/memory-temporary-source.cjs");
+const { tokenizeForIndex } = require("../../app/memory-retrieval.cjs");
 
 const START = Date.UTC(2026, 9, 27, 10, 0, 0);
 const MODEL_NAME = "fixture-corrected-source";
@@ -2239,4 +2244,1225 @@ test("POL-SEMOP-001d/S16 编辑后再次改口与无origin连续编辑仍有效"
     assert.equal(cSnapshot.sourceCharacterId, "a");
     assert.equal(cSnapshot.relayFrom, "b");
   });
+});
+
+/* S03m 2c-2a（§13 已批准方案）多 L 领域切片：T 仍为当前理解组，L 是长期
+   fact identity。阶段 2 尚未实现，下列 SQL 夹具明确标注为“阶段 2 准备状态”，
+   只构造与真实 store/derivation/link/source 一致的合法多 L 数据；核心
+   store/memory/source-context 与真实 SQLite 仍是唯一业务入口。 */
+function entryLinkTableExists(ctx) {
+  return withDatabase(ctx.store.dbPath, (db) => Boolean(db.prepare(
+    "SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'memory_temporary_entry_links'",
+  ).get()));
+}
+
+function entryLinksOf(ctx, entryId) {
+  return withDatabase(ctx.store.dbPath, (db) => db.prepare(
+    "SELECT * FROM memory_temporary_entry_links WHERE entry_id = ?",
+  ).get(entryId) ?? null);
+}
+
+function entryLinkRowsOfIdentity(ctx, tempIdentityId, holderCharacterId) {
+  return withDatabase(ctx.store.dbPath, (db) => db.prepare(`
+    SELECT * FROM memory_temporary_entry_links
+    WHERE temp_identity_id = ? AND holder_character_id = ?
+    ORDER BY entry_id ASC
+  `).all(tempIdentityId, holderCharacterId));
+}
+
+function addLongForMultiL(ctx, characterId, factKey, body) {
+  ctx.store.memory.remember({
+    characterId,
+    factKey,
+    body,
+    kind: "preference",
+    sourceId: `seed-${characterId}-${factKey}`,
+  });
+  const entry = entryOf(ctx.store, characterId, factKey);
+  assert.ok(entry, `长期夹具 ${factKey} 应存在`);
+  return entry;
+}
+
+/* 明确标注：阶段 2 尚未实现，本夹具只模拟“已批准方案会在既有 T 内新增
+   holder+候选 L 的 current”这一状态。它不是阶段 2 的核验证据，也不能代替
+   proof/API 覆盖。 */
+function insertPreparedMultiLMember(ctx, {
+  holder, ownLong, rootLong, originCurrent, body, label,
+}) {
+  const originParsed = parseTemporarySource(originCurrent.sourceId);
+  assert.ok(originParsed && originParsed.kind === "direct", "多 L 夹具必须以 direct current 为来源");
+  assert.equal(originParsed.originLongEntryId, rootLong.id, "root 锚必须等于 origin current 的长期来源");
+  const tempIdentityId = originCurrent.factIdentityId;
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const entryId = `fixture-${holder}-${label}-${suffix}`;
+  const sourceId = copiedTemporarySource({
+    originLongEntryId: rootLong.id,
+    originLongVersion: rootLong.version,
+    originCurrentEntryId: originCurrent.id,
+    originCurrentVersion: originCurrent.version,
+    holderLongEntryId: ownLong.id,
+    holderLongVersion: ownLong.version,
+    messageSourceId: originParsed.messageSourceId,
+  });
+  const factKey = `${temporaryFactKey(ownLong.factKey, ownLong.id)}.${suffix}`;
+  const nowMs = ctx.nowMs();
+  const hasEntryLinks = entryLinkTableExists(ctx);
+  withDatabase(ctx.store.dbPath, (db) => {
+    db.prepare(`
+      INSERT INTO memory_entries (
+        id, character_id, fact_key, fact_identity_id, origin_character_id,
+        derived_from_entry_id, kind, body, trust, source_kind, importance,
+        expires_at, source_id, source_version, version, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'stated', 'user', ?, ?, ?, 1, 1, ?, ?)
+    `).run(
+      entryId, holder, factKey, tempIdentityId, originCurrent.characterId,
+      originCurrent.id, originCurrent.kind, body, originCurrent.importance,
+      originCurrent.expiresAt, sourceId, nowMs, nowMs,
+    );
+    const tokens = tokenizeForIndex(body);
+    db.prepare("INSERT INTO memory_fts (entry_id, char_tokens, segment_tokens) VALUES (?, ?, ?)")
+      .run(entryId, tokens.charTokens, tokens.segmentTokens);
+    db.prepare(`
+      INSERT INTO memory_derivations (
+        entry_id, parent_entry_id, origin_character_id, narrator_character_id,
+        source_id, source_version, created_at
+      ) VALUES (?, ?, ?, ?, ?, 1, ?)
+    `).run(
+      entryId, originCurrent.id, originCurrent.characterId,
+      originCurrent.characterId, sourceId, nowMs,
+    );
+    db.prepare(`
+      INSERT OR IGNORE INTO memory_temporary_links
+        (temp_identity_id, long_identity_id, holder_character_id, expires_at)
+      VALUES (?, ?, ?, ?)
+    `).run(
+      tempIdentityId, ownLong.factIdentityId, holder, originCurrent.expiresAt,
+    );
+    // 旧生产没有新表时仍写旧控制关系，用于取得有效 AssertionError 基线。
+    if (hasEntryLinks) {
+      db.prepare(`
+        INSERT INTO memory_temporary_entry_links (
+          entry_id, temp_identity_id, holder_character_id, expires_at,
+          long_identity_id, root_identity_id
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        entryId, tempIdentityId, holder, originCurrent.expiresAt,
+        ownLong.factIdentityId, rootLong.factIdentityId,
+      );
+    }
+  });
+  const entry = ctx.store.memory.listMemories(holder).find((item) => item.id === entryId);
+  assert.ok(entry, "多 L 夹具条目应可读取");
+  return entry;
+}
+
+/* 真实建立多 L 来源：先创建 A/B 长期事实与 B 的第二锚，用既有 associateFacts
+   合并同 identity（会递增版本），再发起今日临时理解；最后按已批准阶段 2 的
+   结构补一条 B 的独立 L current。这样 alias、holder 版本与 link 全部自洽，
+   不依赖“同文新 factKey 自动同 identity”这一产品刻意不提供的假设。 */
+async function seedMultiLSourcePair(ctx) {
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  await rememberViaChat(ctx, aConversation, "我喜欢咖啡。", [
+    { factKey: "pref.coffee", body: "用户喜欢咖啡", kind: "preference", trust: "stated", evidence: "我喜欢咖啡" },
+  ]);
+  const aLongBefore = entryOf(ctx.store, "a", "pref.coffee");
+  ctx.store.memory.relay({
+    fromCharacterId: "a",
+    toCharacterId: "b",
+    entries: [{ entryId: aLongBefore.id, expectedVersion: aLongBefore.version }],
+  });
+  const bLongBefore = entryOf(ctx.store, "b", "pref.coffee");
+  // 让第二锚的 created_at 明确晚于 relay 锚，双锚确定性选择才可断言。
+  ctx.setNow(ctx.nowMs() + 1000);
+  const secondBefore = addLongForMultiL(ctx, "b", "pref.coffee.anchor2", "用户喜欢咖啡");
+  ctx.store.memory.associateFacts({
+    left: { entryId: bLongBefore.id, expectedVersion: bLongBefore.version },
+    right: { entryId: secondBefore.id, expectedVersion: secondBefore.version },
+  });
+  const aLong = entryOf(ctx.store, "a", "pref.coffee");
+  const bLong = entryOf(ctx.store, "b", "pref.coffee");
+  const secondAnchor = entryOf(ctx.store, "b", "pref.coffee.anchor2");
+  assert.equal(aLong.factIdentityId, bLong.factIdentityId);
+  assert.equal(secondAnchor.factIdentityId, bLong.factIdentityId);
+
+  const independent = addLongForMultiL(ctx, "b", "pref.tea.independent", "用户平时爱喝茶");
+  assert.notEqual(independent.factIdentityId, bLong.factIdentityId);
+
+  // 关联完成后才发起今日理解；B 已证明同一 L 的两个锚不会各建一条 current。
+  await correctViaChat(ctx, aConversation, "不是咖啡，我今天想喝茶，请帮我改过来。", {
+    needle: "我喜欢咖啡",
+    excerpt: "我今天想喝茶",
+    evidence: "请帮我改过来",
+  });
+  const aTemp = temporaryEntryOf(ctx.store, "a");
+  const bTemp = temporaryEntryOf(ctx.store, "b");
+  assert.ok(aTemp, "A 应有今日临时理解");
+  assert.ok(bTemp, "B 应同步今日临时理解");
+  // 加入独立 L 之前，单 L 的 A/B 今日理解必须已经合法；否则是夹具 ERROR。
+  assert.equal(snapshot(ctx, "a", aTemp).status, "ok", "多 L 夹具的 A 单 L 基线应合法");
+  assert.equal(snapshot(ctx, "b", bTemp).status, "ok", "多 L 夹具的 B 单 L 基线应合法");
+  const member = insertPreparedMultiLMember(ctx, {
+    holder: "b",
+    ownLong: independent,
+    rootLong: aLong,
+    originCurrent: aTemp,
+    body: aTemp.body,
+    label: "independent-l3",
+  });
+  return {
+    aConversation,
+    bConversation,
+    aLong,
+    bLong,
+    secondAnchor,
+    independent,
+    member,
+    aTemp,
+    bTemp,
+    todayBody: aTemp.body,
+    longBody: "我喜欢咖啡",
+  };
+}
+
+function addAIndependentPreparedMember(ctx, seeded) {
+  const independent = addLongForMultiL(ctx, "a", "pref.tea.a-independent", "用户平时爱喝红茶");
+  const member = insertPreparedMultiLMember(ctx, {
+    holder: "a",
+    ownLong: independent,
+    rootLong: seeded.aLong,
+    originCurrent: seeded.aTemp,
+    body: seeded.aTemp.body,
+    label: "a-independent",
+  });
+  return { independent, member };
+}
+
+function latestChatSourceId(ctx, characterId) {
+  return withDatabase(ctx.store.dbPath, (db) => {
+    const row = db.prepare(`
+      SELECT id FROM chat_messages
+      WHERE character_id = ? AND role = 'user'
+      ORDER BY seq DESC, id DESC LIMIT 1
+    `).get(characterId);
+    assert.ok(row, "应存在刚发出的聊天消息");
+    return `chat:${row.id}`;
+  });
+}
+
+async function issueTodayStatement(ctx, conversation, characterId, {
+  entryId, expectedVersion, body, text, expiresAt,
+}) {
+  await rememberViaChat(ctx, conversation, text, [], characterId);
+  return ctx.store.memory.applyTemporaryUnderstanding({
+    characterId,
+    entryId,
+    expectedVersion,
+    body,
+    trust: "stated",
+    expiresAt,
+    sourceId: latestChatSourceId(ctx, characterId),
+    nowMs: ctx.nowMs(),
+  });
+}
+
+function temporaryEntriesOf(ctx, characterId, tempIdentityId) {
+  return ctx.store.memory.listMemories(characterId).filter((entry) =>
+    entry.expiresAt !== null && entry.factIdentityId === tempIdentityId);
+}
+
+function assertMultiLState(state) {
+  const tables = ["memory_entries", "memory_derivations", "memory_temporary_links"];
+  const snapshotState = withDatabase(state.store.dbPath, (db) => ({
+    ...Object.fromEntries(tables.map((table) => [
+      table,
+      db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all(),
+    ])),
+    entryLinks: db.prepare(
+      "SELECT * FROM memory_temporary_entry_links ORDER BY rowid",
+    ).all(),
+    sourceControls: db.prepare(
+      "SELECT * FROM memory_source_controls ORDER BY rowid",
+    ).all(),
+    forgetControls: db.prepare(
+      "SELECT * FROM memory_forget_identity_controls ORDER BY rowid",
+    ).all(),
+    shareControls: db.prepare(
+      "SELECT * FROM memory_share_identity_controls ORDER BY rowid",
+    ).all(),
+  }));
+  return snapshotState;
+}
+
+test("POL-SEMOP-001d/D2+D11 多 L 阶段1：全部 L 成员更新、双锚不重复、上下文去重", async (t) => {
+  const ctx = await setupContext(t);
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  const prepared = await seedMultiLSourcePair(ctx);
+  const seeded = prepared;
+  assert.equal(snapshot(ctx, "b", prepared.member).status, "ok");
+  const tempIdentityId = prepared.member.factIdentityId;
+
+  // B 从自己的 L3 current 再发起：只更新既有 T，不新建 T，不改长期 identity。
+  await issueTodayStatement(ctx, bConversation, "b", {
+    entryId: prepared.member.id,
+    expectedVersion: prepared.member.version,
+    body: "我今天想喝乌龙茶",
+    text: "我今天想喝乌龙茶。",
+    expiresAt: seeded.aTemp.expiresAt,
+  });
+  const bEntries = temporaryEntriesOf(ctx, "b", tempIdentityId);
+  const aEntries = temporaryEntriesOf(ctx, "a", tempIdentityId);
+  assert.equal(new Set(bEntries.map((entry) => entry.id)).size, bEntries.length);
+  assert.equal(bEntries.length, 2, "B 的 L1 与 L3 各保留一条 current，不重复");
+  assert.equal(aEntries.length, 1);
+  const bOwnIdentity = prepared.independent.factIdentityId;
+  const bL1 = bEntries.find((entry) => entry.id !== prepared.member.id);
+  const bL3 = bEntries.find((entry) => entry.id === prepared.member.id);
+  assert.ok(bL1 && bL3);
+  assert.equal(entryLinksOf(ctx, bL1.id).long_identity_id, seeded.bLong.factIdentityId);
+  assert.equal(entryLinksOf(ctx, bL3.id).long_identity_id, bOwnIdentity);
+  assert.equal(entryLinksOf(ctx, bL3.id).root_identity_id, bOwnIdentity);
+  assert.equal(entryLinksOf(ctx, bL1.id).root_identity_id, bOwnIdentity);
+  assert.equal(entryLinksOf(ctx, aEntries[0].id).long_identity_id, seeded.aLong.factIdentityId);
+  assert.equal(entryLinksOf(ctx, aEntries[0].id).root_identity_id, bOwnIdentity);
+  for (const entry of [...aEntries, ...bEntries]) {
+    assert.equal(entry.body, "我今天想喝乌龙茶");
+  }
+  const bL1Snapshot = snapshot(ctx, "b", bL1);
+  assert.equal(bL1Snapshot.status, "ok");
+  assert.equal(bL1Snapshot.sourceAnchorIdentityId, bOwnIdentity);
+  assert.equal(bL1Snapshot.holderLongIdentityId, seeded.bLong.factIdentityId);
+  // 同 identity 的第二锚不会生成第二条 current，holder 锚确定性取最早条目。
+  assert.equal(bL1Snapshot.holderAnchorEntryId, seeded.bLong.id);
+  const bL3Snapshot = snapshot(ctx, "b", bL3);
+  assert.equal(bL3Snapshot.status, "ok");
+  assert.equal(bL3Snapshot.direct, true);
+  assert.equal(bL3Snapshot.sourceAnchorIdentityId, bOwnIdentity);
+  assert.equal(bL3Snapshot.holderLongIdentityId, bOwnIdentity);
+  const aSnapshot = snapshot(ctx, "a", aEntries[0]);
+  assert.equal(aSnapshot.status, "ok");
+  assert.equal(aSnapshot.sourceAnchorIdentityId, bOwnIdentity);
+  assert.equal(aSnapshot.holderLongIdentityId, seeded.aLong.factIdentityId);
+
+  // 长期正文与 identity 不被改写。
+  assert.equal(entryOf(ctx.store, "b", "pref.coffee").body, "我喜欢咖啡");
+  assert.equal(entryOf(ctx.store, "b", "pref.tea.independent").body, "用户平时爱喝茶");
+  // 同 T 同 holder 同正文同到期只注入一次，并抑制 B 的两个 own L。
+  const bBodies = contextBodies(ctx, "b");
+  assert.equal(bBodies.filter((body) => body === "我今天想喝乌龙茶").length, 1);
+  assert.equal(bBodies.includes("用户喜欢咖啡"), false);
+  assert.equal(bBodies.includes("用户平时爱喝茶"), false);
+  const aBodies = contextBodies(ctx, "a");
+  assert.equal(aBodies.filter((body) => body === "我今天想喝乌龙茶").length, 1);
+  assert.equal(aBodies.includes("用户喜欢咖啡"), false);
+});
+
+test("POL-SEMOP-001d/D2 exclusive：保留本人全部 L，root 版本同步，share/relay 零写", async (t) => {
+  const ctx = await setupContext(t);
+  const bConversation = openConversation(ctx.store, "b");
+  const prepared = await seedMultiLSourcePair(ctx);
+  const seeded = prepared;
+  assert.equal(snapshot(ctx, "b", prepared.member).status, "ok");
+  const tempIdentityId = prepared.member.factIdentityId;
+  await issueTodayStatement(ctx, bConversation, "b", {
+    entryId: prepared.member.id,
+    expectedVersion: prepared.member.version,
+    body: "我今天想喝乌龙茶",
+    text: "我今天想喝乌龙茶。",
+    expiresAt: seeded.aTemp.expiresAt,
+  });
+  const before = temporaryEntriesOf(ctx, "b", tempIdentityId);
+  const rootEntry = before.find((entry) => entry.id === prepared.member.id);
+  const copyEntry = before.find((entry) => entry.id !== prepared.member.id);
+  assert.ok(rootEntry && copyEntry);
+
+  const result = ctx.store.memory.keepExclusive({
+    characterId: "b",
+    entryId: rootEntry.id,
+    expectedVersion: rootEntry.version,
+  });
+  assert.equal(result.clearedCharacters.includes("a"), true);
+  assert.equal(temporaryEntriesOf(ctx, "a", tempIdentityId).length, 0);
+  const retained = temporaryEntriesOf(ctx, "b", tempIdentityId);
+  assert.equal(retained.length, 2, "exclusive 保留本人全部 L current");
+  const retainedRoot = retained.find((entry) => entry.id === rootEntry.id);
+  const retainedCopy = retained.find((entry) => entry.id === copyEntry.id);
+  assert.equal(retainedRoot.version, rootEntry.version + 1);
+  assert.equal(retainedCopy.version, copyEntry.version + 1);
+  const copyParsed = parseTemporarySource(retainedCopy.sourceId);
+  assert.equal(copyParsed.originCurrentEntryId, retainedRoot.id);
+  assert.equal(copyParsed.originCurrentVersion, retainedRoot.version);
+  const copyDerivation = derivationRow(ctx, retainedCopy.id);
+  assert.equal(copyDerivation.parent_entry_id, retainedRoot.id);
+  assert.equal(copyDerivation.source_id, retainedCopy.sourceId);
+  assert.equal(snapshot(ctx, "b", retainedRoot).status, "ok");
+  assert.equal(snapshot(ctx, "b", retainedCopy).status, "ok");
+  assert.equal(contextBodies(ctx, "b").filter((body) => body === retainedRoot.body).length, 1);
+  const hits = ctx.store.memory.searchMemories({ characterId: "b", query: retainedRoot.body });
+  assert.equal(hits.filter((entry) => retained.some((item) => item.id === entry.id)).length, 2);
+
+  // 保留者仍可再次编辑，但 share/relay 因 T 禁分享拒绝且零写。
+  ctx.store.memory.correct({
+    characterId: "b",
+    entryId: retainedRoot.id,
+    expectedVersion: retainedRoot.version,
+    body: "用户今天想喝普洱",
+  });
+  const edited = temporaryEntriesOf(ctx, "b", tempIdentityId);
+  assert.equal(edited.every((entry) => entry.body === "用户今天想喝普洱"), true);
+  const stateBefore = assertMultiLState(ctx);
+  assert.throws(() => ctx.store.memory.relay({
+    fromCharacterId: "b",
+    toCharacterId: "c",
+    entries: [{ entryId: rootEntry.id, expectedVersion: retainedRoot.version + 1 }],
+  }), (error) => error.code === "SHARE_BLOCKED");
+  assert.deepEqual(assertMultiLState(ctx), stateBefore, "拒绝分享必须零写");
+
+  // 只有走既有明确 allowSharing 才可转告；本对照不自动解除。
+  const rooted = temporaryEntriesOf(ctx, "b", tempIdentityId)
+    .find((entry) => entry.id === rootEntry.id);
+  const allowed = ctx.store.memory.allowSharing({
+    characterId: "b",
+    entryId: rooted.id,
+    expectedVersion: rooted.version,
+  });
+  assert.equal(allowed.lifted, true);
+  const relayed = ctx.store.memory.relay({
+    fromCharacterId: "b",
+    toCharacterId: "c",
+    entries: [{ entryId: rooted.id, expectedVersion: rooted.version }],
+  });
+  assert.equal(relayed.shared[0].alreadyHeld, false);
+  const cEntry = temporaryEntryOf(ctx.store, "c");
+  assert.ok(cEntry);
+  assert.equal(snapshot(ctx, "c", cEntry).status, "ok");
+  assert.equal(cEntry.body, "用户今天想喝普洱");
+});
+
+test("POL-SEMOP-001d/D6 root/own L 分离：root 删除仍有效，holder 锚缺失或变化失效", async (t) => {
+  await t.test("root-long-removed", async (t2) => {
+    const ctx = await setupContext(t2);
+    const prepared = await seedMultiLSourcePair(ctx);
+    const seeded = prepared;
+    assert.equal(snapshot(ctx, "b", prepared.member).status, "ok");
+    ctx.store.memory.forget({
+      characterId: "a",
+      entryId: seeded.aLong.id,
+      expectedVersion: seeded.aLong.version,
+      scope: "self",
+    });
+    const result = snapshot(ctx, "b", prepared.member);
+    assert.equal(result.status, "ok");
+    assert.equal(result.sourceAnchorEntryId, seeded.aLong.id);
+    assert.equal(result.sourceAnchorIdentityId, seeded.aLong.factIdentityId);
+    assert.equal(result.holderLongIdentityId, prepared.independent.factIdentityId);
+    assert.equal(result.sourceAnchorStatus, "removed");
+  });
+  await t.test("holder-anchor-deleted", async (t2) => {
+    const ctx = await setupContext(t2);
+    const prepared = await seedMultiLSourcePair(ctx);
+    const seeded = prepared;
+    assert.equal(snapshot(ctx, "b", prepared.member).status, "ok");
+    ctx.store.memory.forget({
+      characterId: "b",
+      entryId: prepared.independent.id,
+      expectedVersion: prepared.independent.version,
+      scope: "self",
+    });
+    assertUnavailable(snapshot(ctx, "b", prepared.member), "holder_anchor_changed");
+  });
+  await t.test("holder-anchor-version-changed", async (t2) => {
+    const ctx = await setupContext(t2);
+    const prepared = await seedMultiLSourcePair(ctx);
+    const seeded = prepared;
+    assert.equal(snapshot(ctx, "b", prepared.member).status, "ok");
+    withDatabase(ctx.store.dbPath, (db) => {
+      db.prepare("UPDATE memory_entries SET version = version + 1 WHERE id = ?")
+        .run(prepared.independent.id);
+    });
+    assertUnavailable(snapshot(ctx, "b", prepared.member), "holder_anchor_changed");
+  });
+  await t.test("root-long-and-current-removed", async (t2) => {
+    const ctx = await setupContext(t2);
+    const seeded = await seedMultiLSourcePair(ctx);
+    assert.equal(snapshot(ctx, "b", seeded.member).status, "ok");
+    ctx.store.memory.forget({
+      characterId: "a",
+      entryId: seeded.aLong.id,
+      expectedVersion: seeded.aLong.version,
+      scope: "self",
+    });
+    ctx.store.memory.forget({
+      characterId: "a",
+      entryId: seeded.aTemp.id,
+      expectedVersion: seeded.aTemp.version,
+      scope: "self",
+    });
+    const result = snapshot(ctx, "b", seeded.member);
+    assert.equal(result.status, "ok", "持久 entry/derivation/消息链仍可证明 root L");
+    assert.equal(result.sourceAnchorIdentityId, seeded.aLong.factIdentityId);
+    assert.equal(result.holderLongIdentityId, seeded.independent.factIdentityId);
+    assert.equal(result.sourceAnchorStatus, "removed");
+    assert.equal(result.temporarySourceStatus, "removed");
+    assert.equal(ctx.store.memorySourceContext.isCurrent(result), true);
+  });
+  await t.test("relay-without-holder-anchor", async (t2) => {
+    const ctx = await setupContext(t2);
+    const seeded = await seedSourcePair(ctx);
+    const relayed = ctx.store.memory.relay({
+      fromCharacterId: "a",
+      toCharacterId: "c",
+      entries: [{ entryId: seeded.aTemp.id, expectedVersion: seeded.aTemp.version }],
+    });
+    assert.equal(relayed.shared[0].alreadyHeld, false);
+    const cEntry = temporaryEntryOf(ctx.store, "c", { includeLegacy: true });
+    assert.ok(cEntry);
+    const beforeDelete = snapshot(ctx, "c", cEntry);
+    assert.equal(beforeDelete.status, "ok");
+    assert.equal(beforeDelete.holderAnchorEntryId, null);
+    assert.equal(beforeDelete.holderLongIdentityId, seeded.aLong.factIdentityId);
+    ctx.store.memory.forget({
+      characterId: "a",
+      entryId: seeded.aLong.id,
+      expectedVersion: seeded.aLong.version,
+      scope: "self",
+    });
+    const afterDelete = snapshot(ctx, "c", cEntry);
+    assert.equal(afterDelete.status, "ok", "relay 从始无 holder 锚，root 删除仍有效");
+    assert.equal(afterDelete.sourceAnchorStatus, "removed");
+  });
+});
+
+test("POL-SEMOP-001d/D7 旧多 L 控制继承：restrict/forget/旧源不因新 T 解除", async (t) => {
+  const ctx = await setupContext(t);
+  const aConversation = openConversation(ctx.store);
+  const prepared = await seedMultiLSourcePair(ctx);
+  const seeded = prepared;
+  assert.equal(snapshot(ctx, "b", prepared.member).status, "ok");
+  ctx.store.memory.restrictSharing({
+    characterId: "a",
+    entryId: seeded.aTemp.id,
+    expectedVersion: seeded.aTemp.version,
+  });
+  ctx.store.memory.forget({
+    characterId: "a",
+    entryId: seeded.aTemp.id,
+    expectedVersion: seeded.aTemp.version,
+    scope: "self",
+  });
+  const bMembers = temporaryEntriesOf(ctx, "b", prepared.member.factIdentityId);
+  assert.equal(bMembers.length, 2);
+  ctx.store.memory.forget({
+    characterId: "b",
+    entryId: bMembers[0].id,
+    expectedVersion: bMembers[0].version,
+    scope: "self",
+  });
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+  assert.equal(temporaryEntryOf(ctx.store, "b"), null);
+  const oldSourceControls = withDatabase(ctx.store.dbPath, (db) => db.prepare(
+    "SELECT COUNT(*) AS count FROM memory_source_controls WHERE character_id = 'b'",
+  ).get().count);
+  assert.ok(oldSourceControls > 0);
+
+  await issueTodayStatement(ctx, aConversation, "a", {
+    entryId: seeded.aLong.id,
+    expectedVersion: seeded.aLong.version,
+    body: "我今天想喝白茶",
+    text: "我今天想喝白茶。",
+    expiresAt: seeded.aTemp.expiresAt,
+  });
+  const aNew = temporaryEntryOf(ctx.store, "a");
+  assert.ok(aNew);
+  assert.notEqual(aNew.factIdentityId, prepared.member.factIdentityId);
+  assert.equal(temporaryEntryOf(ctx.store, "b"), null, "旧 forget 不解除，B 不获副本");
+  const inherited = withDatabase(ctx.store.dbPath, (db) => ({
+    share: db.prepare(
+      "SELECT COUNT(*) AS count FROM memory_share_identity_controls WHERE identity_id = ?",
+    ).get(aNew.factIdentityId).count,
+    forgetB: db.prepare(`
+      SELECT COUNT(*) AS count FROM memory_forget_identity_controls
+      WHERE character_id = 'b' AND identity_id = ?
+    `).get(aNew.factIdentityId).count,
+  }));
+  assert.equal(inherited.share, 1, "旧 share 控制继承到新 T");
+  assert.equal(inherited.forgetB, 1, "他人旧 forget 继承到新 T");
+  assert.throws(() => ctx.store.memory.relay({
+    fromCharacterId: "a",
+    toCharacterId: "c",
+    entries: [{ entryId: aNew.id, expectedVersion: aNew.version }],
+  }), (error) => error.code === "SHARE_BLOCKED");
+
+  ctx.reopen();
+  assert.equal(temporaryEntryOf(ctx.store, "a")?.body, "我今天想喝白茶");
+  assert.equal(temporaryEntryOf(ctx.store, "b"), null);
+  assert.equal(withDatabase(ctx.store.dbPath, (db) => db.prepare(
+    "SELECT COUNT(*) AS count FROM memory_source_controls WHERE character_id = 'b'",
+  ).get().count), oldSourceControls);
+});
+
+test("POL-SEMOP-001d/D8 A self 删除全部 L：B 的独立 L current 保留且可检索", async (t) => {
+  const ctx = await setupContext(t);
+  const prepared = await seedMultiLSourcePair(ctx);
+  const seeded = prepared;
+  const aPrepared = addAIndependentPreparedMember(ctx, seeded);
+  assert.equal(snapshot(ctx, "a", seeded.aTemp).status, "ok");
+  assert.equal(snapshot(ctx, "a", aPrepared.member).status, "ok");
+  assert.equal(snapshot(ctx, "b", prepared.member).status, "ok");
+  const tempIdentityId = prepared.member.factIdentityId;
+  assert.equal(temporaryEntriesOf(ctx, "a", tempIdentityId).length, 2);
+  ctx.store.memory.forget({
+    characterId: "a",
+    entryId: seeded.aTemp.id,
+    expectedVersion: seeded.aTemp.version,
+    scope: "self",
+  });
+  assert.equal(temporaryEntriesOf(ctx, "a", tempIdentityId).length, 0);
+  const bEntries = temporaryEntriesOf(ctx, "b", tempIdentityId);
+  assert.equal(bEntries.length, 2);
+  for (const entry of bEntries) {
+    assert.equal(snapshot(ctx, "b", entry).status, "ok");
+  }
+  const hits = ctx.store.memory.searchMemories({ characterId: "b", query: bEntries[0].body });
+  assert.equal(hits.filter((hit) => bEntries.some((entry) => entry.id === hit.id)).length, 2);
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee").body, "我喜欢咖啡");
+  // 正文删除后 entry 关联仍保留，供历史根证明与控制查询。
+  assert.equal(entryLinkRowsOfIdentity(ctx, tempIdentityId, "a").length, 2);
+});
+
+test("POL-SEMOP-001d/D12 多 L 编辑后转告：own L/锚保留且不冒充直接告知", async (t) => {
+  const ctx = await setupContext(t);
+  const bConversation = openConversation(ctx.store, "b");
+  const prepared = await seedMultiLSourcePair(ctx);
+  const seeded = prepared;
+  assert.equal(snapshot(ctx, "b", prepared.member).status, "ok");
+  const tempIdentityId = prepared.member.factIdentityId;
+  await issueTodayStatement(ctx, bConversation, "b", {
+    entryId: prepared.member.id,
+    expectedVersion: prepared.member.version,
+    body: "我今天想喝乌龙茶",
+    text: "我今天想喝乌龙茶。",
+    expiresAt: seeded.aTemp.expiresAt,
+  });
+  const before = temporaryEntriesOf(ctx, "b", tempIdentityId);
+  const selected = before.find((entry) => entry.id !== prepared.member.id);
+  assert.ok(selected);
+  ctx.store.memory.correct({
+    characterId: "b",
+    entryId: selected.id,
+    expectedVersion: selected.version,
+    body: "用户今天想喝花茶",
+  });
+  const after = temporaryEntriesOf(ctx, "b", tempIdentityId);
+  assert.equal(after.length, 2);
+  for (const entry of after) {
+    assert.equal(entry.body, "用户今天想喝花茶");
+    assert.equal(entry.expiresAt, seeded.aTemp.expiresAt);
+    assert.equal(parseTemporarySource(entry.sourceId).kind, "edit");
+    const link = entryLinksOf(ctx, entry.id);
+    assert.equal(link.long_identity_id, entry === after.find((item) => item.id === prepared.member.id)
+      ? prepared.independent.factIdentityId
+      : seeded.bLong.factIdentityId);
+    assert.equal(snapshot(ctx, "b", entry).status, "ok");
+  }
+  const relayed = ctx.store.memory.relay({
+    fromCharacterId: "b",
+    toCharacterId: "c",
+    entries: [{ entryId: prepared.member.id, expectedVersion: after.find((entry) => entry.id === prepared.member.id).version }],
+  });
+  assert.equal(relayed.shared[0].alreadyHeld, false);
+  const cEntry = temporaryEntryOf(ctx.store, "c");
+  assert.ok(cEntry);
+  const cSnapshot = snapshot(ctx, "c", cEntry);
+  assert.equal(cSnapshot.status, "ok");
+  assert.equal(cSnapshot.edited, true);
+  assert.equal(cSnapshot.relayFrom, "b");
+  assert.equal(cSnapshot.sourceAnchorIdentityId, prepared.independent.factIdentityId);
+  assert.equal(cSnapshot.holderLongIdentityId, prepared.independent.factIdentityId);
+  assert.equal(cSnapshot.holderAnchorEntryId, null);
+  // 多 L 编辑/转告不改本体长期。
+  assert.equal(entryOf(ctx.store, "b", "pref.coffee").body, "我喜欢咖啡");
+  assert.equal(entryOf(ctx.store, "b", "pref.tea.independent").body, "用户平时爱喝茶");
+  // 来源失效后，B 的两个 own L 长期恢复，失效今日正文不再进入上下文。
+  withDatabase(ctx.store.dbPath, (db) => {
+    db.prepare("UPDATE chat_messages SET role = 'assistant' WHERE id = ?")
+      .run(parseTemporarySource(cEntry.sourceId).messageSourceId.slice("chat:".length));
+  });
+  assert.equal(snapshot(ctx, "c", cEntry).status, "unavailable");
+  const restored = contextBodies(ctx, "b");
+  assert.equal(restored.includes("用户今天想喝花茶"), false);
+  assert.ok(restored.includes("我喜欢咖啡"));
+  assert.ok(restored.includes("用户平时爱喝茶"));
+});
+
+test("POL-SEMOP-001d/D13+D16 entry 关联历史：旧行保留、篡改不覆盖、新行可解析", async (t) => {
+  const ctx = await setupContext(t);
+  const prepared = await seedMultiLSourcePair(ctx);
+  const seeded = prepared;
+  assert.equal(entryLinkTableExists(ctx), true);
+  assert.equal(snapshot(ctx, "b", prepared.member).status, "ok");
+  const tempIdentityId = prepared.member.factIdentityId;
+  const oldLink = entryLinksOf(ctx, prepared.member.id);
+  const otherLBefore = entryLinkRowsOfIdentity(ctx, tempIdentityId, "b")
+    .filter((row) => row.long_identity_id === seeded.bLong.factIdentityId);
+  deleteOldTemporaryEntryOnly(ctx, prepared.member.id);
+  const replacement = insertPreparedMultiLMember(ctx, {
+    holder: "b",
+    ownLong: prepared.independent,
+    rootLong: seeded.aLong,
+    originCurrent: seeded.aTemp,
+    body: prepared.member.body,
+    label: "independent-l3-new",
+  });
+  const history = entryLinkRowsOfIdentity(ctx, tempIdentityId, "b")
+    .filter((row) => row.long_identity_id === prepared.independent.factIdentityId);
+  assert.equal(history.length, 2, "同 T/holder/L 的新旧 entry 各保留一行");
+  const retainedOld = history.find((row) => row.entry_id === prepared.member.id);
+  assert.deepEqual(retainedOld, oldLink, "旧 entry 关联不被覆盖");
+  const otherLAfter = entryLinkRowsOfIdentity(ctx, tempIdentityId, "b")
+    .filter((row) => row.long_identity_id === seeded.bLong.factIdentityId);
+  assert.deepEqual(otherLAfter, otherLBefore, "另一 L 的 entry 关联不得被本次历史操作改动");
+  assert.equal(snapshot(ctx, "b", replacement).status, "ok");
+  assert.equal(withDatabase(ctx.store.dbPath, (db) => db.prepare(`
+    SELECT COUNT(*) AS count FROM memory_temporary_links
+    WHERE temp_identity_id = ? AND holder_character_id = 'b' AND long_identity_id = ?
+  `).get(tempIdentityId, prepared.independent.factIdentityId).count), 1,
+  "旧控制关系表按 (T,L,holder,expiry) 保持一行");
+
+  // 篡改已删除旧行的 root：新 entry 不因旧历史被篡改而改变。
+  withDatabase(ctx.store.dbPath, (db) => {
+    db.prepare("UPDATE memory_temporary_entry_links SET root_identity_id = 'forged-root' WHERE entry_id = ?")
+      .run(prepared.member.id);
+  });
+  assert.equal(snapshot(ctx, "b", replacement).status, "ok");
+  assert.equal(entryLinkRowsOfIdentity(ctx, tempIdentityId, "b")
+    .filter((row) => row.long_identity_id === prepared.independent.factIdentityId).length, 2);
+
+  // 篡改仍存活条目的 own L：矛盾条目不可用，恢复后可用。
+  const replacementLink = entryLinksOf(ctx, replacement.id);
+  withDatabase(ctx.store.dbPath, (db) => {
+    db.prepare("UPDATE memory_temporary_entry_links SET long_identity_id = 'forged-own' WHERE entry_id = ?")
+      .run(replacement.id);
+  });
+  assert.equal(snapshot(ctx, "b", replacement).status, "unavailable");
+  withDatabase(ctx.store.dbPath, (db) => {
+    db.prepare("UPDATE memory_temporary_entry_links SET long_identity_id = ? WHERE entry_id = ?")
+      .run(replacementLink.long_identity_id, replacement.id);
+  });
+  assert.equal(snapshot(ctx, "b", replacement).status, "ok");
+});
+
+function deleteOldTemporaryEntryOnly(ctx, entryId) {
+  withDatabase(ctx.store.dbPath, (db) => {
+    db.prepare("DELETE FROM memory_fts WHERE entry_id = ?").run(entryId);
+    db.prepare("DELETE FROM memory_derivations WHERE entry_id = ?").run(entryId);
+    db.prepare("DELETE FROM memory_entries WHERE id = ?").run(entryId);
+  });
+}
+
+test("POL-SEMOP-001d/D15 entry 关联与 source 锚矛盾时不可用", async (t) => {
+  const mutations = {
+    "root-identity-forged": (ctx, prepared) => {
+      withDatabase(ctx.store.dbPath, (db) => {
+        db.prepare("UPDATE memory_temporary_entry_links SET root_identity_id = 'forged-root' WHERE entry_id = ?")
+          .run(prepared.member.id);
+      });
+    },
+    "own-identity-forged": (ctx, prepared) => {
+      withDatabase(ctx.store.dbPath, (db) => {
+        db.prepare("UPDATE memory_temporary_entry_links SET long_identity_id = 'forged-own' WHERE entry_id = ?")
+          .run(prepared.member.id);
+      });
+    },
+    "source-root-forged": (ctx, prepared, seeded) => {
+      withDatabase(ctx.store.dbPath, (db) => {
+        db.prepare("UPDATE memory_entries SET source_id = ? WHERE id = ?")
+          .run(prepared.member.sourceId.replace(seeded.aLong.id, "forged-root"), prepared.member.id);
+      });
+    },
+    "derivation-removed": (ctx, prepared) => {
+      withDatabase(ctx.store.dbPath, (db) => {
+        db.prepare("DELETE FROM memory_derivations WHERE entry_id = ?").run(prepared.member.id);
+      });
+    },
+  };
+  for (const [name, mutate] of Object.entries(mutations)) {
+    await t.test(name, async (t2) => {
+      const ctx = await setupContext(t2);
+      const prepared = await seedMultiLSourcePair(ctx);
+      const seeded = prepared;
+      assert.equal(snapshot(ctx, "b", prepared.member).status, "ok");
+      mutate(ctx, prepared, seeded);
+      const beforeResolve = assertMultiLState(ctx);
+      const result = snapshot(ctx, "b", prepared.member);
+      assert.equal(result.status, "unavailable");
+      assert.deepEqual(assertMultiLState(ctx), beforeResolve, "resolve 只读");
+    });
+  }
+});
+
+test("POL-SEMOP-001d/D9 旧单 L 行读取回退：缺 entry 关联仍可解析且读取不补齐", async (t) => {
+  const ctx = await setupContext(t);
+  const seeded = await seedSourcePair(ctx);
+  assert.equal(entryLinkTableExists(ctx), true);
+  const link = entryLinksOf(ctx, seeded.bTemp.id);
+  assert.ok(link);
+  withDatabase(ctx.store.dbPath, (db) => {
+    db.prepare("DELETE FROM memory_temporary_entry_links WHERE entry_id = ?").run(seeded.bTemp.id);
+  });
+  const result = snapshot(ctx, "b", seeded.bTemp);
+  assert.equal(result.status, "ok", "旧单 L 行按唯一 L 回退");
+  assert.equal(result.sourceAnchorIdentityId, result.holderLongIdentityId);
+  assert.equal(entryLinksOf(ctx, seeded.bTemp.id), null, "读取永不补齐 entry 关联");
+});
+
+test("POL-SEMOP-001d/D2 exclusive：root 在他人处被删后保留者多 L 仍合法", async (t) => {
+  const ctx = await setupContext(t);
+  const prepared = await seedMultiLSourcePair(ctx);
+  const tempIdentityId = prepared.member.factIdentityId;
+  const bMembers = temporaryEntriesOf(ctx, "b", tempIdentityId);
+  assert.equal(bMembers.length, 2);
+  const selected = bMembers.find((entry) => entry.id !== prepared.member.id);
+  assert.ok(selected);
+  const cleared = ctx.store.memory.keepExclusive({
+    characterId: "b",
+    entryId: selected.id,
+    expectedVersion: selected.version,
+  });
+  assert.equal(cleared.clearedCharacters.includes("a"), true);
+  assert.equal(temporaryEntriesOf(ctx, "a", tempIdentityId).length, 0);
+  const retained = temporaryEntriesOf(ctx, "b", tempIdentityId);
+  assert.equal(retained.length, 2);
+  for (const entry of retained) {
+    const result = snapshot(ctx, "b", entry);
+    assert.equal(result.status, "ok", result.reason);
+    assert.equal(result.temporarySourceStatus, "removed", "root current 已被 exclusive 删除");
+    assert.equal(result.sourceAnchorStatus, "live", "root 长期仍在");
+    assert.equal(result.sourceAnchorEntryId, prepared.aLong.id);
+    assert.equal(result.holderAnchorStatus, "live");
+  }
+  const hits = ctx.store.memory.searchMemories({
+    characterId: "b",
+    query: retained[0].body,
+  });
+  assert.equal(hits.filter((hit) => retained.some((entry) => entry.id === hit.id)).length, 2);
+  const bodies = contextBodies(ctx, "b");
+  assert.equal(bodies.filter((body) => body === retained[0].body).length, 1);
+  assert.equal(bodies.includes("我喜欢咖啡"), false);
+  assert.equal(bodies.includes("用户平时爱喝茶"), false);
+
+  ctx.store.memory.correct({
+    characterId: "b",
+    entryId: retained[0].id,
+    expectedVersion: retained[0].version,
+    body: "用户今天想喝黑茶",
+  });
+  const edited = temporaryEntriesOf(ctx, "b", tempIdentityId);
+  assert.equal(edited.length, 2);
+  for (const entry of edited) {
+    assert.equal(entry.body, "用户今天想喝黑茶");
+    assert.equal(snapshot(ctx, "b", entry).status, "ok");
+  }
+  assert.equal(entryOf(ctx.store, "b", "pref.coffee").body, "我喜欢咖啡");
+  assert.equal(entryOf(ctx.store, "b", "pref.tea.independent").body, "用户平时爱喝茶");
+});
+
+function expireTemporaryIdentity(ctx, tempIdentityId, nowMs) {
+  withDatabase(ctx.store.dbPath, (db) => {
+    db.prepare(`
+      UPDATE memory_entries SET expires_at = ?
+      WHERE fact_identity_id = ? AND expires_at IS NOT NULL
+    `).run(nowMs - 1, tempIdentityId);
+  });
+}
+
+function temporaryControlCounts(ctx, tempIdentityId) {
+  return withDatabase(ctx.store.dbPath, (db) => ({
+    share: db.prepare(`
+      SELECT COUNT(*) AS count FROM memory_share_identity_controls WHERE identity_id = ?
+    `).get(tempIdentityId).count,
+    forgetB: db.prepare(`
+      SELECT COUNT(*) AS count FROM memory_forget_identity_controls
+      WHERE character_id = 'b' AND identity_id = ?
+    `).get(tempIdentityId).count,
+  }));
+}
+
+test("POL-SEMOP-001d/D7 旧多 L 控制独立对照：forget/restrict/exclusive 不互相遮蔽", async (t) => {
+  const cases = {
+    "forget-only": async (ctx, seeded) => {
+      const bMembers = temporaryEntriesOf(ctx, "b", seeded.member.factIdentityId);
+      ctx.store.memory.forget({
+        characterId: "b",
+        entryId: bMembers[0].id,
+        expectedVersion: bMembers[0].version,
+        scope: "self",
+      });
+      expireTemporaryIdentity(ctx, seeded.member.factIdentityId, ctx.nowMs());
+    },
+    "restrict-only": async (ctx, seeded) => {
+      ctx.store.memory.restrictSharing({
+        characterId: "a",
+        entryId: seeded.aTemp.id,
+        expectedVersion: seeded.aTemp.version,
+      });
+      expireTemporaryIdentity(ctx, seeded.member.factIdentityId, ctx.nowMs());
+    },
+    exclusive: async (ctx, seeded) => {
+      ctx.store.memory.keepExclusive({
+        characterId: "a",
+        entryId: seeded.aTemp.id,
+        expectedVersion: seeded.aTemp.version,
+      });
+      expireTemporaryIdentity(ctx, seeded.member.factIdentityId, ctx.nowMs());
+    },
+    "no-control": async (ctx, seeded) => {
+      expireTemporaryIdentity(ctx, seeded.member.factIdentityId, ctx.nowMs());
+    },
+  };
+  for (const [name, prepare] of Object.entries(cases)) {
+    await t.test(name, async (t2) => {
+      const ctx = await setupContext(t2);
+      const seeded = await seedMultiLSourcePair(ctx);
+      assert.equal(snapshot(ctx, "b", seeded.member).status, "ok");
+      const oldIdentityId = seeded.member.factIdentityId;
+      await prepare(ctx, seeded);
+      assert.equal(temporaryEntryOf(ctx.store, "a"), null);
+      assert.equal(temporaryEntryOf(ctx.store, "b"), null);
+      await issueTodayStatement(ctx, seeded.aConversation, "a", {
+        entryId: seeded.aLong.id,
+        expectedVersion: seeded.aLong.version,
+        body: "我今天想喝白茶",
+        text: "我今天想喝白茶。",
+        expiresAt: seeded.aTemp.expiresAt,
+      });
+      const aNew = temporaryEntryOf(ctx.store, "a");
+      assert.ok(aNew);
+      assert.notEqual(aNew.factIdentityId, oldIdentityId);
+      const bNew = temporaryEntryOf(ctx.store, "b");
+      const counts = temporaryControlCounts(ctx, aNew.factIdentityId);
+      if (name === "no-control") {
+        assert.ok(bNew, "无旧控制时应获得同锚 copy");
+        assert.equal(snapshot(ctx, "b", bNew).status, "ok");
+        assert.deepEqual(counts, { share: 0, forgetB: 0 });
+        assert.equal(
+          ctx.store.memory.relay({
+            fromCharacterId: "a",
+            toCharacterId: "c",
+            entries: [{ entryId: aNew.id, expectedVersion: aNew.version }],
+          }).shared[0].alreadyHeld,
+          false,
+        );
+        return;
+      }
+      assert.equal(bNew, null, `${name} 不得向旧 forget/share 持有者重建副本`);
+      if (name === "forget-only") {
+        assert.deepEqual(counts, { share: 0, forgetB: 1 });
+        // 只 forget 不阻断其他人的显式转告。
+        const relayed = ctx.store.memory.relay({
+          fromCharacterId: "a",
+          toCharacterId: "c",
+          entries: [{ entryId: aNew.id, expectedVersion: aNew.version }],
+        });
+        assert.equal(relayed.shared[0].alreadyHeld, false);
+      } else if (name === "restrict-only") {
+        assert.deepEqual(counts, { share: 1, forgetB: 0 });
+        assert.throws(() => ctx.store.memory.relay({
+          fromCharacterId: "a",
+          toCharacterId: "c",
+          entries: [{ entryId: aNew.id, expectedVersion: aNew.version }],
+        }), (error) => error.code === "SHARE_BLOCKED");
+      } else {
+        assert.deepEqual(counts, { share: 1, forgetB: 1 });
+        assert.throws(() => ctx.store.memory.relay({
+          fromCharacterId: "a",
+          toCharacterId: "c",
+          entries: [{ entryId: aNew.id, expectedVersion: aNew.version }],
+        }), (error) => error.code === "SHARE_BLOCKED");
+      }
+    });
+  }
+});
+
+/* 旧单 L 快照没有 holderLongIdentityId；测试用它明确执行 digest/isCurrent 的
+   兼容回退，而不是只看新字段是否存在。 */
+function legacyTemporaryDigest(snapshotValue) {
+  const base = [
+    snapshotValue.status, snapshotValue.characterId, snapshotValue.holderCharacterId,
+    snapshotValue.speaker, snapshotValue.entryId, snapshotValue.entryVersion,
+    snapshotValue.sourceId, snapshotValue.sourceVersion, snapshotValue.contextVersion,
+    snapshotValue.sourceCreatedAt, snapshotValue.excerpt, snapshotValue.contextIncomplete,
+    snapshotValue.sourceMessage, snapshotValue.messages,
+  ];
+  if (snapshotValue.format === "corrected_v2") {
+    base.push(
+      snapshotValue.format, snapshotValue.sourceAnchorEntryId,
+      snapshotValue.sourceAnchorVersion, snapshotValue.sourceAnchorIdentityId,
+      snapshotValue.sourceCharacterId, snapshotValue.direct, snapshotValue.via,
+      snapshotValue.expiresAt, snapshotValue.segments,
+    );
+  }
+  if (snapshotValue.temporaryKind) {
+    base.push(
+      snapshotValue.temporaryKind, snapshotValue.temporaryIdentityId,
+      snapshotValue.temporarySourceEntryId, snapshotValue.temporarySourceVersion,
+      snapshotValue.temporarySourceStatus, snapshotValue.sourceAnchorStatus,
+      snapshotValue.holderAnchorEntryId, snapshotValue.holderAnchorVersion,
+      snapshotValue.holderAnchorIdentityId, snapshotValue.holderAnchorStatus,
+      snapshotValue.edited, snapshotValue.relayFrom,
+    );
+  }
+  return sha256(JSON.stringify(base));
+}
+
+test("POL-SEMOP-001d/D9 新旧临时快照 digest/isCurrent 兼容", async (t) => {
+  const legacyOf = (value) => {
+    const copy = { ...value };
+    delete copy.holderLongIdentityId;
+    copy.digest = legacyTemporaryDigest(copy);
+    return copy;
+  };
+  const assertLegacyCompatible = async (ctx, current, seeded) => {
+    assert.equal(current.status, "ok");
+    assert.equal(ctx.store.memorySourceContext.isCurrent(current), true);
+    const legacy = legacyOf(current);
+    assert.equal(
+      ctx.store.memorySourceContext.isCurrent(legacy),
+      true,
+      "旧快照必须按 94d8855 摘要算法兼容",
+    );
+    withDatabase(ctx.store.dbPath, (db) => {
+      db.prepare("UPDATE chat_messages SET role = 'assistant' WHERE id = ?")
+        .run(seeded.parsed.messageSourceId.slice("chat:".length));
+    });
+    assert.equal(ctx.store.memorySourceContext.isCurrent(current), false);
+    assert.equal(ctx.store.memorySourceContext.isCurrent(legacy), false);
+  };
+  await t.test("legacy-direct-current", async (t2) => {
+    const ctx = await setupContext(t2);
+    const seeded = await seedSourcePair(ctx);
+    const current = snapshot(ctx, "a", seeded.aTemp);
+    assert.equal(current.format, "corrected_v2");
+    assert.equal(current.direct, true);
+    assert.equal(current.temporaryKind, undefined);
+    assert.equal(Object.hasOwn(current, "holderLongIdentityId"), true);
+    await assertLegacyCompatible(ctx, current, { parsed: parseTemporarySource(seeded.aTemp.sourceId) });
+  });
+  await t.test("legacy-copy", async (t2) => {
+    const ctx = await setupContext(t2);
+    const seeded = await seedSourcePair(ctx);
+    await assertLegacyCompatible(ctx, snapshot(ctx, "b", seeded.bTemp), seeded);
+  });
+  await t.test("legacy-edit", async (t2) => {
+    const ctx = await setupContext(t2);
+    const seeded = await seedSourcePair(ctx);
+    ctx.store.memory.correct({
+      characterId: "b",
+      entryId: seeded.bTemp.id,
+      expectedVersion: seeded.bTemp.version,
+      body: "用户今天想喝奶茶",
+    });
+    const edited = temporaryEntryOf(ctx.store, "b");
+    assert.equal(parseTemporarySource(edited.sourceId).kind, "edit");
+    await assertLegacyCompatible(ctx, snapshot(ctx, "b", edited), seeded);
+  });
+  await t.test("multi-L-new-digest", async (t2) => {
+    const ctx = await setupContext(t2);
+    const seeded = await seedMultiLSourcePair(ctx);
+    const current = snapshot(ctx, "b", seeded.member);
+    assert.equal(current.status, "ok");
+    assert.equal(current.holderLongIdentityId, seeded.independent.factIdentityId);
+    assert.equal(ctx.store.memorySourceContext.isCurrent(current), true);
+    withDatabase(ctx.store.dbPath, (db) => {
+      db.prepare("UPDATE memory_entries SET body = '被篡改' WHERE id = ?")
+        .run(seeded.member.id);
+    });
+    assert.equal(ctx.store.memorySourceContext.isCurrent(current), false);
+  });
+});
+
+/* master r44：root long 与 origin current 都删除后，不能只信本条 root_identity_id。
+   必须复用 originCurrentEntryId 对应的历史 entry 关联行（T/holder/expiry/own/root）
+   与持久 derivation/消息链。以下反例在当前实现应先失败。 */
+test("POL-SEMOP-001d/D6 双原件删除后历史 entry 关联负例", async (t) => {
+  const mutations = {
+    "copy-root-forged": (ctx, seeded) => {
+      withDatabase(ctx.store.dbPath, (db) => {
+        db.prepare("UPDATE memory_temporary_entry_links SET root_identity_id = 'forged-root' WHERE entry_id = ?")
+          .run(seeded.member.id);
+      });
+    },
+    "origin-entry-link-deleted": (ctx, seeded, originId) => {
+      withDatabase(ctx.store.dbPath, (db) => {
+        db.prepare("DELETE FROM memory_temporary_entry_links WHERE entry_id = ?").run(originId);
+      });
+    },
+    "origin-root-forged": (ctx, seeded, originId) => {
+      withDatabase(ctx.store.dbPath, (db) => {
+        db.prepare("UPDATE memory_temporary_entry_links SET root_identity_id = 'forged-root' WHERE entry_id = ?")
+          .run(originId);
+      });
+    },
+    "origin-holder-mismatch": (ctx, seeded, originId) => {
+      withDatabase(ctx.store.dbPath, (db) => {
+        db.prepare("UPDATE memory_temporary_entry_links SET holder_character_id = 'x' WHERE entry_id = ?")
+          .run(originId);
+      });
+    },
+    "origin-expiry-mismatch": (ctx, seeded, originId) => {
+      withDatabase(ctx.store.dbPath, (db) => {
+        db.prepare("UPDATE memory_temporary_entry_links SET expires_at = expires_at + 1 WHERE entry_id = ?")
+          .run(originId);
+      });
+    },
+    "origin-temp-mismatch": (ctx, seeded, originId) => {
+      withDatabase(ctx.store.dbPath, (db) => {
+        db.prepare("UPDATE memory_temporary_entry_links SET temp_identity_id = 'forged-temp' WHERE entry_id = ?")
+          .run(originId);
+      });
+    },
+  };
+  await t.test("positive-both-removed", async (t2) => {
+    const ctx = await setupContext(t2);
+    const seeded = await seedMultiLSourcePair(ctx);
+    assert.equal(snapshot(ctx, "b", seeded.member).status, "ok");
+    ctx.store.memory.forget({
+      characterId: "a",
+      entryId: seeded.aLong.id,
+      expectedVersion: seeded.aLong.version,
+      scope: "self",
+    });
+    ctx.store.memory.forget({
+      characterId: "a",
+      entryId: seeded.aTemp.id,
+      expectedVersion: seeded.aTemp.version,
+      scope: "self",
+    });
+    const result = snapshot(ctx, "b", seeded.member);
+    assert.equal(result.status, "ok");
+    assert.equal(result.sourceAnchorEntryId, parseTemporarySource(seeded.member.sourceId).originLongEntryId);
+    assert.equal(result.sourceAnchorStatus, "removed");
+    assert.equal(result.temporarySourceStatus, "removed");
+    const originId = parseTemporarySource(seeded.member.sourceId).originCurrentEntryId;
+    const history = entryLinksOf(ctx, originId);
+    assert.ok(history, "origin current 的 entry 关联历史必须保留");
+    assert.equal(history.temp_identity_id, seeded.member.factIdentityId);
+    assert.equal(history.holder_character_id, "a");
+    assert.equal(history.expires_at, seeded.member.expiresAt);
+    assert.equal(history.root_identity_id, history.long_identity_id);
+  });
+  for (const [name, mutate] of Object.entries(mutations)) {
+    await t.test(name, async (t2) => {
+      const ctx = await setupContext(t2);
+      const seeded = await seedMultiLSourcePair(ctx);
+      ctx.store.memory.forget({
+        characterId: "a",
+        entryId: seeded.aLong.id,
+        expectedVersion: seeded.aLong.version,
+        scope: "self",
+      });
+      ctx.store.memory.forget({
+        characterId: "a",
+        entryId: seeded.aTemp.id,
+        expectedVersion: seeded.aTemp.version,
+        scope: "self",
+      });
+      // 只保留被篡改的 B 成员，避免另一条同文 current 掩盖“长期恢复”观察。
+      const otherB = temporaryEntriesOf(ctx, "b", seeded.member.factIdentityId)
+        .find((entry) => entry.id !== seeded.member.id);
+      if (otherB) {
+        deleteOldTemporaryEntryOnly(ctx, otherB.id);
+      }
+      assert.equal(snapshot(ctx, "b", seeded.member).status, "ok");
+      const originId = parseTemporarySource(seeded.member.sourceId).originCurrentEntryId;
+      mutate(ctx, seeded, originId);
+      const before = assertMultiLState(ctx);
+      const result = snapshot(ctx, "b", seeded.member);
+      assert.equal(result.status, "unavailable", name);
+      assert.deepEqual(assertMultiLState(ctx), before, "resolve 必须零写");
+      const bodies = contextBodies(ctx, "b");
+      assert.equal(bodies.includes(seeded.member.body), false);
+      assert.ok(bodies.includes("我喜欢咖啡"));
+      assert.ok(bodies.includes("用户平时爱喝茶"));
+    });
+  }
+});
+
+/* master r44 澄清：relay 无 holder 锚只在首次创建时 own=root；root 轮换后
+   既有关联 L 保留，无锚成员仍必须同步，不能因 own L 不同而回滚整组。 */
+test("POL-SEMOP-001d/D11 relay 无锚成员 root 轮换后仍同步且可编辑/转告", async (t) => {
+  const ctx = await setupContext(t, ["a", "b", "c", "d"]);
+  const seeded = await seedMultiLSourcePair(ctx);
+  const relayed = ctx.store.memory.relay({
+    fromCharacterId: "a",
+    toCharacterId: "c",
+    entries: [{ entryId: seeded.aTemp.id, expectedVersion: seeded.aTemp.version }],
+  });
+  assert.equal(relayed.shared[0].alreadyHeld, false);
+  const cFirst = temporaryEntryOf(ctx.store, "c");
+  assert.ok(cFirst);
+  assert.equal(snapshot(ctx, "c", cFirst).status, "ok");
+  // C 的无关长期事实不能成为 holder 锚。
+  addLongForMultiL(ctx, "c", "pref.cat", "用户喜欢猫");
+  const tempIdentityId = seeded.member.factIdentityId;
+  const cBefore = temporaryEntriesOf(ctx, "c", tempIdentityId);
+  assert.equal(cBefore.length, 1);
+
+  // B 从独立 L2 再发起：C 仍是合法 T 成员，必须同步；own L 保持 L1。
+  await issueTodayStatement(ctx, seeded.bConversation, "b", {
+    entryId: seeded.member.id,
+    expectedVersion: seeded.member.version,
+    body: "我今天想喝乌龙茶",
+    text: "我今天想喝乌龙茶。",
+    expiresAt: seeded.aTemp.expiresAt,
+  });
+  const cAfter = temporaryEntryOf(ctx.store, "c");
+  assert.ok(cAfter, "C 必须仍在 T 中并同步");
+  assert.equal(cAfter.body, "我今天想喝乌龙茶");
+  const cLink = entryLinksOf(ctx, cAfter.id);
+  assert.equal(cLink.long_identity_id, seeded.aLong.factIdentityId, "C own L 不得改写成新 root L");
+  assert.equal(cLink.root_identity_id, seeded.independent.factIdentityId);
+  const cSnapshot = snapshot(ctx, "c", cAfter);
+  assert.equal(cSnapshot.status, "ok");
+  assert.equal(cSnapshot.holderAnchorEntryId, null);
+  assert.equal(cSnapshot.holderLongIdentityId, seeded.aLong.factIdentityId);
+  assert.equal(cSnapshot.sourceAnchorIdentityId, seeded.independent.factIdentityId);
+
+  // C 可继续编辑并转告 D。
+  ctx.store.memory.correct({
+    characterId: "c",
+    entryId: cAfter.id,
+    expectedVersion: cAfter.version,
+    body: "用户今天想喝黄茶",
+  });
+  const cEdited = temporaryEntryOf(ctx.store, "c");
+  assert.equal(cEdited.body, "用户今天想喝黄茶");
+  assert.equal(snapshot(ctx, "c", cEdited).status, "ok");
+  const relayedD = ctx.store.memory.relay({
+    fromCharacterId: "c",
+    toCharacterId: "d",
+    entries: [{ entryId: cEdited.id, expectedVersion: cEdited.version }],
+  });
+  assert.equal(relayedD.shared[0].alreadyHeld, false);
+  const dEntry = temporaryEntryOf(ctx.store, "d");
+  assert.ok(dEntry);
+  assert.equal(snapshot(ctx, "d", dEntry).status, "ok");
+
+  // A 再从 L1 发起，root 再变化；C 仍可解析。
+  await issueTodayStatement(ctx, seeded.aConversation, "a", {
+    entryId: seeded.aLong.id,
+    expectedVersion: seeded.aLong.version,
+    body: "我今天想喝绿茶",
+    text: "我今天想喝绿茶。",
+    expiresAt: seeded.aTemp.expiresAt,
+  });
+  const cFinal = temporaryEntryOf(ctx.store, "c");
+  assert.ok(cFinal);
+  assert.equal(cFinal.body, "我今天想喝绿茶");
+  const finalLink = entryLinksOf(ctx, cFinal.id);
+  assert.equal(finalLink.long_identity_id, seeded.aLong.factIdentityId);
+  assert.equal(finalLink.root_identity_id, seeded.aLong.factIdentityId);
+  assert.equal(snapshot(ctx, "c", cFinal).status, "ok");
+  // 明确声明 holder 锚后删除仍拒绝的旧规则不变由既有 D6 holder-anchor 子项覆盖。
 });

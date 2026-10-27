@@ -23,6 +23,11 @@ const {
   tokenizeForIndex,
 } = require("./memory-retrieval.cjs");
 const { createMemoryTemporary } = require("./memory-temporary.cjs");
+const {
+  copiedTemporarySource,
+  editedTemporarySource,
+  parseTemporarySource,
+} = require("./memory-temporary-source.cjs");
 
 const LIMITS = Object.freeze({
   characterId: 200,
@@ -983,15 +988,18 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       }
       const identityId = identityOfEntry(held, nowMs);
       const hash = factKeyHash(held.factKey);
-      const others = store
-        .listEntriesByIdentity(identityId)
-        .filter((entry) => entry.characterId !== characterId);
+      const identityEntries = store.listEntriesByIdentity(identityId);
+      const others = identityEntries.filter((entry) => entry.characterId !== characterId);
+      const retainedEntries = identityEntries.filter(
+        (entry) => entry.characterId === characterId,
+      );
 
       // 已只剩保留者且禁分享已生效：重复确认幂等，不制造新版本或新控制。
       if (others.length === 0 && isShareRestricted(held)) {
         return {
           factKeyHash: hash,
           retainedEntryId: held.id,
+          retainedEntryIds: retainedEntries.map((entry) => entry.id).sort(),
           retainedCharacterId: characterId,
           version: held.version,
           cleared: 0,
@@ -999,6 +1007,80 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
           alreadyExclusive: true,
           blockedSharing: true,
           contextVersions: {},
+        };
+      }
+
+      /* 临时理解按 T 覆盖本人全部 L：逐条递增版本；若 root current 也递增，
+         同事务重写引用它的 originCurrentVersion，避免保留后自身 copy 失效。
+         其他 holder 的条目全删，root current 被删时保留者的 derived_from 清空，
+         持久 derivation/parent 仍作为根证明。 */
+      if (temporary.isTemporaryEntry(held)) {
+        const deletedIds = new Set(others.map((entry) => entry.id));
+        const root = retainedEntries.find((entry) => entry.derivedFromEntryId === null) ?? null;
+        const rootVersion = root ? root.version + 1 : null;
+        const updated = new Map();
+        for (const entry of retainedEntries) {
+          const parsed = parseTemporarySource(entry.sourceId);
+          const next = { ...entry, version: entry.version + 1, updatedAt: nowMs };
+          if (parsed && parsed.kind !== "direct" &&
+            parsed.originCurrentEntryId === root?.id) {
+            const build = parsed.kind === "edit"
+              ? editedTemporarySource
+              : copiedTemporarySource;
+            next.sourceId = build({
+              originLongEntryId: parsed.originLongEntryId,
+              originLongVersion: parsed.originLongVersion,
+              originCurrentEntryId: parsed.originCurrentEntryId,
+              originCurrentVersion: rootVersion,
+              holderLongEntryId: parsed.holderLongEntryId,
+              holderLongVersion: parsed.holderLongVersion,
+              messageSourceId: parsed.messageSourceId,
+            });
+          }
+          if (entry.derivedFromEntryId !== null && deletedIds.has(entry.derivedFromEntryId)) {
+            store.updateTemporaryOrigin(entry.id, entry.originCharacterId, null);
+            next.derivedFromEntryId = null;
+          }
+          store.updateEntry(next, tokenizeForIndex(next.body));
+          if (entry.derivationSourceId !== null) {
+            // derived_from 列可因父删除清空，但持久 derivation parent 仍用于根证明。
+            store.setDerivation({
+              ...next,
+              derivedFromEntryId: entry.derivedFromEntryId,
+              narratorCharacterId: entry.narratorCharacterId,
+              originCharacterId: entry.originCharacterId,
+            });
+          }
+          updated.set(entry.id, next);
+        }
+        for (const entry of others) {
+          store.deleteEntry(entry.id);
+          store.addSourceControl(entry.characterId, sourceIdHash(entry.sourceId), nowMs);
+          store.addForgetIdentityControl(entry.characterId, identityId, nowMs);
+          store.addDeletedFactFingerprint(
+            entry.characterId,
+            deletedFingerprintOf(entry),
+            nowMs,
+          );
+        }
+        store.addShareIdentityControl(identityId, nowMs);
+        const kept = updated.get(held.id) ?? held;
+        const affected = new Set([characterId, ...others.map((entry) => entry.characterId)]);
+        const contextVersions = {};
+        for (const holder of [...affected].sort()) {
+          contextVersions[holder] = store.bumpContextVersion(holder, nowMs);
+        }
+        return {
+          factKeyHash: hash,
+          retainedEntryId: kept.id,
+          retainedEntryIds: [...updated.keys()].sort(),
+          retainedCharacterId: characterId,
+          version: kept.version,
+          cleared: others.length,
+          clearedCharacters: [...new Set(others.map((entry) => entry.characterId))].sort(),
+          alreadyExclusive: false,
+          blockedSharing: true,
+          contextVersions,
         };
       }
 
@@ -1091,6 +1173,14 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
         longIdentityId: temporaryCopy.longIdentityId,
         holderCharacterId: toCharacterId,
         expiresAt: temporaryCopy.expiresAt,
+      });
+      store.insertTemporaryEntryLink({
+        entryId: entry.id,
+        tempIdentityId: temporaryCopy.temporaryIdentityId,
+        holderCharacterId: toCharacterId,
+        expiresAt: temporaryCopy.expiresAt,
+        longIdentityId: temporaryCopy.longIdentityId,
+        rootIdentityId: temporaryCopy.rootIdentityId,
       });
     }
     store.insertRelationEdge(original.id, entry.id, relation, nowMs);

@@ -58,6 +58,9 @@ function digestOf(snapshot) {
       snapshot.edited, snapshot.relayFrom,
     );
   }
+  if (snapshot.holderLongIdentityId !== undefined) {
+    base.push(snapshot.holderLongIdentityId);
+  }
   return sha256(JSON.stringify(base));
 }
 
@@ -116,6 +119,19 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       FROM memory_temporary_links
       WHERE temp_identity_id = ?
       ORDER BY holder_character_id ASC, long_identity_id ASC, expires_at ASC
+    `),
+    getTemporaryEntryLink: db.prepare(`
+      SELECT entry_id, temp_identity_id, holder_character_id, expires_at,
+             long_identity_id, root_identity_id
+      FROM memory_temporary_entry_links
+      WHERE entry_id = ?
+    `),
+    listTemporaryEntryLinksByIdentity: db.prepare(`
+      SELECT entry_id, temp_identity_id, holder_character_id, expires_at,
+             long_identity_id, root_identity_id
+      FROM memory_temporary_entry_links
+      WHERE temp_identity_id = ?
+      ORDER BY holder_character_id ASC, long_identity_id ASC, entry_id ASC
     `),
     /* 显式 share/relay 会留下无正文关系边；身份同步 copy 没有边。用边区分
        propagation 与 temporary_relay，避免把同一来源格式当成同一种讲述方式。 */
@@ -222,7 +238,8 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
 
   function correctedSnapshot({
     entry, characterId, nowMs, anchor, message, embeddedSourceId, sourceCharacterId,
-    direct, via,
+    direct, via, sourceAnchorIdentityId = anchor.fact_identity_id,
+    holderLongIdentityId = undefined,
   }) {
     if (sourceExcluded(characterId, entry.source_id)) {
       return unavailable("source_excluded");
@@ -250,7 +267,7 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       holderCharacterId: characterId,
       sourceAnchorEntryId: anchor.id,
       sourceAnchorVersion: anchor.version,
-      sourceAnchorIdentityId: anchor.fact_identity_id,
+      sourceAnchorIdentityId,
       entryId: entry.id,
       entryVersion: entry.version,
       sourceId: entry.source_id,
@@ -266,6 +283,9 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       via,
       segments: segments.map((segment) => ({ messageId: message.id, ...segment })),
     };
+    if (holderLongIdentityId !== undefined) {
+      snapshot.holderLongIdentityId = holderLongIdentityId;
+    }
     return { ...snapshot, digest: digestOf(snapshot) };
   }
 
@@ -323,7 +343,7 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       const embeddedSourceId = match[3];
       const message = statements.getMessage.get(embeddedSourceId.slice("chat:".length));
       const expectedFactKey = anchor ? `${anchor.fact_key}.current.${anchor.id}` : null;
-      const link = temporaryLinkInfo(entry);
+      const link = entryLinkInfo(entry);
       if (
         !anchor ||
         anchor.character_id !== characterId ||
@@ -340,12 +360,15 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       if (link.reason) {
         return unavailable(link.reason);
       }
-      if (link.longIdentityId !== anchor.fact_identity_id) {
+      if (link.longIdentityId !== anchor.fact_identity_id ||
+        link.rootIdentityId !== link.longIdentityId) {
         return unavailable("source_mismatch");
       }
       return correctedSnapshot({
         entry, characterId, nowMs, anchor, message, embeddedSourceId,
         sourceCharacterId: characterId, direct: true, via: "current_temporary",
+        sourceAnchorIdentityId: link.rootIdentityId,
+        holderLongIdentityId: link.longIdentityId,
       });
     }
 
@@ -400,6 +423,66 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       return { reason: holderRows.length === 0 ? "link_missing" : "link_conflict" };
     }
     return { longIdentityId: rows[0].long_identity_id };
+  }
+
+  /* entry 关联优先：own L 必须与旧控制关系、holder 锚和 source 内嵌锚一致。
+     没有 entry 行时才按 2c-1 唯一 L 回退；读取只构造内存结果，永不补齐。 */
+  function entryLinkInfo(entry) {
+    const row = statements.getTemporaryEntryLink.get(entry.id);
+    if (!row) {
+      const legacy = temporaryLinkInfo(entry);
+      if (legacy.reason) {
+        return legacy;
+      }
+      return {
+        longIdentityId: legacy.longIdentityId,
+        rootIdentityId: legacy.longIdentityId,
+      };
+    }
+    if (row.temp_identity_id !== entry.fact_identity_id ||
+      row.holder_character_id !== entry.character_id ||
+      row.expires_at !== entry.expires_at ||
+      !row.long_identity_id || !row.root_identity_id) {
+      return { reason: "link_conflict" };
+    }
+    const links = statements.listTemporaryLinks.all(entry.fact_identity_id)
+      .filter((link) =>
+        link.holder_character_id === entry.character_id &&
+        link.expires_at === entry.expires_at);
+    if (!links.some((link) => link.long_identity_id === row.long_identity_id)) {
+      return { reason: "link_missing" };
+    }
+    const entryLinks = statements.listTemporaryEntryLinksByIdentity
+      .all(entry.fact_identity_id)
+      .filter((link) =>
+        link.holder_character_id === entry.character_id &&
+        link.expires_at === entry.expires_at);
+    if (links.some((link) =>
+      !entryLinks.some((item) => item.long_identity_id === link.long_identity_id))) {
+      return { reason: "link_conflict" };
+    }
+    return {
+      longIdentityId: row.long_identity_id,
+      rootIdentityId: row.root_identity_id,
+    };
+  }
+
+  /* origin current 可能已删除；此时必须复用其历史 entry 关联行（T/holder/
+     expiry/own/root），不能只凭本条 root_identity_id 自证。没有历史行时只
+     兼容旧单 L 合法数据，读取不补齐。 */
+  function originLinkInfo(entry, sourceCharacterId, originCurrentEntryId, rootIdentityId) {
+    const row = statements.getTemporaryEntryLink.get(originCurrentEntryId);
+    if (row) {
+      return Boolean(
+        row.temp_identity_id === entry.fact_identity_id &&
+        row.holder_character_id === sourceCharacterId &&
+        row.expires_at === entry.expires_at &&
+        row.long_identity_id === rootIdentityId &&
+        row.root_identity_id === row.long_identity_id,
+      );
+    }
+    const legacy = temporaryLinkInfo(entry);
+    return !legacy.reason && legacy.longIdentityId === rootIdentityId;
   }
 
   /* copy/edit 共用的关系核验：显式 share/relay 的关系边只对当前 immediate
@@ -492,11 +575,12 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       return unavailable("segments_unavailable");
     }
 
-    const link = temporaryLinkInfo(entry);
+    const link = entryLinkInfo(entry);
     if (link.reason) {
       return unavailable(link.reason);
     }
     const longIdentityId = link.longIdentityId;
+    const rootIdentityId = link.rootIdentityId;
 
     let holderAnchor = null;
     if (parsed.holderLongEntryId) {
@@ -525,7 +609,17 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
         return unavailable("temporary_source_changed");
       }
     }
+    if (!originLinkInfo(entry, sourceCharacterId, parsed.originCurrentEntryId, rootIdentityId)) {
+      return unavailable("temporary_source_changed");
+    }
     const originLong = statements.getEntry.get(parsed.originLongEntryId);
+    if (originLong && (
+      originLong.character_id !== sourceCharacterId ||
+      originLong.fact_identity_id !== rootIdentityId ||
+      originLong.version !== parsed.originLongVersion
+    )) {
+      return unavailable("temporary_source_changed");
+    }
     const { messages, contextIncomplete } = priorMessages({ message, sourceCharacterId });
     const snapshot = {
       status: "ok",
@@ -535,7 +629,7 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       holderCharacterId: characterId,
       sourceAnchorEntryId: parsed.originLongEntryId,
       sourceAnchorVersion: parsed.originLongVersion,
-      sourceAnchorIdentityId: longIdentityId,
+      sourceAnchorIdentityId: rootIdentityId,
       entryId: entry.id,
       entryVersion: entry.version,
       sourceId: entry.source_id,
@@ -561,6 +655,7 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       holderAnchorStatus: holderAnchor ? "live" : "absent",
       edited: false,
       relayFrom: relayed ? narratorCharacterId : null,
+      holderLongIdentityId: longIdentityId,
       segments: segments.map((segment) => ({ messageId: message.id, ...segment })),
     };
     return { ...snapshot, digest: digestOf(snapshot) };
@@ -589,11 +684,12 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
     if (message.content.length > LIMITS.utterance) {
       return unavailable("source_too_long");
     }
-    const link = temporaryLinkInfo(entry);
+    const link = entryLinkInfo(entry);
     if (link.reason) {
       return unavailable(link.reason);
     }
     const longIdentityId = link.longIdentityId;
+    const rootIdentityId = link.rootIdentityId;
 
     let holderAnchor = null;
     if (parsed.holderLongEntryId) {
@@ -623,6 +719,9 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
         return unavailable("temporary_source_changed");
       }
     }
+    if (!originLinkInfo(entry, sourceCharacterId, parsed.originCurrentEntryId, rootIdentityId)) {
+      return unavailable("temporary_source_changed");
+    }
 
     const isOrigin = entry.character_id === sourceCharacterId &&
       entry.id === parsed.originCurrentEntryId;
@@ -641,6 +740,13 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
     }
 
     const originLong = statements.getEntry.get(parsed.originLongEntryId);
+    if (originLong && (
+      originLong.character_id !== sourceCharacterId ||
+      originLong.fact_identity_id !== rootIdentityId ||
+      originLong.version !== parsed.originLongVersion
+    )) {
+      return unavailable("temporary_source_changed");
+    }
     const { messages, contextIncomplete } = priorMessages({ message, sourceCharacterId });
     const snapshot = {
       status: "ok",
@@ -650,7 +756,7 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       holderCharacterId: characterId,
       sourceAnchorEntryId: parsed.originLongEntryId,
       sourceAnchorVersion: parsed.originLongVersion,
-      sourceAnchorIdentityId: longIdentityId,
+      sourceAnchorIdentityId: rootIdentityId,
       entryId: entry.id,
       entryVersion: entry.version,
       sourceId: entry.source_id,
@@ -676,6 +782,7 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
       holderAnchorStatus: holderAnchor ? "live" : "absent",
       edited: true,
       relayFrom: relayedNarrator,
+      holderLongIdentityId: longIdentityId,
       segments: [],
     };
     return { ...snapshot, digest: digestOf(snapshot) };
@@ -803,6 +910,22 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
     if (current.status !== "ok") {
       return false;
     }
+    /* 94d8855 的临时/直接今日快照没有 holderLongIdentityId；旧 copy/edit 用
+       temporaryKind 判断，旧 direct current 没有 temporaryKind，只能按
+       corrected_v2 + direct 识别。用当前 own L 回填后再比摘要，不跳过校验。 */
+    const legacyMissingHolderLong = snapshot.format === "corrected_v2" &&
+      !Object.hasOwn(snapshot, "holderLongIdentityId") &&
+      current.holderLongIdentityId !== undefined;
+    const expectedHolderLong = snapshot.temporaryKind
+      ? (Object.hasOwn(snapshot, "holderLongIdentityId")
+        ? snapshot.holderLongIdentityId
+        : snapshot.sourceAnchorIdentityId)
+      : legacyMissingHolderLong && snapshot.direct === true
+        ? snapshot.sourceAnchorIdentityId
+        : null;
+    const expectedDigest = legacyMissingHolderLong
+      ? digestOf({ ...snapshot, holderLongIdentityId: current.holderLongIdentityId })
+      : snapshot.digest;
     if (corrected) {
       return (
         current.format === "corrected_v2" &&
@@ -821,7 +944,7 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
         current.sourceCreatedAt === snapshot.sourceCreatedAt &&
         current.sourceMessage.id === snapshot.sourceMessage?.id &&
         JSON.stringify(current.segments) === JSON.stringify(snapshot.segments) &&
-        current.digest === snapshot.digest &&
+        current.digest === expectedDigest &&
         (!snapshot.temporaryKind || (
           current.temporaryKind === snapshot.temporaryKind &&
           current.temporaryIdentityId === snapshot.temporaryIdentityId &&
@@ -835,7 +958,9 @@ function createMemorySourceContext({ db, memory, now = () => Date.now() } = {}) 
           current.holderAnchorStatus === snapshot.holderAnchorStatus &&
           current.edited === snapshot.edited &&
           current.relayFrom === snapshot.relayFrom
-        ))
+        )) &&
+        (expectedHolderLong === null ||
+          current.holderLongIdentityId === expectedHolderLong)
       );
     }
     return (

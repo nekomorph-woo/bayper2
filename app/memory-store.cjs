@@ -50,6 +50,19 @@ const FACT_IDENTITY_SCHEMA = `
     PRIMARY KEY (temp_identity_id, long_identity_id, holder_character_id, expires_at)
   );
 
+  /* S03m 2c-2 每条临时条目自己的无正文关联：own L（long_identity_id）在条目
+     生命周期内不变，root L（root_identity_id）表示当前来源链的根长期身份。
+     同一 (T,L,holder,expiry) 可有多个历史 entry 行；正文删除时保留本行，
+     用于根证明与查证。不保存正文，也不承载控制范围。 */
+  CREATE TABLE IF NOT EXISTS memory_temporary_entry_links (
+    entry_id TEXT PRIMARY KEY,
+    temp_identity_id TEXT NOT NULL,
+    holder_character_id TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    long_identity_id TEXT NOT NULL,
+    root_identity_id TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS memory_share_identity_controls (
     identity_id TEXT PRIMARY KEY REFERENCES memory_fact_identities(identity_id),
     created_at INTEGER NOT NULL
@@ -244,6 +257,7 @@ function createMemoryStore(db) {
     ensureFactIdentityColumns(db);
     migrateFactIdentities(db);
     migrateLegacyIdentityGroups(db, { nowMs: Date.now() });
+    backfillTemporaryEntryLinks(db);
     db.exec(`RELEASE SAVEPOINT ${FACT_IDENTITY_MIGRATION_SAVEPOINT}`);
   } catch (error) {
     db.exec(`ROLLBACK TO SAVEPOINT ${FACT_IDENTITY_MIGRATION_SAVEPOINT}`);
@@ -303,6 +317,30 @@ function createMemoryStore(db) {
       FROM memory_temporary_links
       WHERE long_identity_id = ?
       ORDER BY expires_at ASC, temp_identity_id ASC, holder_character_id ASC
+    `),
+    insertTemporaryEntryLink: db.prepare(`
+      INSERT INTO memory_temporary_entry_links (
+        entry_id, temp_identity_id, holder_character_id, expires_at,
+        long_identity_id, root_identity_id
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(entry_id) DO UPDATE SET
+        temp_identity_id = excluded.temp_identity_id,
+        holder_character_id = excluded.holder_character_id,
+        expires_at = excluded.expires_at,
+        root_identity_id = excluded.root_identity_id
+    `),
+    getTemporaryEntryLink: db.prepare(`
+      SELECT entry_id, temp_identity_id, holder_character_id, expires_at,
+             long_identity_id, root_identity_id
+      FROM memory_temporary_entry_links
+      WHERE entry_id = ?
+    `),
+    listTemporaryEntryLinksByIdentity: db.prepare(`
+      SELECT entry_id, temp_identity_id, holder_character_id, expires_at,
+             long_identity_id, root_identity_id
+      FROM memory_temporary_entry_links
+      WHERE temp_identity_id = ?
+      ORDER BY holder_character_id ASC, long_identity_id ASC, entry_id ASC
     `),
     updateEntry: db.prepare(`
       UPDATE memory_entries SET
@@ -787,6 +825,52 @@ function createMemoryStore(db) {
     );
   }
 
+  function mapTemporaryEntryLinks(rows) {
+    return rows.map((row) => ({
+      entryId: row.entry_id,
+      tempIdentityId: row.temp_identity_id,
+      holderCharacterId: row.holder_character_id,
+      expiresAt: row.expires_at,
+      longIdentityId: row.long_identity_id,
+      rootIdentityId: row.root_identity_id,
+    }));
+  }
+
+  /* own L 在条目生命周期内不可变；更新只允许同步到期与 root 引用。 */
+  function insertTemporaryEntryLink({
+    entryId,
+    tempIdentityId,
+    holderCharacterId,
+    expiresAt,
+    longIdentityId,
+    rootIdentityId,
+  }) {
+    const existing = statements.getTemporaryEntryLink.get(entryId);
+    if (existing && existing.long_identity_id !== longIdentityId) {
+      throw new Error("临时条目的 own L 不可变。");
+    }
+    statements.insertTemporaryEntryLink.run(
+      entryId,
+      tempIdentityId,
+      holderCharacterId,
+      expiresAt,
+      longIdentityId,
+      rootIdentityId,
+    );
+  }
+
+  function getTemporaryEntryLink(entryId) {
+    return mapTemporaryEntryLinks(
+      [statements.getTemporaryEntryLink.get(entryId)].filter(Boolean),
+    )[0] ?? null;
+  }
+
+  function listTemporaryEntryLinksByIdentity(tempIdentityId) {
+    return mapTemporaryEntryLinks(
+      statements.listTemporaryEntryLinksByIdentity.all(tempIdentityId),
+    );
+  }
+
   function getIdentityLegacyId(identityId) {
     return statements.getIdentityLegacy.get(identityId)?.legacy_identity_id ?? null;
   }
@@ -976,6 +1060,9 @@ function createMemoryStore(db) {
     listTemporaryLinksByIdentity,
     listTemporaryLinksByHolderLong,
     listTemporaryLinksByLongIdentity,
+    insertTemporaryEntryLink,
+    getTemporaryEntryLink,
+    listTemporaryEntryLinksByIdentity,
     getIdentityLegacyId,
     isSplitIdentity,
     listAliasIdentityIds,
@@ -1059,6 +1146,33 @@ function ensureFactIdentityColumns(db) {
     "identity_migrated",
     "INTEGER NOT NULL DEFAULT 0",
   );
+}
+
+/* 旧 2c-1 临时条目只有 T→单 L 的控制关系。仅当整 T 唯一 L、该 holder 在该 T
+   恰一行且到期一致时回填 own/root 同 L；缺证或多 L 一律不猜，读取仍走旧回退。 */
+function backfillTemporaryEntryLinks(db) {
+  db.exec(`
+    INSERT OR IGNORE INTO memory_temporary_entry_links (
+      entry_id, temp_identity_id, holder_character_id, expires_at,
+      long_identity_id, root_identity_id
+    )
+    SELECT e.id, e.fact_identity_id, e.character_id, e.expires_at,
+           l.long_identity_id, l.long_identity_id
+    FROM memory_entries e
+    JOIN memory_temporary_links l
+      ON l.temp_identity_id = e.fact_identity_id
+     AND l.holder_character_id = e.character_id
+     AND l.expires_at = e.expires_at
+    WHERE e.expires_at IS NOT NULL
+      AND e.fact_identity_id IS NOT NULL
+      AND (SELECT COUNT(DISTINCT l2.long_identity_id)
+           FROM memory_temporary_links l2
+           WHERE l2.temp_identity_id = e.fact_identity_id) = 1
+      AND (SELECT COUNT(*)
+           FROM memory_temporary_links l3
+           WHERE l3.temp_identity_id = e.fact_identity_id
+             AND l3.holder_character_id = e.character_id) = 1
+  `);
 }
 
 /* 幂等身份迁移：

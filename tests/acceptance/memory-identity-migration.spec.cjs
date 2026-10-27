@@ -423,6 +423,11 @@ function fullSnapshot(db) {
   if (tableExists(db, "memory_fact_relation_edges")) {
     tables.push("memory_fact_relation_edges");
   }
+  for (const table of ["memory_temporary_links", "memory_temporary_entry_links"]) {
+    if (tableExists(db, table)) {
+      tables.push(table);
+    }
+  }
   const snapshot = {
     relationTableExists: tableExists(db, "memory_fact_relation_edges"),
     identityColumns: db.prepare("PRAGMA table_info(memory_fact_identities)").all(),
@@ -1073,4 +1078,168 @@ test("POL-MIG-006 派生环剔除与单一已证明组件不变", (t) => {
   assert.notEqual(identityOf(ctx.db, "x1"), identityOf(ctx.db, "y1"));
   assert.equal(identityOf(ctx.db, "p1"), "proven");
   assert.deepEqual(versionsOf(ctx.db, ["p1", "q1"]), { p1: 1, q1: 1 });
+});
+
+/* S03m 2c-2a：旧 2c-1 单 L 库的 entry 关联初始化迁移。只验证表/回填/回滚与
+   重开一致性；多 L 读取与阶段 1 行为见 memory-corrected-source.spec.cjs。 */
+function ensureLegacyTemporaryLinkTable(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS memory_temporary_links (
+      temp_identity_id TEXT NOT NULL,
+      long_identity_id TEXT NOT NULL,
+      holder_character_id TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      PRIMARY KEY (temp_identity_id, long_identity_id, holder_character_id, expires_at)
+    );
+  `);
+}
+
+function ensureTemporaryEntryLinkTable(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS memory_temporary_entry_links (
+      entry_id TEXT PRIMARY KEY,
+      temp_identity_id TEXT NOT NULL,
+      holder_character_id TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      long_identity_id TEXT NOT NULL,
+      root_identity_id TEXT NOT NULL
+    );
+  `);
+}
+
+const TEMP_END = START + 8 * 60 * 60 * 1000;
+
+function seedLegacyTemporaryRows(db) {
+  ensureLegacyTemporaryLinkTable(db);
+  insertIdentity(db, "temp-single-L");
+  insertIdentity(db, "long-single-L");
+  insertIdentity(db, "temp-multi-L");
+  insertIdentity(db, "long-multi-1");
+  insertIdentity(db, "long-multi-2");
+  insertEntry(db, {
+    id: "legacy-temp-a",
+    characterId: "a",
+    factKey: "pref.legacy.current.long-a",
+    factIdentityId: "temp-single-L",
+    originCharacterId: "a",
+    body: "用户今天想喝茶",
+    expiresAt: TEMP_END,
+    sourceId: "chat-current:long-a:1:chat:legacy-a",
+  });
+  insertEntry(db, {
+    id: "legacy-temp-b",
+    characterId: "b",
+    factKey: "pref.legacy.current.long-b",
+    factIdentityId: "temp-single-L",
+    originCharacterId: "a",
+    body: "用户今天想喝茶",
+    expiresAt: TEMP_END,
+    sourceId: "chat-current-copy:long-a:1:legacy-temp-a:1:long-b:1:chat:legacy-a",
+  });
+  insertEntry(db, {
+    id: "legacy-temp-multi",
+    characterId: "b",
+    factKey: "pref.legacy.multi.current",
+    factIdentityId: "temp-multi-L",
+    originCharacterId: "a",
+    body: "用户今天想喝咖啡",
+    expiresAt: TEMP_END,
+    sourceId: "chat-current-copy:long-a:1:legacy-temp-a:1:long-multi-1:1:chat:legacy-a",
+  });
+  // 合法 2c-1 copy 带有持久 derivation；缺少它会被身份迁移按无证明组件拆开。
+  insertDerivation(db, "legacy-temp-b", "legacy-temp-a", "a", "a");
+  const insertLink = db.prepare(`
+    INSERT INTO memory_temporary_links (
+      temp_identity_id, long_identity_id, holder_character_id, expires_at
+    ) VALUES (?, ?, ?, ?)
+  `);
+  insertLink.run("temp-single-L", "long-single-L", "a", TEMP_END);
+  insertLink.run("temp-single-L", "long-single-L", "b", TEMP_END);
+  // 同 T 两个 L：不满足“整 T 唯一 L”，迁移不得猜测。
+  insertLink.run("temp-multi-L", "long-multi-1", "b", TEMP_END);
+  insertLink.run("temp-multi-L", "long-multi-2", "b", TEMP_END);
+}
+
+function temporaryEntryLinks(db, entryId = null) {
+  if (entryId === null) {
+    return db.prepare(`
+      SELECT * FROM memory_temporary_entry_links ORDER BY entry_id ASC
+    `).all();
+  }
+  return db.prepare(
+    "SELECT * FROM memory_temporary_entry_links WHERE entry_id = ?",
+  ).get(entryId) ?? null;
+}
+
+test("POL-SEMOP-001d/D9 旧 2c-1 单 L 库回填 entry 关联，缺证多 L 不猜且重开幂等", (t) => {
+  const ctx = makeLegacyContext(t, seedLegacyTemporaryRows);
+  const backfilled = () => temporaryEntryLinks(ctx.db);
+  assert.equal(tableExists(ctx.db, "memory_temporary_entry_links"), true);
+  const rows = backfilled();
+  assert.equal(rows.length, 2, "只回填可证明的单 L 旧行");
+  for (const row of rows) {
+    assert.equal(row.temp_identity_id, "temp-single-L");
+    assert.equal(row.long_identity_id, "long-single-L");
+    assert.equal(row.root_identity_id, "long-single-L");
+  }
+  assert.equal(temporaryEntryLinks(ctx.db, "legacy-temp-multi"), null, "多 L 缺证不回填");
+  const before = JSON.stringify(rows);
+  ctx.reopen();
+  assert.equal(JSON.stringify(backfilled()), before, "重开幂等");
+});
+
+test("POL-SEMOP-001d/D9 entry 关联回填失败随迁移保存点整笔回滚，修复后重开成功", (t) => {
+  const { dir } = makeLegacyBase(t, (db) => {
+    seedLegacyTemporaryRows(db);
+    ensureTemporaryEntryLinkTable(db);
+    db.exec(`
+      CREATE TRIGGER block_temporary_entry_link
+      BEFORE INSERT ON memory_temporary_entry_links
+      BEGIN
+        SELECT RAISE(ABORT, 'temporary entry link failure');
+      END;
+    `);
+  });
+  const beforeDb = openMemoryDatabase(dir);
+  const before = fullSnapshot(beforeDb);
+  beforeDb.close();
+  const db = openMemoryDatabase(dir);
+  assert.throws(() => createMemoryService({ db, now: () => START }), /temporary entry link failure/);
+  assert.deepEqual(
+    fullSnapshot(db),
+    before,
+    "失败必须随同一迁移保存点回滚，不能残留半建表、回填或其他身份控制变化",
+  );
+  db.exec("DROP TRIGGER block_temporary_entry_link");
+  db.close();
+  const reopened = openMemoryDatabase(dir);
+  const service = createMemoryService({ db: reopened, now: () => START });
+  assert.ok(service);
+  const after = fullSnapshot(reopened);
+  try {
+    assert.equal(after.tables.memory_temporary_entry_links.length, 2);
+    const identityProjection = (snapshotValue) => snapshotValue.tables.memory_fact_identities
+      .map((row) => ({ identity_id: row.identity_id, created_at: row.created_at }));
+    assert.deepEqual(
+      identityProjection(after),
+      identityProjection(before),
+      "回填不得改写身份记录",
+    );
+    for (const table of [
+      "memory_entries",
+      "memory_fact_aliases",
+      "memory_fact_alias_conflicts",
+      "memory_forget_identity_controls",
+      "memory_share_identity_controls",
+      "memory_derivations",
+    ]) {
+      assert.deepEqual(
+        after.tables[table],
+        before.tables[table],
+        `${table} 不应被回填改写`,
+      );
+    }
+  } finally {
+    reopened.close();
+  }
 });

@@ -489,7 +489,7 @@ master 2026-10-27 受托批准本方向，**不是用户亲自确认**。C2 旧 
 
 ## 13. 2c-2 多 L 粒度最小方案（r40 定稿 + r41 收口修正；Codex 受托批准，不是用户亲自确认）
 
-Codex 2026-10-27 受托批准本节方案与 D1～D16（不是用户亲自确认）。**实现仍未开始，D1～D16 与 2c-2 实现均 NOT_COVERED**；批准的是计划与验收口径，不是产品通过。
+Codex 2026-10-27 受托批准本节方案与 D1～D16（不是用户亲自确认）。**2c-2a 已于 2026-10-27 实现，并由 master 独立复跑 20 相关套件 335/335、exit 0、before/after SHA 一致后受托接受为“已测存储/来源/操作有限能力”**（不是用户亲自确认、不是 GUI/真实模型、不是完整 S03）；2c-2b（阶段 2 proof、原子回滚、单 assistant、contextVersion 精确放行）仍未实现，D1/D3/D4/D5/D10 的阶段 2 行为 NOT_COVERED。批准的是计划与验收口径，不是产品通过；以下 r38/r39 退回依据与 r43/r44 记录保留为历史。
 
 r38 退回依据保留：旧表 PK `(T,L,holder,expiry)` 无法容纳同元组多个 entry 历史；“按 entry_id 删旧行又保留历史”矛盾；阶段 0 把今日 body 当 left；§13.4 只更新选中 L 会使其他 L 成员 stale。
 r39 退回依据保留：holder long 删除仍判 ok 与 §12 A2 的“已声明 holder 锚必须存在且版本匹配”冲突；`verifyOperationProof` 只核发起人 contextVersion；keepExclusive 保留自身 current 时未同事务修正 root 引用；`root_identity_id/own L` 未与 source 锚及持久证明交叉校验。本节只给一套首选方案；本轮不实施，待 master snap 后另派。
@@ -498,7 +498,7 @@ r39 退回依据保留：holder long 删除仍判 ok 与 §12 A2 的“已声明
 
 - T 是“当前理解组”，L 是长期 fact identity；同一 T 可关联多个已核验 L，禁止合并/改写长期 identity。
 - 现有 `memory_temporary_links` 原样保留：它是无正文控制关系，PK 与含义不变，记录 T 与哪些 holder+L 发生过控制关系，用于继承 forget/share/exclusive 和查找，不承载 entry 历史。
-- 新窄表 `memory_temporary_entry_links(entry_id PRIMARY KEY, temp_identity_id, holder_character_id, expires_at, long_identity_id, root_identity_id)`：只存 id/时间。`long_identity_id`=本条依附 L（B 的 L2，entry 生命周期内不可变）；`root_identity_id`=本条当前来源链的根长期 L（copy 的 B 条目为 A 的 L1，direct 的 B 条目为 B 的 L2）。relay 无自身 long 时两者相同。
+- 新窄表 `memory_temporary_entry_links(entry_id PRIMARY KEY, temp_identity_id, holder_character_id, expires_at, long_identity_id, root_identity_id)`：只存 id/时间。`long_identity_id`=本条依附 L（B 的 L2，entry 生命周期内不可变）；`root_identity_id`=本条当前来源链的根长期 L（copy 的 B 条目为 A 的 L1，direct 的 B 条目为 B 的 L2）。relay 无自身 long 时首次创建 own=root；root 轮换后 own L 保留、root 随本轮来源更新（见 13.4）。
 - 每条 temp entry 恰一行；同一 `(T,L,holder,expiry)` 可有多个历史 entry 行，各保留自己的 entry_id。正文删除时保留 entry 关联行与旧 `memory_temporary_links`，用于根证明与查证。无正文、无通用图、不合并长期。
 - 阶段 2 只在既有 T 内新增/更新 current 与 entry 关联，不新建 T、不 `associateFacts`、不改长期条目/identity。
 
@@ -514,7 +514,7 @@ r39 退回依据保留：holder long 删除仍判 ok 与 §12 A2 的“已声明
 
 - `sourceAnchorEntryId/Version/IdentityId` 必须真实指向 origin 长期（A 的 L1）及来源消息；IdentityId 取 entry 关联的 `root_identity_id`，即使 origin current/root entry 已删仍可证明。不得把 B 的 L2 冒充 A 的 L1。
 - 新增 `holderLongIdentityId`（必填，取 entry 关联 `long_identity_id`）：本条依附 L，用于抑制、查找和 holder 锚核对；可与 `sourceAnchorIdentityId` 不同。copy/edit 的 B 条目：`sourceAnchor*=A L1`、`holderLongIdentityId=L2`；direct 条目（含 B 再发起）：`sourceAnchor*=own L`，此时可与 `holderLongIdentityId` 相同。copy/edit 分别核 source 内 originLong 与 holderLongEntryId；relay 无自身 long 时 `holderLongIdentityId=root L`、`holderLongEntryId='-'`。
-- 删除与变化分开：root long 已删 → `sourceAnchorStatus="removed"`，仍靠 `root_identity_id` 与持久 entry 关联核，ok；origin current 已删 → `temporarySourceStatus="removed"`，仍靠持久 derivation/link/消息核，ok；root current 存在但版本/正文/trust/expiry 变 → `temporary_source_changed`；**已声明 holder long 锚删除或版本/身份变化一律 `holder_anchor_changed`**（与 §12 A2 一致，恢复旧 Expected）；relay 从始无 holder 锚的合法分支保持（`holderLongEntryId='-'` 且无 held 锚可核）；无 entry 关联且旧回退不成立 → `link_missing/link_conflict`；控制排除 → `source_excluded`。
+- 删除与变化分开：root long 已删 → `sourceAnchorStatus="removed"`，仍靠 `root_identity_id` 与持久 entry 关联核，ok；origin current 已删 → `temporarySourceStatus="removed"`，仍靠持久 derivation/link/消息核，ok；root current 存在但版本/正文/trust/expiry 变 → `temporary_source_changed`；已声明 holder long 锚删除或版本/身份变化 → `holder_anchor_changed`（与 §12 A2 一致，恢复旧 Expected）；relay 从始无 holder 锚的合法分支保持（`holderLongEntryId='-'` 且无 held 锚可核）；无 entry 关联且旧回退不成立 → `link_missing/link_conflict`；控制排除 → `source_excluded`。**origin current 已删除时必须复用 `originCurrentEntryId` 对应的历史 entry 关联行（T/holder/expiry/own/root）与持久 derivation/消息链；历史行缺失时只允许旧单 L 合法回退，多 L 或任一字段矛盾一律 unavailable，不能只凭本条 root_identity_id 自证。**
 - entry 关联字段不能单独作证：`root_identity_id/long_identity_id` 必须与 source 内嵌 origin/holder 锚、仍存活的根/own 长期条目、已持久 origin entry/current/derivation/消息相互一致；任一矛盾 → unavailable，不取字段或第一条 link。root 与 origin current 都删除时，仅当 entry 关联、source 锚 id、derivation/关系边与消息仍形成同一条无正文证明链才继续；证明不足不猜。
 - sourceId 格式与长度不变（上限 200），不嵌入 L2 或 token，不按任意现存 long/第一条 link 推断。
 - digest 与 isCurrent 纳入 `holderLongIdentityId`（及 entry 关联根/own L 的必要字段）；旧单 L 快照无该字段时按 `sourceAnchorIdentityId` 兼容读取，仍以 digest 自校验，旧 direct/corrected 形状不变。
@@ -524,6 +524,7 @@ r39 退回依据保留：holder long 删除仍判 ok 与 §12 A2 的“已声明
 - 选中临时条目：由 entry 关联得所选 L；发起人 origin current 必须是该 holder+L 下的 T 成员。选中长期条目仍按 2c-1 的唯一可证明 T 查找。
 - 新明确今日陈述更新 T 中已有且未被控制阻断的**全部成员**（含不同 L），每条保留自身 holder+L 与 holderLong 锚，body/expiry 同步；source 的 origin current id 统一为 T 本轮根 direct、`originCurrentVersion` 取更新后根版本，derivation parent 同步同一 id；holderLong 锚各按自身 L 不变。再为所选 L 的已有长期 holder 补 copy。B 的其他 L 成员也被更新正文，但其 entry 关联 own L 与 holderLong 锚不被改写。
 - 每 holder+L 一条 current：已有成员原地更新；无成员时按该 holder+L 选锚新建；同 holder+L 多锚确定性取一条（优先既有成员，否则最早 `created_at/id`）。
+- 无 holder 锚的既有成员（含 relay）在 root 轮换时必须继续同步：own L 保留、root 更新到本轮 direct，不得因 own≠root 回滚整组，也不得凭收件人恰有一条任意 long 挂锚；明确声明过的 holder 锚删除/版本/身份变化仍拒绝。
 - T 旧 forget/share/exclusive 与旧 source 控制先查，不因换 L、换措辞或换 T 绕过；未知角色不创建。
 - `editUnderstanding` 对 T 内全部有效成员按各自 entry 关联选择 holderLong/锚，统一更新 body/expiry，origin/消息沿用 T 的 direct origin；不把 L2 改写成 L1。
 - `keepExclusive`（memory.cjs）保留选中 holder 在 T 的全部 L current（逐条 version+1）；若 root current 也 version+1，必须在同一事务重写其他保留条目的 source `originCurrentVersion` 与 derivation，使 root 引用一致，不能出现保留后自身 copy 已失效；删除其他 holder 在 T 的全部副本并写 T share control 与其 source/forget 控制；`self/all` 仍按 T 覆盖全部 L。exclusive 后保留者的 resolve/search/context/再次编辑合法，但 share/relay 仍被 T share control 拒绝且零写；只有先经既有明确 `allowSharing` 流程解除限制后才可转告，另列对照，不自动解除。
@@ -584,5 +585,31 @@ Mock 只替换聊天与关系模型 HTTP；不 mock 核心 store/chat/memory/sou
 
 ### 13.9 局限
 
-- 2c-2 未实现；2c-1 的 295/295 与 S1～S16 只证明单 T 单 L 已测路径，不据此判其失败。
+- 2c-2a 已实现并由 master 独立 335/335 复验后受托接受为已测存储/来源/操作有限能力；2c-2b 未实现。2c-1 的 295/295 与 S1～S16 只证明单 T 单 L 已测路径，不据此判其失败。
 - 真实模型 L1/L2、GUI/UI IPC/live、完整 S03 与 `POL-SEMOP-001～008` 聚合仍 NOT_COVERED；本方案不改变这些边界。
+
+### 13.10 2c-2a 实施记录（r43，历史；master 已退回，不接受）
+
+- 范围：只实现 §13 的 2c-2a 领域与迁移，改 `memory-store.cjs`、`memory-source-context.cjs`、`memory-temporary.cjs`、`memory.cjs` 临时相关部分；未改 chat 阶段 2、proof、关系协议、GUI、版本或 Git。
+- 实际净增 **520 行**（允许 450，超出 70）：store +114、source +128、temporary +188、memory +90。超出集中在多 L 写入/操作：stage1 逐成员保留 own L、edit 全成员、relay/share 写 entry 关联、exclusive root 版本同步与父删除后的持久 derivation、以及 source 对新旧快照/旧单 L 回退的交叉核验；未压行或删断言。
+- 测试证据：聚焦两套件 **97/97、0 fail、0 skipped、exit 0**（`evidence/s03m-2c2/attempt-20261027-192333-2c2a-focus-final2/`）；既有 20 相关套件 **324/324、0 fail、0 skipped、exit 0、before/after SHA 一致**（`evidence/s03m-2c2/attempt-20261027-192339-2c2a-regression20-final2/`）。
+- 覆盖：D2（多 L 全成员同步、双锚不重复、exclusive 自身 root 与 root 在他人处被删）、D6（root/own 分离、root long 与 origin current 同时删除仍凭持久 entry/derivation/消息证明、holder 锚删除/版本变化）、D7（forget-only/restrict-only/exclusive/no-control 独立对照）、D8（本人全部 L self 删除）、D9（单 L 回填、缺证多 L 不猜、读取回退、失败整笔回滚）、D11/D12（多 L 再次改口、编辑、转告、失效后长期恢复）、D13/D16（entry 历史、own L 计数、另一 L 不动、篡改）、D15（root/own/source 锚与 derivation 矛盾）、新旧临时快照 digest/isCurrent 兼容、D14 既有 S1～S16 回归。
+- r44 已按 master 受托澄清移除上述保守拒绝：无 holder 锚的 relay 成员在 root 轮换时保留 own L、root 随本轮来源更新，可继续解析/编辑/转告；历史 origin 关联校验见 13.3。
+- 仍未覆盖：D1/D3/D4/D5/D10 的阶段 2 行为、2c-2b（proof/原子回滚/单 assistant/contextVersion 精确放行）、真实模型 L1/L2、GUI/UI IPC/live、完整 S03；`POL-SEMOP-001～008` 聚合仍 NOT_COVERED。本记录只说明实现与测试结果，不构成 master 验收或产品通过。
+
+### 13.11 2c-2a r44 返修记录（历史；master 已复验并接受有限能力）
+
+- master 退回三点：①root long 与 origin current 均删除时 copy/edit 只凭本条 root 字段自证；②relay 无锚成员在 root 轮换时被 own≠root 粗暴回滚；③isCurrent 对无 temporaryKind 的旧 direct current 快照不兼容（digest 纳入 holderLongIdentityId 后失效）。
+- 反例先行：`evidence/s03m-2c2/attempt-20261027-192748-r44-reverse-baseline/`，14 tests / 4 pass / 10 fail，真实失败为旧 direct 快照、5 个历史关联负例、无锚 C 轮换；旧 r43 证据保留。
+- 修正：copy/edit 在 origin current 删除时读取并校验 `originCurrentEntryId` 的历史 entry 关联行（T/holder/expiry/own/root 六字段）+ 持久 derivation/消息链；无历史行仅兼容旧单 L。无锚成员 root 轮换时保留 own L、更新 root，不再回滚；首次创建仍 own=root。isCurrent 对旧 direct current 按 `corrected_v2 + direct + 缺 holderLongIdentityId` 回填摘要，copy/edit 旧形状同样兼容，旧普通 direct/corrected 不变。
+- 结果：反例 14/14；聚焦两套件 **108/108、exit 0**（`attempt-20261027-192857-r44-focus/`）；20 相关套件 **335/335、exit 0、before/after SHA 一致**（`attempt-20261027-192907-r44-regression20-final/`）。生产净增 **505**（store +114、source +125、temporary +176、memory +90），高于 450 共 55，低于本次允许上限 650。
+- 仍未覆盖：2c-2b、阶段 2 proof/原子回滚/单 assistant/contextVersion 精确放行、真实模型、GUI/UI IPC/live、完整 S03；`POL-SEMOP-001～008` 聚合仍 NOT_COVERED。
+
+### 13.12 2c-2a 有限能力受托接受与当前口径（2026-10-27 r45）
+
+- master 证据：[master-multil-final-ZLv9fbBn](evidence/master-multil-final-ZLv9fbBn/stdout.log)。master 对最终工作区独立运行 20 相关套件：**335 tests / 335 pass / 0 fail / 0 skipped、真实 exit 0**，before/after SHA 相等，当前 after 清单 `shasum -c` 通过。
+- 受托接受范围：**2c-2a 已测存储/来源/操作有限能力**，即 D2、D6、D7、D8、D9、D11、D12、D13、D15、D16 的本地存储、来源认证与 memory 管理操作部分，以及 D14 的既有 S1～S16 回归。不是用户亲自确认，不是真实模型语义，不是 GUI/UI IPC/live，也不接受完整 S03。
+- 生产净增 **505 行**（store +114、source +125、temporary +176、memory +90）已由 master 审阅 diff 后认可为必要职责与可读性；不做压行。
+- **仍未实现/NOT_COVERED**：2c-2b（真实 chat 两阶段、temporary proof、contextVersion 精确放行、阶段 2 原子回滚、单 assistant、候选去重/HTTP 预算）；D1/D3/D4/D5/D10 的阶段 2 行为；真实模型 L1/L2；GUI/UI IPC/live；完整 S03 与 `POL-SEMOP-001～008` 聚合。
+- Polaris 复盘：本批真实使用了 Case/失败基线/独立复验机制，捕获了测试夹具错误、origin 双删自证、isCurrent 旧 direct 兼容与 relay 无锚 root 轮换的计划歧义；后者由 master 受托决定澄清（relay 无锚 own=root 仅首次创建，轮换后保留 own L、root 随来源更新）。现行 skill 能支持这些发现与返修，无新 skill 缺陷，故不修改 skill。
+- 历史记录：r43 整体被退回、r44 三处反例返修；旧 attempt 与失败全部保留，不覆盖、不补造 PASS。

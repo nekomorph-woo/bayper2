@@ -59,10 +59,85 @@ function createMemoryTemporary({
     if (!longIdentityId) {
       return null;
     }
+    // listEntriesByIdentity 已按 created_at/id 排序；同 holder+L 多锚取最早一条。
     return store.listEntriesByIdentity(longIdentityId).find((entry) =>
       entry.characterId === holderCharacterId &&
       !isTemporaryEntry(entry) &&
       (entry.expiresAt === null || entry.expiresAt > nowMs)) ?? null;
+  }
+
+  /* 旧 2c-1 只有 T→单 L 控制关系；只有整 T 唯一 L、该 holder 恰一行且到期
+     一致时才允许回退/回填。读取永不补齐，写入端在合法操作内同事务补齐。 */
+  function legacyEntryLink(entry) {
+    if (!entry?.factIdentityId || !store) {
+      return null;
+    }
+    const links = store.listTemporaryLinksByIdentity(entry.factIdentityId);
+    const identityIds = new Set(links.map((link) => link.longIdentityId));
+    if (identityIds.size !== 1 ||
+      links.some((link) => link.expiresAt !== entry.expiresAt)) {
+      return null;
+    }
+    const holderLinks = links.filter((link) =>
+      link.holderCharacterId === entry.characterId &&
+      link.expiresAt === entry.expiresAt);
+    if (holderLinks.length !== 1) {
+      return null;
+    }
+    return {
+      ownLongIdentityId: holderLinks[0].longIdentityId,
+      rootIdentityId: holderLinks[0].longIdentityId,
+    };
+  }
+
+  /* 每条临时条目恰一条 entry 关联：own L 不可变，root L 随本轮 direct origin
+     轮换。旧行没有 entry 关联时只在写入路径按可证明条件补齐。 */
+  function linkOfEntry(entry, { write = false } = {}) {
+    if (!entry || !entry.factIdentityId) {
+      return null;
+    }
+    const row = store.getTemporaryEntryLink(entry.id);
+    if (row) {
+      if (row.tempIdentityId !== entry.factIdentityId ||
+        row.holderCharacterId !== entry.characterId ||
+        row.expiresAt !== entry.expiresAt ||
+        !row.longIdentityId || !row.rootIdentityId) {
+        return null;
+      }
+      // entry 关联不能单独作证：own L 必须同时存在于旧控制关系。
+      if (!store.listTemporaryLinksByIdentity(entry.factIdentityId).some((link) =>
+        link.holderCharacterId === entry.characterId &&
+        link.expiresAt === entry.expiresAt &&
+        link.longIdentityId === row.longIdentityId)) {
+        return null;
+      }
+      return {
+        ownLongIdentityId: row.longIdentityId,
+        rootIdentityId: row.rootIdentityId,
+      };
+    }
+    const legacy = legacyEntryLink(entry);
+    if (!legacy) {
+      return null;
+    }
+    if (write) {
+      store.insertTemporaryEntryLink({
+        entryId: entry.id,
+        tempIdentityId: entry.factIdentityId,
+        holderCharacterId: entry.characterId,
+        expiresAt: entry.expiresAt,
+        longIdentityId: legacy.ownLongIdentityId,
+        rootIdentityId: legacy.rootIdentityId,
+      });
+    }
+    return legacy;
+  }
+
+  function activeMembers(temporaryIdentityId, nowMs) {
+    return store.listEntriesByIdentity(temporaryIdentityId).filter((entry) =>
+      entry.expiresAt !== null &&
+      entry.expiresAt > nowMs &&
+      isTemporaryEntry(entry));
   }
 
   /* 长期目标优先发起人自己的唯一有效 current；否则接受同一长期 identity 下
@@ -202,33 +277,48 @@ function createMemoryTemporary({
       }
 
       const selectedTemporary = isTemporaryEntry(selected);
-      let longAnchor = selectedTemporary ? null : selected;
       let temporaryIdentityId = null;
       let oldIdentityIds = [];
+      let ownIdentityId = null;
+      let longAnchor = null;
+      let originCurrent = null;
+      let members = [];
       if (selectedTemporary) {
         /* 选中的临时条目也必须先过同一权威校验器；失效 current 不能凭 T
            直接绕过，也不能把来源里的锚当作可用证据。 */
         const validated = validTemporaryEntry(selected, nowMs);
-        if (!validated || !selected.factIdentityId || !validated.sourceAnchorIdentityId) {
+        if (!validated || !selected.factIdentityId) {
           throw new MemoryError("TEMPORARY_SOURCE_UNAVAILABLE", "这条临时理解已失效。");
+        }
+        const link = linkOfEntry(selected, { write: true });
+        if (!link) {
+          throw new MemoryError("TEMPORARY_SOURCE_UNAVAILABLE", "临时条目的关联证据不足。");
         }
         temporaryIdentityId = selected.factIdentityId;
         oldIdentityIds = [temporaryIdentityId];
-        longAnchor = holderLong(
-          characterId,
-          validated.sourceAnchorIdentityId,
-          nowMs,
-        );
+        ownIdentityId = link.ownLongIdentityId;
+        longAnchor = holderLong(characterId, ownIdentityId, nowMs);
+        originCurrent = selected;
+        members = activeMembers(temporaryIdentityId, nowMs);
       } else {
         const longIdentityId = identityOf(selected, nowMs);
         const found = findIdentity({ characterId, longIdentityId, expiresAt, nowMs });
         temporaryIdentityId = found.temporaryIdentityId;
         oldIdentityIds = found.oldIdentityIds;
+        ownIdentityId = longIdentityId;
+        longAnchor = selected;
+        members = activeMembers(temporaryIdentityId, nowMs);
+        originCurrent = members.find((entry) =>
+          entry.characterId === characterId &&
+          linkOfEntry(entry, { write: true })?.ownLongIdentityId === longIdentityId) ?? null;
       }
       if (!longAnchor) {
         throw new MemoryError("TEMPORARY_ANCHOR_REQUIRED", "当前角色没有长期记忆。");
       }
-      const longIdentityId = identityOf(longAnchor, nowMs);
+      const rootIdentityId = identityOf(longAnchor, nowMs);
+      if (rootIdentityId !== ownIdentityId) {
+        throw new MemoryError("TEMPORARY_SOURCE_UNAVAILABLE", "临时条目的 own L 与长期锚不一致。");
+      }
       if (!store.listTemporaryLinksByIdentity(temporaryIdentityId).length &&
         !store.listEntriesByIdentity(temporaryIdentityId).length) {
         store.insertFactIdentity(temporaryIdentityId, nowMs);
@@ -247,7 +337,6 @@ function createMemoryTemporary({
           body,
         });
 
-      const existingMembers = store.listEntriesByIdentity(temporaryIdentityId);
       const blocked = (holder) => {
         if (holder === characterId) {
           return false;
@@ -272,12 +361,6 @@ function createMemoryTemporary({
         store.addSourceControl(holder, hash, nowMs);
       };
 
-      let originCurrent = selectedTemporary && selected.characterId === characterId
-        ? selected
-        : existingMembers.find((entry) => entry.characterId === characterId) ?? null;
-      if (originCurrent && originCurrent.characterId !== characterId) {
-        originCurrent = null;
-      }
       const canonicalKey = temporaryFactKey(longAnchor.factKey, longAnchor.id);
       const nextFactKey = uniqueFactKey(characterId, canonicalKey, temporaryIdentityId);
       if (originCurrent && originCurrent.factKey !== nextFactKey) {
@@ -307,7 +390,6 @@ function createMemoryTemporary({
         originCurrent = {
           ...originCurrent,
           ...base,
-          factKey: originCurrent.factKey === nextFactKey ? nextFactKey : originCurrent.factKey,
           originCharacterId: characterId,
           derivedFromEntryId: null,
           narratorCharacterId: null,
@@ -336,33 +418,36 @@ function createMemoryTemporary({
         };
         store.insertEntry(originCurrent, tokenize(body));
       }
+      store.insertTemporaryEntryLink({
+        entryId: originCurrent.id,
+        tempIdentityId: temporaryIdentityId,
+        holderCharacterId: characterId,
+        expiresAt,
+        longIdentityId: ownIdentityId,
+        rootIdentityId,
+      });
       store.insertTemporaryLink({
         tempIdentityId: temporaryIdentityId,
-        longIdentityId,
+        longIdentityId: ownIdentityId,
         holderCharacterId: characterId,
         expiresAt,
       });
       affected.add(characterId);
 
-      const holders = new Set(existingMembers.map((entry) => entry.characterId));
-      for (const entry of store.listEntriesByIdentity(longIdentityId)) {
-        if (!isTemporaryEntry(entry) && (entry.expiresAt === null || entry.expiresAt > nowMs)) {
-          holders.add(entry.characterId);
-        }
-      }
-      holders.delete(characterId);
-      for (const holder of holders) {
-        const existing = existingMembers.find((entry) => entry.characterId === holder) ?? null;
-        if (blocked(holder)) {
+      /* 多 L：已有成员各自保留 holder+L 与 holderLong 锚，正文/到期同步，
+         来源 origin current 统一到本轮根 direct；own L 永不改写。 */
+      for (const member of members) {
+        if (member.id === originCurrent.id) {
           continue;
         }
-        if (!existing && shareControlled) {
+        const link = linkOfEntry(member, { write: true });
+        if (!link) {
+          throw new MemoryError("TEMPORARY_SOURCE_UNAVAILABLE", "临时成员缺少 entry 关联。");
+        }
+        if (blocked(member.characterId)) {
           continue;
         }
-        const anchor = holderLong(holder, longIdentityId, nowMs);
-        if (!existing && !anchor) {
-          continue;
-        }
+        const anchor = holderLong(member.characterId, link.ownLongIdentityId, nowMs);
         const holderSource = copiedTemporarySource({
           originLongEntryId: longAnchor.id,
           originLongVersion: longAnchor.version,
@@ -373,54 +458,121 @@ function createMemoryTemporary({
           messageSourceId: sourceId,
         });
         if (holderSource.length > limits.sourceId ||
-          store.hasSourceControl(holder, hashSource(holderSource))) {
+          store.hasSourceControl(member.characterId, hashSource(holderSource))) {
           continue;
         }
-        if (existing && existing.sourceId !== holderSource) {
-          recordSource(holder, existing.sourceId);
+        if (member.sourceId !== holderSource) {
+          recordSource(member.characterId, member.sourceId);
         }
         const next = {
-          ...(existing ?? {
-            id: newId(),
-            factKey: uniqueFactKey(
-              holder,
-              temporaryFactKey(anchor.factKey, anchor.id),
-              temporaryIdentityId,
-            ),
-            originCharacterId: characterId,
-            sourceVersion: 1,
-            version: 1,
-            createdAt: nowMs,
-          }),
+          ...member,
           ...base,
-          characterId: holder,
-          factKey: existing?.factKey ?? uniqueFactKey(
-            holder,
-            temporaryFactKey(anchor.factKey, anchor.id),
-            temporaryIdentityId,
-          ),
+          characterId: member.characterId,
+          factKey: member.factKey,
           originCharacterId: characterId,
           derivedFromEntryId: originCurrent.id,
           narratorCharacterId: characterId,
           sourceKind: "user",
-          importance: existing?.importance ?? anchor?.importance ?? longAnchor.importance,
+          importance: member.importance ?? anchor?.importance ?? longAnchor.importance,
           sourceId: holderSource,
           sourceVersion: 1,
-          version: existing ? existing.version + 1 : 1,
+          version: member.version + 1,
         };
-        if (existing) {
-          store.updateEntry(next, tokenize(body));
-          store.setDerivation(next);
-          // 身份同步会替换旧 immediate parent；持久归属与旧关系边必须一起更新，
-          // 不能让显式 relay 的旧边与新 derivation 矛盾。
-          store.updateTemporaryOrigin(existing.id, characterId, originCurrent.id);
-          store.removeRelationEdgesToEntry(existing.id);
-        } else {
-          store.insertEntry(next, tokenize(body));
-        }
+        store.updateEntry(next, tokenize(body));
+        store.setDerivation(next);
+        // 身份同步会替换旧 immediate parent；持久归属与旧关系边必须一起更新，
+        // 不能让显式 relay 的旧边与新 derivation 矛盾。
+        store.updateTemporaryOrigin(member.id, characterId, originCurrent.id);
+        store.removeRelationEdgesToEntry(member.id);
+        store.insertTemporaryEntryLink({
+          entryId: member.id,
+          tempIdentityId: temporaryIdentityId,
+          holderCharacterId: member.characterId,
+          expiresAt,
+          longIdentityId: link.ownLongIdentityId,
+          rootIdentityId,
+        });
         store.insertTemporaryLink({
           tempIdentityId: temporaryIdentityId,
-          longIdentityId,
+          longIdentityId: link.ownLongIdentityId,
+          holderCharacterId: member.characterId,
+          expiresAt,
+        });
+        affected.add(member.characterId);
+      }
+
+      /* 再为所选 L 的已有长期 holder 补 copy；已存在的 holder+L 不重复。 */
+      const knownHolders = new Set(
+        store.listEntriesByIdentity(rootIdentityId)
+          .filter((entry) =>
+            !isTemporaryEntry(entry) &&
+            (entry.expiresAt === null || entry.expiresAt > nowMs))
+          .map((entry) => entry.characterId),
+      );
+      knownHolders.delete(characterId);
+      for (const holder of knownHolders) {
+        if (blocked(holder)) {
+          continue;
+        }
+        const existing = members.some((member) =>
+          member.characterId === holder &&
+          linkOfEntry(member)?.ownLongIdentityId === rootIdentityId);
+        if (existing || shareControlled) {
+          continue;
+        }
+        const anchor = holderLong(holder, rootIdentityId, nowMs);
+        if (!anchor) {
+          continue;
+        }
+        const holderSource = copiedTemporarySource({
+          originLongEntryId: longAnchor.id,
+          originLongVersion: longAnchor.version,
+          originCurrentEntryId: originCurrent.id,
+          originCurrentVersion: originCurrent.version,
+          holderLongEntryId: anchor.id,
+          holderLongVersion: anchor.version,
+          messageSourceId: sourceId,
+        });
+        if (holderSource.length > limits.sourceId ||
+          store.hasSourceControl(holder, hashSource(holderSource))) {
+          continue;
+        }
+        const next = {
+          id: newId(),
+          characterId: holder,
+          factKey: uniqueFactKey(
+            holder,
+            temporaryFactKey(anchor.factKey, anchor.id),
+            temporaryIdentityId,
+          ),
+          factIdentityId: temporaryIdentityId,
+          originCharacterId: characterId,
+          derivedFromEntryId: originCurrent.id,
+          narratorCharacterId: characterId,
+          kind: longAnchor.kind,
+          body,
+          trust,
+          sourceKind: "user",
+          importance: anchor.importance ?? longAnchor.importance,
+          expiresAt,
+          sourceId: holderSource,
+          sourceVersion: 1,
+          version: 1,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        };
+        store.insertEntry(next, tokenize(body));
+        store.insertTemporaryEntryLink({
+          entryId: next.id,
+          tempIdentityId: temporaryIdentityId,
+          holderCharacterId: holder,
+          expiresAt,
+          longIdentityId: rootIdentityId,
+          rootIdentityId,
+        });
+        store.insertTemporaryLink({
+          tempIdentityId: temporaryIdentityId,
+          longIdentityId: rootIdentityId,
           holderCharacterId: holder,
           expiresAt,
         });
@@ -474,18 +626,18 @@ function createMemoryTemporary({
         throw new MemoryError("INVALID_INPUT", "这条记忆不是临时理解。");
       }
       const validated = validTemporaryEntry(selected, nowMs);
-      if (!validated || !validated.sourceAnchorIdentityId || !selected.factIdentityId) {
+      if (!validated || !selected.factIdentityId) {
         throw new MemoryError("TEMPORARY_SOURCE_UNAVAILABLE", "这条临时理解已失效。");
       }
+      const selectedLink = linkOfEntry(selected, { write: true });
       const parsed = parseTemporarySource(selected.sourceId);
-      if (!parsed) {
+      if (!selectedLink || !parsed) {
         throw new MemoryError("TEMPORARY_SOURCE_UNAVAILABLE", "临时理解的来源不完整。");
       }
       const temporaryIdentityId = selected.factIdentityId;
-      const longIdentityId = validated.sourceAnchorIdentityId;
-      const members = store.listEntriesByIdentity(temporaryIdentityId)
-        .filter((entry) =>
-          isTemporaryEntry(entry) && entry.expiresAt === selected.expiresAt);
+      const rootIdentityId = selectedLink.rootIdentityId;
+      const members = activeMembers(temporaryIdentityId, nowMs)
+        .filter((entry) => entry.expiresAt === selected.expiresAt);
       /* 同步编辑必须建立在这一 T 当前仍完整有效的证据上；任一成员失效时
          保守拒绝，避免把失效正文修成看似有效的面板编辑。 */
       if (members.length === 0 ||
@@ -512,7 +664,14 @@ function createMemoryTemporary({
       const affected = new Set();
       let updatedDerived = 0;
       for (const member of members) {
-        const anchor = holderLong(member.characterId, longIdentityId, nowMs);
+        const link = linkOfEntry(member, { write: true });
+        if (!link) {
+          throw new MemoryError("TEMPORARY_SOURCE_UNAVAILABLE", "临时成员缺少 entry 关联。");
+        }
+        if (link.rootIdentityId !== rootIdentityId) {
+          throw new MemoryError("TEMPORARY_SOURCE_UNAVAILABLE", "同一 T 的 root L 不一致。");
+        }
+        const anchor = holderLong(member.characterId, link.ownLongIdentityId, nowMs);
         const sourceId = editedTemporarySource({
           originLongEntryId: parsed.originLongEntryId,
           originLongVersion,
@@ -555,6 +714,14 @@ function createMemoryTemporary({
           });
           updatedDerived += 1;
         }
+        store.insertTemporaryEntryLink({
+          entryId: member.id,
+          tempIdentityId: temporaryIdentityId,
+          holderCharacterId: member.characterId,
+          expiresAt: member.expiresAt,
+          longIdentityId: link.ownLongIdentityId,
+          rootIdentityId: link.rootIdentityId,
+        });
         affected.add(member.characterId);
       }
 
@@ -582,14 +749,14 @@ function createMemoryTemporary({
       return null;
     }
     const info = temporaryInfo(entry, nowMs);
-    if (!info) {
-      throw new MemoryError("SHARE_NOT_ALLOWED", "这条临时理解已失效。");
-    }
     const parsed = parseTemporarySource(entry.sourceId);
-    if (!parsed || !entry.factIdentityId || entry.expiresAt === null) {
-      throw new MemoryError("SHARE_NOT_ALLOWED", "临时理解的来源不完整。");
+    const link = linkOfEntry(entry, { write: true });
+    if (!info || !parsed || !link || !entry.factIdentityId || entry.expiresAt === null) {
+      throw new MemoryError("SHARE_NOT_ALLOWED", "这条临时理解已失效或关联不足。");
     }
-    const anchor = holderLong(holderCharacterId, info.longIdentityId, nowMs);
+    const ownIdentityId = link.ownLongIdentityId;
+    const rootIdentityId = link.rootIdentityId;
+    const anchor = holderLong(holderCharacterId, ownIdentityId, nowMs);
     const originCurrentEntryId = parsed.kind === "direct" ? entry.id : parsed.originCurrentEntryId;
     const originCurrentVersion = parsed.kind === "direct"
       ? entry.version
@@ -611,7 +778,9 @@ function createMemoryTemporary({
     }
     return {
       sourceId,
-      longIdentityId: info.longIdentityId,
+      // 收件人无该 L 的明确长期锚时，own L 与 root L 相同；不凭空挂靠。
+      longIdentityId: anchor ? ownIdentityId : rootIdentityId,
+      rootIdentityId,
       temporaryIdentityId: entry.factIdentityId,
       expiresAt: entry.expiresAt,
       holderLongEntryId: anchor?.id ?? null,
@@ -643,7 +812,9 @@ function createMemoryTemporary({
       kind: result.temporaryKind === "copy"
         ? "copy"
         : result.temporaryKind === "edit" ? "edit" : "direct",
-      longIdentityId: result.sourceAnchorIdentityId,
+      // own L 用于抑制与查找；root L 只作来源链证明，不冒充本条长期锚。
+      longIdentityId: result.holderLongIdentityId ?? result.sourceAnchorIdentityId,
+      rootIdentityId: result.sourceAnchorIdentityId,
       originCharacterId: result.sourceCharacterId ?? entry.originCharacterId,
       relayFrom: result.relayFrom ?? null,
       edited: result.edited === true,
@@ -661,8 +832,8 @@ function createMemoryTemporary({
     });
   }
 
-  /* buildContext 才体现“今日优先”：有效 current 抑制同一长期 identity 的长期锚；
-     失效/到期后不设墓碑，长期按原样恢复。 */
+  /* buildContext 才体现“今日优先”：有效 current 抑制其明确关联的 own L；
+     同 T+holder+正文+到期只注入一次，不同 T 即使同文也不合并。 */
   function annotateContext(entries, nowMs) {
     const infoById = new Map();
     const suppressed = new Set();
@@ -685,7 +856,12 @@ function createMemoryTemporary({
         if (!info) {
           continue;
         }
-        const key = `${entry.body}\u0000${entry.expiresAt}\u0000${info.longIdentityId}`;
+        const key = [
+          entry.characterId,
+          entry.factIdentityId,
+          entry.body,
+          entry.expiresAt,
+        ].join("\u0000");
         if (seen.has(key)) {
           continue;
         }
