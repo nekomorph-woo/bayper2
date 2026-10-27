@@ -160,11 +160,17 @@ function createChatStore(db) {
     `),
     prepareRetry: db.prepare(`
       UPDATE chat_requests SET
-        status = 'pending', context_version = ?, completed_at = NULL,
-        assistant_message_id = NULL, error_code = NULL, memory_applied = 0,
-        operation_proof = NULL, verification_status = 'none'
+        status = 'pending', context_version = ?, operation_proof = ?,
+        completed_at = NULL, assistant_message_id = NULL, error_code = NULL,
+        memory_applied = 0, verification_status = 'none'
       WHERE id = ?
     `),
+    setOperationProof: db.prepare(
+      "UPDATE chat_requests SET operation_proof = ? WHERE id = ?",
+    ),
+    clearOperationProof: db.prepare(
+      "UPDATE chat_requests SET operation_proof = NULL WHERE id = ?",
+    ),
     updateMessageContent: db.prepare(
       "UPDATE chat_messages SET content = ? WHERE id = ?",
     ),
@@ -307,9 +313,17 @@ function createChatStore(db) {
     return getRequest(id);
   }
 
-  function prepareRetry(id, contextVersion) {
-    statements.prepareRetry.run(contextVersion, id);
+  function prepareRetry(id, contextVersion, operationProof = null) {
+    statements.prepareRetry.run(contextVersion, operationProof, id);
     return getRequest(id);
+  }
+
+  function setOperationProof(id, proof) {
+    return statements.setOperationProof.run(proof, id).changes;
+  }
+
+  function clearOperationProof(id) {
+    return statements.clearOperationProof.run(id).changes;
   }
 
   function updateMessageContent(id, content) {
@@ -357,6 +371,8 @@ function createChatStore(db) {
     getRequest,
     updateRequest,
     prepareRetry,
+    setOperationProof,
+    clearOperationProof,
     updateMessageContent,
     setVerification,
     listPendingVerifications,

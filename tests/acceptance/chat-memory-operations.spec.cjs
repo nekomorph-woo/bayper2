@@ -2834,6 +2834,1033 @@ test("POL-CHATMEM-CLARIFY-002g1 显式null纯提问命令零写", async (t) => {
   assert.equal(countRows(ctx.store.dbPath, "memory_entries"), entriesBefore);
 });
 
+/* S03o-B forget 目标澄清：真实 chat/SQLite + 构造 chat/关系 HTTP。 */
+function relationDescription() {
+  return { subject: "用户", subjectQuote: "我", scope: "current", time: null, timeQuote: null };
+}
+
+function relationResponder(relation = "equivalent", delayMs = 0) {
+  return ({ body, res }) => {
+    const pairs = JSON.parse(body.messages.find((message) => message.role === "user").content).pairs;
+    const results = pairs.map((pair) => ({
+      pair: pair.id, relation, left: relationDescription(), right: relationDescription(),
+    }));
+    const send = () => sendEnvelope(res, { results });
+    if (!delayMs) return send();
+    return new Promise((resolve) => setTimeout(() => { send(); resolve(); }, delayMs));
+  };
+}
+
+const isRelationRequest = (body) => Boolean(body?.messages?.some((message) =>
+  message.role === "system" && message.content.includes("记忆事实关系判定器")));
+const relationRequests = (ctx) => ctx.server.requests.filter(isRelationRequest);
+const chatRequests = (ctx) => ctx.server.requests.filter((body) => !isRelationRequest(body));
+
+async function seedChatFact(ctx, conversation, {
+  characterId = "a", text, factKey, kind = "preference",
+}) {
+  const evidence = text.replace(/[。！!]+$/u, "");
+  ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+    reply: "我记下了。",
+    memoryCandidates: [{ factKey, body: evidence, kind, trust: "stated", evidence }],
+    memoryOperation: null,
+  }));
+  const result = await ctx.store.chat.sendMessage({
+    characterId, conversationId: conversation.id, text, requestId: crypto.randomUUID(),
+  });
+  assert.equal(result.status, "completed");
+  const entry = entryOf(ctx.store, characterId, factKey);
+  assert.ok(entry, `种子记忆未写入 ${factKey}`);
+  return entry;
+}
+
+async function askForget(ctx, conversation, {
+  text = "请忘记我喜欢咖啡这件事。", requestId, reply = "模型说已经删除了。",
+} = {}) {
+  ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+    reply, memoryCandidates: [], memoryOperation: null,
+  }));
+  return ctx.store.chat.sendMessage({
+    characterId: "a", conversationId: conversation.id, text,
+    requestId: requestId ?? crypto.randomUUID(),
+  });
+}
+
+async function answerForget(ctx, conversation, text, requestId, relation = null, relationDelayMs = 0) {
+  if (relation) ctx.server.enqueue(relationResponder(relation, relationDelayMs));
+  return ctx.store.chat.sendMessage({
+    characterId: "a", conversationId: conversation.id, text, requestId,
+  });
+}
+
+function requestRowFull(dbPath, requestId) {
+  return readOne(
+    dbPath,
+    "SELECT status, error_code, memory_applied, verification_status, operation_proof FROM chat_requests WHERE id = ?",
+    requestId,
+  );
+}
+
+async function waitVerification(ctx, requestId) {
+  await waitFor(() => requestRowFull(ctx.store.dbPath, requestId).verification_status !== "pending");
+  return requestRowFull(ctx.store.dbPath, requestId).verification_status;
+}
+
+function conversationMessages(ctx, conversationId, characterId = "a") {
+  return ctx.store.chat.getConversation({ characterId, conversationId }).messages;
+}
+
+function candidateLinesOf(body) {
+  return body.messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n")
+    .split("\n")
+    .filter((line) => /^\[M\d+\]/u.test(line));
+}
+
+function questionLines(reply) {
+  return [...reply.matchAll(/\[第 (\d+) 条\] ([^\n]+)/gu)].map((match) => ({
+    display: Number(match[1]), body: match[2],
+  }));
+}
+
+test("POL-CHATMEM-FORGET-CLARIFY-001/010 本地提问不透传模型reply且不改记忆", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-001-question");
+  const conversation = openConversation(ctx.store);
+  await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  const result = await askForget(ctx, conversation, {
+    requestId: "clarify-question", reply: "我已经删除了你喜欢咖啡的记忆。",
+  });
+  assert.equal(result.status, "completed");
+  assert.match(result.reply, /我只找到一条可能相关的记忆/u);
+  assert.match(result.reply, /\[第 1 条\] 我平时喝咖啡一定要加糖/u);
+  assert.equal(result.reply.includes("我已经删除了"), false, "不得透传模型成功文案");
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee").body, "我平时喝咖啡一定要加糖");
+  assert.equal(relationRequests(ctx).length, 0);
+  const row = requestRowFull(ctx.store.dbPath, "clarify-question");
+  assert.equal(row.status, "completed");
+  assert.equal(row.memory_applied, 0);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-001b 第1条承接原命令并双source防回流", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-001b-number");
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  await seedChatFact(ctx, aConversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await seedChatFact(ctx, bConversation, {
+    characterId: "b", text: "我的咖啡都要甜的。", factKey: "pref.coffeeB",
+  });
+  const question = await askForget(ctx, aConversation, { requestId: "clarify-number-q" });
+  assert.match(question.reply, /\[第 1 条\]/u);
+  const chatBefore = chatRequests(ctx).length;
+  const relationBefore = relationRequests(ctx).length;
+
+  const answer = await answerForget(
+    ctx, aConversation, "第 1 条", "clarify-number-a", "equivalent", 300,
+  );
+  assert.equal(answer.status, "completed");
+  const duringAssistants = conversationMessages(ctx, aConversation.id)
+    .filter((message) => message.role === "assistant").length;
+  assert.equal(await waitVerification(ctx, "clarify-number-a"), "completed");
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+  assert.equal(entryOf(ctx.store, "b", "pref.coffeeB"), null);
+  assert.equal(relationRequests(ctx).length, relationBefore + 1);
+  assert.equal(chatRequests(ctx).length, chatBefore, "回答回合不得再调用聊天模型");
+  assert.equal(
+    conversationMessages(ctx, aConversation.id).filter((message) => message.role === "assistant").length,
+    duringAssistants,
+    "阶段2必须原位更新同一 assistant",
+  );
+
+  const messages = conversationMessages(ctx, aConversation.id);
+  const command = messages.find((message) => message.role === "user" && message.content.includes("请忘记"));
+  const answerMessage = messages.find((message) => message.role === "user" && message.content === "第 1 条");
+  const excluded = ctx.store.memory.listExcludedSources("a");
+  assert.ok(excluded.includes(sha256(command.sourceId)), "原命令 source 应被排除");
+  assert.ok(excluded.includes(sha256(answerMessage.sourceId)), "回答 source 应被排除");
+  const proof = JSON.parse(requestRowFull(ctx.store.dbPath, "clarify-number-a").operation_proof);
+  assert.equal(proof.commandSourceHash, sha256(command.sourceId), "commandSourceHash 只对应原命令");
+  assert.equal(proof.commandSourceId, command.sourceId);
+  assert.ok(proof.sourceControls.a.includes(sha256(command.sourceId)));
+  assert.ok(proof.sourceControls.a.includes(sha256(answerMessage.sourceId)));
+  assert.equal(answer.reply.includes("更正"), false);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-001c 描述式选择只接受原候选快照", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-001c-description");
+  const conversation = openConversation(ctx.store);
+  await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(ctx, conversation, { requestId: "clarify-desc-q" });
+  const answer = await answerForget(ctx, conversation, "加糖那条", "clarify-desc-a");
+  assert.equal(answer.status, "completed");
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+  assert.equal(relationRequests(ctx).length, 0);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-002 多候选按显示第2条删除对应内部目标", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-002-multi");
+  const conversation = openConversation(ctx.store);
+  await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee1",
+  });
+  await seedChatFact(ctx, conversation, {
+    text: "我喜欢在下午喝咖啡。", factKey: "pref.coffee2",
+  });
+  const question = await askForget(ctx, conversation, { requestId: "clarify-multi-q" });
+  const lines = questionLines(question.reply);
+  assert.equal(lines.length, 2, "两条 topic 匹配候选都应显示");
+  const chosen = lines.find((line) => line.display === 2);
+  assert.ok(chosen, "缺少第2条");
+  const chosenFactKey = chosen.body.includes("下午") ? "pref.coffee2" : "pref.coffee1";
+  const otherFactKey = chosenFactKey === "pref.coffee1" ? "pref.coffee2" : "pref.coffee1";
+  const answer = await answerForget(
+    ctx, conversation, "第 2 条", "clarify-multi-a", "different",
+  );
+  assert.equal(answer.status, "completed");
+  assert.equal(await waitVerification(ctx, "clarify-multi-a"), "completed");
+  assert.equal(entryOf(ctx.store, "a", chosenFactKey), null);
+  assert.ok(entryOf(ctx.store, "a", otherFactKey), "未选候选必须保留");
+  assert.equal(relationRequests(ctx).length, 1, "独立候选只做一次关系核验");
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-003 无效/否定/引用/假设/新事实选择均本地未操作", async (t) => {
+  const answers = [
+    "加糖那条不要删",
+    "加糖那条？",
+    "“加糖那条”",
+    "如果加糖那条",
+    "加糖那条是我朋友的",
+    "第 9 条",
+  ];
+  for (const [index, text] of answers.entries()) {
+    const ctx = await setupContext(t, `FORGET-CLARIFY-003-${index}`);
+    const conversation = openConversation(ctx.store);
+    await seedChatFact(ctx, conversation, {
+      text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+    });
+    await askForget(ctx, conversation, { requestId: `clarify-invalid-q-${index}` });
+    const chatBefore = chatRequests(ctx).length;
+    const relationBefore = relationRequests(ctx).length;
+    const answer = await answerForget(ctx, conversation, text, `clarify-invalid-a-${index}`);
+    assert.equal(answer.status, "completed");
+    assert.match(answer.reply, /没有改动任何记忆/u);
+    assert.ok(entryOf(ctx.store, "a", "pref.coffee"), "旧 forget 不得执行");
+    assert.equal(chatRequests(ctx).length, chatBefore, "拒绝回合不得调用聊天模型");
+    assert.equal(relationRequests(ctx).length, relationBefore);
+  }
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-004 新明确命令优先并清旧pending", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-004-new-command");
+  const conversation = openConversation(ctx.store);
+  await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await seedChatFact(ctx, conversation, {
+    text: "我住在杭州。", factKey: "detail.city", kind: "detail",
+  });
+  await askForget(ctx, conversation, { requestId: "clarify-old-q" });
+  ctx.server.enqueue(({ body, res }) => sendEnvelope(res, {
+    reply: "好的。",
+    memoryCandidates: [],
+    memoryOperation: {
+      action: "forget",
+      target: targetFromRequest(body, "杭州"),
+      scope: "all",
+      evidence: "请忘记我住在杭州这件事",
+    },
+  }));
+  const result = await ctx.store.chat.sendMessage({
+    characterId: "a",
+    conversationId: conversation.id,
+    text: "请忘记我住在杭州这件事。",
+    requestId: "clarify-new-a",
+  });
+  assert.equal(result.status, "completed");
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"), "旧目标不得被删除");
+  assert.equal(entryOf(ctx.store, "a", "detail.city"), null);
+  assert.equal(relationRequests(ctx).length, 0);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-005 context变化阻止旧pending执行", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-005-stale-context");
+  const conversation = openConversation(ctx.store);
+  await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(ctx, conversation, { requestId: "clarify-stale-q" });
+  ctx.store.memory.remember({
+    characterId: "a", factKey: "detail.city", body: "用户住在杭州",
+    kind: "detail", sourceId: "seed-city-between",
+  });
+  const chatBefore = chatRequests(ctx).length;
+  const answer = await answerForget(ctx, conversation, "第 1 条", "clarify-stale-a");
+  assert.equal(answer.status, "completed");
+  assert.match(answer.reply, /已经变化/u);
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"));
+  assert.equal(chatRequests(ctx).length, chatBefore);
+  assert.equal(relationRequests(ctx).length, 0);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-005b 目标被外部删除阻止旧pending", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-005b-target-deleted");
+  const conversation = openConversation(ctx.store);
+  const coffee = await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(ctx, conversation, { requestId: "clarify-target-q" });
+  ctx.store.memory.forget({
+    characterId: "a", entryId: coffee.id, expectedVersion: coffee.version,
+  });
+  const chatBefore = chatRequests(ctx).length;
+  const answer = await answerForget(ctx, conversation, "第 1 条", "clarify-target-a");
+  assert.equal(answer.status, "completed");
+  assert.match(answer.reply, /已经变化/u);
+  assert.equal(chatRequests(ctx).length, chatBefore);
+  assert.equal(relationRequests(ctx).length, 0);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-005c 目标来源被排除阻止旧pending", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-005c-source-excluded");
+  const conversation = openConversation(ctx.store);
+  const coffee = await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  const city = await seedChatFact(ctx, conversation, {
+    text: "我住在杭州。", factKey: "detail.city", kind: "detail",
+  });
+  await askForget(ctx, conversation, { requestId: "clarify-source-q" });
+  ctx.store.memory.forget({
+    characterId: "a", entryId: city.id, expectedVersion: city.version,
+    scope: "all", sourceIdsToExclude: [coffee.sourceId],
+  });
+  const chatBefore = chatRequests(ctx).length;
+  const answer = await answerForget(ctx, conversation, "第 1 条", "clarify-source-a");
+  assert.equal(answer.status, "completed");
+  assert.match(answer.reply, /已经变化/u);
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"), "来源失效不得执行旧删除");
+  assert.equal(chatRequests(ctx).length, chatBefore);
+  assert.equal(relationRequests(ctx).length, 0);
+});
+
+function latestUserSourceId(ctx, characterId = "a") {
+  return withDatabase(ctx.store.dbPath, (db) => {
+    const row = db.prepare(`
+      SELECT id FROM chat_messages
+      WHERE character_id = ? AND role = 'user'
+      ORDER BY seq DESC, id DESC LIMIT 1
+    `).get(characterId);
+    assert.ok(row, "应存在刚发出的聊天消息");
+    return `chat:${row.id}`;
+  });
+}
+
+async function failSelectionWithTrigger(ctx, conversation, entry, requestId) {
+  withDatabase(ctx.store.dbPath, (db) => db.exec(`
+    CREATE TRIGGER fail_forget_selection BEFORE DELETE ON memory_entries
+    WHEN old.id = '${entry.id}'
+    BEGIN SELECT RAISE(ABORT, 'fixture forget failure'); END;
+  `));
+  const result = await answerForget(ctx, conversation, "第 1 条", requestId);
+  withDatabase(ctx.store.dbPath, (db) => db.exec("DROP TRIGGER fail_forget_selection"));
+  assert.equal(result.status, "failed");
+  assert.equal(
+    requestRowFull(ctx.store.dbPath, requestId).error_code,
+    "FORGET_SELECTION_FAILED",
+  );
+  return result;
+}
+
+function advanceToLocalTime(ctx, hours, minutes, seconds) {
+  const date = new Date(ctx.nowMs());
+  date.setHours(hours, minutes, seconds, 0);
+  let target = date.getTime();
+  if (target <= ctx.nowMs()) {
+    target += 24 * 60 * 60 * 1000;
+  }
+  ctx.advance(target - ctx.nowMs());
+}
+
+test("POL-CHATMEM-FORGET-CLARIFY-005d 未过期临时理解可作为删除目标", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-005d-temporary-target");
+  const conversation = openConversation(ctx.store);
+  const coffee = await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+    reply: "好的。", memoryCandidates: [], memoryOperation: null,
+  }));
+  await ctx.store.chat.sendMessage({
+    characterId: "a", conversationId: conversation.id,
+    text: "我今天想喝茶。", requestId: "temporary-source-message",
+  });
+  const nowMs = ctx.nowMs();
+  ctx.store.memory.applyTemporaryUnderstanding({
+    characterId: "a",
+    entryId: coffee.id,
+    expectedVersion: coffee.version,
+    body: "我今天想喝茶",
+    trust: "stated",
+    expiresAt: endOfLocalDay(nowMs),
+    sourceId: latestUserSourceId(ctx, "a"),
+    nowMs,
+  });
+  assert.ok(temporaryEntryOf(ctx.store, "a"), "应存在未过期临时理解");
+  const question = await askForget(ctx, conversation, {
+    text: "请忘记我今天喝茶这件事。", requestId: "clarify-temp-q",
+  });
+  assert.match(question.reply, /我今天想喝茶/u);
+  const answer = await answerForget(ctx, conversation, "第 1 条", "clarify-temp-a");
+  assert.equal(answer.status, "completed");
+  assert.equal(temporaryEntryOf(ctx.store, "a"), null, "未过期临时理解应被删除");
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"), "长期事实不得被临时目标删除");
+  assert.equal(relationRequests(ctx).length, 0);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-005e 仅source控制变化阻止旧pending且context不变", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-005e-source-only");
+  const conversation = openConversation(ctx.store);
+  const coffee = await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(ctx, conversation, { requestId: "clarify-source-only-q" });
+  const contextBefore = ctx.store.memory.getContextVersion("a");
+  withDatabase(ctx.store.dbPath, (db) => {
+    db.prepare(`
+      INSERT OR IGNORE INTO memory_source_controls (character_id, source_id_hash, created_at)
+      VALUES (?, ?, ?)
+    `).run("a", sha256(coffee.sourceId), ctx.nowMs());
+  });
+  assert.equal(ctx.store.memory.getContextVersion("a"), contextBefore, "fixture 只改来源控制");
+  const chatBefore = chatRequests(ctx).length;
+  const answer = await answerForget(ctx, conversation, "第 1 条", "clarify-source-only-a");
+  assert.equal(answer.status, "completed");
+  assert.match(answer.reply, /已经变化/u);
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"), "来源控制变化不得执行旧删除");
+  assert.equal(chatRequests(ctx).length, chatBefore);
+  assert.equal(relationRequests(ctx).length, 0);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-005f 过期临时理解不被提问或删除", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-005f-expired-temporary");
+  const conversation = openConversation(ctx.store);
+  await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+    reply: "好的。", memoryCandidates: [], memoryOperation: null,
+  }));
+  await ctx.store.chat.sendMessage({
+    characterId: "a", conversationId: conversation.id,
+    text: "我今天想喝茶。", requestId: "expired-temp-source",
+  });
+  const nowMs = ctx.nowMs();
+  ctx.store.memory.applyTemporaryUnderstanding({
+    characterId: "a",
+    entryId: entryOf(ctx.store, "a", "pref.coffee").id,
+    expectedVersion: entryOf(ctx.store, "a", "pref.coffee").version,
+    body: "我今天想喝茶",
+    trust: "stated",
+    expiresAt: nowMs + 1000,
+    sourceId: latestUserSourceId(ctx, "a"),
+    nowMs,
+  });
+  ctx.advance(2000);
+  const result = await askForget(ctx, conversation, {
+    text: "请忘记我今天喝茶这件事。", requestId: "clarify-expired-temp-q",
+  });
+  assert.equal(result.reply, "我这次没有改动任何记忆。");
+  assert.equal(result.reply.includes("[第 1 条]"), false, "过期临时项不得成为候选");
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"));
+  const expiredRows = withDatabase(ctx.store.dbPath, (db) => db.prepare(`
+    SELECT COUNT(*) AS count FROM memory_entries
+    WHERE character_id = 'a' AND expires_at IS NOT NULL
+  `).get().count);
+  assert.ok(expiredRows > 0, "过期行仍在存储中，但检索排除");
+  assert.equal(relationRequests(ctx).length, 0);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-006 pending按角色+会话隔离", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-006-isolation");
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  await seedChatFact(ctx, aConversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(ctx, aConversation, { requestId: "clarify-isolation-q" });
+  ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+    reply: "好的。", memoryCandidates: [], memoryOperation: null,
+  }));
+  const bAnswer = await ctx.store.chat.sendMessage({
+    characterId: "b", conversationId: bConversation.id,
+    text: "第 1 条", requestId: "clarify-isolation-b",
+  });
+  assert.equal(bAnswer.status, "completed");
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"), "B会话不得承接A的pending");
+  const aAnswer = await answerForget(ctx, aConversation, "第 1 条", "clarify-isolation-a");
+  assert.equal(aAnswer.status, "completed");
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null, "A原会话仍应可执行");
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-006b 普通闲聊清pending且不执行旧forget", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-006b-ordinary-chat");
+  const conversation = openConversation(ctx.store);
+  await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(ctx, conversation, { requestId: "clarify-topic-q" });
+  const chatBefore = chatRequests(ctx).length;
+  ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+    reply: "今天天气不错。", memoryCandidates: [], memoryOperation: null,
+  }));
+  const ordinary = await ctx.store.chat.sendMessage({
+    characterId: "a", conversationId: conversation.id,
+    text: "今天天气怎么样？", requestId: "clarify-topic-chat",
+  });
+  assert.equal(ordinary.status, "completed");
+  assert.equal(ordinary.reply, "今天天气不错。");
+  assert.equal(chatRequests(ctx).length, chatBefore + 1, "普通闲聊走正常聊天路径");
+  ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+    reply: "好的。", memoryCandidates: [], memoryOperation: null,
+  }));
+  const after = await ctx.store.chat.sendMessage({
+    characterId: "a", conversationId: conversation.id,
+    text: "第 1 条", requestId: "clarify-topic-after",
+  });
+  assert.equal(after.status, "completed");
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"), "pending已清，不得执行旧forget");
+  assert.equal(chatRequests(ctx).length, chatBefore + 2);
+  assert.equal(relationRequests(ctx).length, 0);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-006c 普通假设闲聊不被选择语法拦截", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-006c-hypothetical-chat");
+  const conversation = openConversation(ctx.store);
+  await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(ctx, conversation, { requestId: "clarify-hypo-q" });
+  const chatBefore = chatRequests(ctx).length;
+  ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+    reply: "那就聊聊雨天。", memoryCandidates: [], memoryOperation: null,
+  }));
+  const ordinary = await ctx.store.chat.sendMessage({
+    characterId: "a", conversationId: conversation.id,
+    text: "如果明天下雨，我们聊点什么？", requestId: "clarify-hypo-chat",
+  });
+  assert.equal(ordinary.status, "completed");
+  assert.equal(ordinary.reply, "那就聊聊雨天。");
+  assert.equal(chatRequests(ctx).length, chatBefore + 1, "普通假设闲聊应走正常模型");
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"), "旧forget不得执行");
+  ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+    reply: "好的。", memoryCandidates: [], memoryOperation: null,
+  }));
+  const after = await ctx.store.chat.sendMessage({
+    characterId: "a", conversationId: conversation.id,
+    text: "第 1 条", requestId: "clarify-hypo-after",
+  });
+  assert.equal(after.status, "completed");
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"), "pending已清，后续选择式文本不得执行");
+  assert.equal(chatRequests(ctx).length, chatBefore + 2);
+  assert.equal(relationRequests(ctx).length, 0);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-006d 同角色不同会话不承接pending", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-006d-same-character");
+  const first = openConversation(ctx.store);
+  const second = openConversation(ctx.store);
+  await seedChatFact(ctx, first, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(ctx, first, { requestId: "clarify-char-q" });
+  ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+    reply: "好的。", memoryCandidates: [], memoryOperation: null,
+  }));
+  const other = await ctx.store.chat.sendMessage({
+    characterId: "a", conversationId: second.id,
+    text: "第 1 条", requestId: "clarify-char-other",
+  });
+  assert.equal(other.status, "completed");
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"), "另一会话不得承接");
+  const answer = await answerForget(ctx, first, "第 1 条", "clarify-char-a");
+  assert.equal(answer.status, "completed");
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null, "原会话仍应执行");
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-007 同identity阶段1直接删除且关系0次", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-007-same-identity");
+  const conversation = openConversation(ctx.store);
+  const aEntry = await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  ctx.store.memory.relay({
+    fromCharacterId: "a", toCharacterId: "b",
+    entries: [{ entryId: aEntry.id, expectedVersion: aEntry.version }],
+  });
+  const bEntry = entryOf(ctx.store, "b", "pref.coffee");
+  assert.ok(bEntry);
+  assert.equal(bEntry.factIdentityId, aEntry.factIdentityId, "fixture 必须同 identity");
+  await askForget(ctx, conversation, { requestId: "clarify-same-q" });
+  const answer = await answerForget(ctx, conversation, "第 1 条", "clarify-same-a");
+  assert.equal(answer.status, "completed");
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+  assert.equal(entryOf(ctx.store, "b", "pref.coffee"), null);
+  assert.equal(relationRequests(ctx).length, 0);
+  assert.equal(answer.reply.includes("核对"), false);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-007b scope self 同identity不删B", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-007b-self-same");
+  const conversation = openConversation(ctx.store);
+  const aEntry = await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  ctx.store.memory.relay({
+    fromCharacterId: "a", toCharacterId: "b",
+    entries: [{ entryId: aEntry.id, expectedVersion: aEntry.version }],
+  });
+  const bBefore = entryOf(ctx.store, "b", "pref.coffee");
+  assert.ok(bBefore);
+  const question = await askForget(ctx, conversation, {
+    text: "只你忘记我喜欢咖啡这件事。", requestId: "clarify-self-same-q",
+  });
+  assert.match(question.reply, /\[第 1 条\]/u);
+  const answer = await answerForget(ctx, conversation, "第 1 条", "clarify-self-same-a");
+  assert.equal(answer.status, "completed");
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+  const bAfter = entryOf(ctx.store, "b", "pref.coffee");
+  assert.equal(bAfter.body, bBefore.body);
+  assert.equal(bAfter.version, bBefore.version);
+  assert.equal(relationRequests(ctx).length, 0);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-008c scope self 独立identity不删B", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-008c-self-independent");
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  await seedChatFact(ctx, aConversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await seedChatFact(ctx, bConversation, {
+    characterId: "b", text: "我的咖啡都要甜的。", factKey: "pref.coffeeB",
+  });
+  const bBefore = entryOf(ctx.store, "b", "pref.coffeeB");
+  await askForget(ctx, aConversation, {
+    text: "只你忘记我喜欢咖啡这件事。", requestId: "clarify-self-ind-q",
+  });
+  const answer = await answerForget(ctx, aConversation, "第 1 条", "clarify-self-ind-a");
+  assert.equal(answer.status, "completed");
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+  const bAfter = entryOf(ctx.store, "b", "pref.coffeeB");
+  assert.equal(bAfter.body, bBefore.body);
+  assert.equal(bAfter.version, bBefore.version);
+  assert.equal(relationRequests(ctx).length, 0);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-009 无关候选不提问不执行", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-009-unrelated");
+  const conversation = openConversation(ctx.store);
+  await seedChatFact(ctx, conversation, {
+    text: "我最近一直住在杭州。", factKey: "detail.city", kind: "detail",
+  });
+  const result = await askForget(ctx, conversation, { requestId: "clarify-unrelated-q" });
+  assert.equal(result.status, "completed");
+  assert.equal(result.reply, "我这次没有改动任何记忆。");
+  assert.equal(result.reply.includes("[第 1 条]"), false);
+  assert.ok(entryOf(ctx.store, "a", "detail.city"));
+  assert.equal(relationRequests(ctx).length, 0);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-009b 原M2重排为第1条且拒绝未授权杭州候选", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-009b-renumber");
+  const conversation = openConversation(ctx.store);
+  await seedChatFact(ctx, conversation, {
+    text: "我最近一直住在杭州。", factKey: "detail.city", kind: "detail",
+  });
+  await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  const questionRequest = chatRequests(ctx).length;
+  const question = await askForget(ctx, conversation, {
+    text: "请忘记我喜欢咖啡这件事，我最近一直住在杭州。",
+    requestId: "clarify-renumber-q",
+  });
+  assert.equal(chatRequests(ctx).length, questionRequest + 1);
+  const modelBody = ctx.server.requests.at(-1);
+  const lines = candidateLinesOf(modelBody);
+  const hangzhou = lines.find((line) => line.includes("杭州"));
+  const coffee = lines.find((line) => line.includes("我平时喝咖啡"));
+  assert.ok(hangzhou && coffee, "模型候选必须同时包含杭州与咖啡");
+  assert.match(hangzhou, /^\[M1\]/u, "fixture 需要杭州为原 M1");
+  assert.match(coffee, /^\[M2\]/u, "fixture 需要咖啡为原 M2");
+  const shown = questionLines(question.reply);
+  assert.equal(shown.length, 1);
+  assert.equal(shown[0].display, 1, "原 M2 咖啡应显示为第 1 条");
+  assert.match(shown[0].body, /我平时喝咖啡/u);
+  assert.equal(question.reply.includes("杭州"), false, "未授权候选不得出现在提问里");
+  const chatBefore = chatRequests(ctx).length;
+  const answer = await answerForget(ctx, conversation, "杭州那条", "clarify-renumber-a");
+  assert.equal(answer.status, "completed");
+  assert.match(answer.reply, /没有改动任何记忆/u);
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"));
+  assert.ok(entryOf(ctx.store, "a", "detail.city"));
+  assert.equal(chatRequests(ctx).length, chatBefore);
+  assert.equal(relationRequests(ctx).length, 0);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-009c 重排第1条真正删除原M2", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-009c-renumber-execute");
+  const conversation = openConversation(ctx.store);
+  await seedChatFact(ctx, conversation, {
+    text: "我最近一直住在杭州。", factKey: "detail.city", kind: "detail",
+  });
+  await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  const question = await askForget(ctx, conversation, {
+    text: "请忘记我喜欢咖啡这件事，我最近一直住在杭州。",
+    requestId: "clarify-renumber-exec-q",
+  });
+  const modelBody = ctx.server.requests.at(-1);
+  const lines = candidateLinesOf(modelBody);
+  assert.match(lines.find((line) => line.includes("杭州")), /^\[M1\]/u);
+  assert.match(lines.find((line) => line.includes("我平时喝咖啡")), /^\[M2\]/u);
+  const shown = questionLines(question.reply);
+  assert.equal(shown.length, 1);
+  assert.equal(shown[0].display, 1);
+  assert.match(shown[0].body, /我平时喝咖啡/u);
+  const answer = await answerForget(ctx, conversation, "第 1 条", "clarify-renumber-exec-a");
+  assert.equal(answer.status, "completed");
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null, "必须删除原M2咖啡");
+  assert.ok(entryOf(ctx.store, "a", "detail.city"), "未授权杭州必须保留");
+  assert.equal(relationRequests(ctx).length, 0);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-011 事务失败保留快照并同request重试", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-011-retry");
+  const conversation = openConversation(ctx.store);
+  const entry = await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(ctx, conversation, { requestId: "clarify-retry-q" });
+  withDatabase(ctx.store.dbPath, (db) => db.exec(`
+    CREATE TRIGGER fail_forget_selection BEFORE DELETE ON memory_entries
+    WHEN old.id = '${entry.id}'
+    BEGIN SELECT RAISE(ABORT, 'fixture forget failure'); END;
+  `));
+  const first = await answerForget(ctx, conversation, "第 1 条", "clarify-retry-a");
+  assert.equal(first.status, "failed");
+  const failed = requestRowFull(ctx.store.dbPath, "clarify-retry-a");
+  assert.equal(failed.error_code, "FORGET_SELECTION_FAILED");
+  assert.equal(JSON.parse(failed.operation_proof).kind, "forget-selection");
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"), "失败必须零写");
+  withDatabase(ctx.store.dbPath, (db) => db.exec("DROP TRIGGER fail_forget_selection"));
+  const userMessagesBefore = conversationMessages(ctx, conversation.id)
+    .filter((message) => message.role === "user").length;
+  const retry = await ctx.store.chat.retryRequest({
+    characterId: "a", requestId: "clarify-retry-a",
+  });
+  assert.equal(retry.status, "completed");
+  assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+  assert.equal(
+    conversationMessages(ctx, conversation.id).filter((message) => message.role === "user").length,
+    userMessagesBefore,
+    "重试不得追加用户消息",
+  );
+  assert.equal(requestRowFull(ctx.store.dbPath, "clarify-retry-a").status, "completed");
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-011b 重启丢快照时retry诚实失败", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-011b-restart");
+  const conversation = openConversation(ctx.store);
+  const entry = await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(ctx, conversation, { requestId: "clarify-restart-q" });
+  withDatabase(ctx.store.dbPath, (db) => db.exec(`
+    CREATE TRIGGER fail_forget_selection BEFORE DELETE ON memory_entries
+    WHEN old.id = '${entry.id}'
+    BEGIN SELECT RAISE(ABORT, 'fixture forget failure'); END;
+  `));
+  const first = await answerForget(ctx, conversation, "第 1 条", "clarify-restart-a");
+  assert.equal(first.status, "failed");
+  withDatabase(ctx.store.dbPath, (db) => db.exec("DROP TRIGGER fail_forget_selection"));
+  ctx.reopen();
+  const chatBefore = chatRequests(ctx).length;
+  const retry = await ctx.store.chat.retryRequest({
+    characterId: "a", requestId: "clarify-restart-a",
+  });
+  assert.equal(retry.status, "stale");
+  assert.equal(retry.errorCode, "FORGET_SELECTION_EXPIRED");
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"));
+  assert.equal(chatRequests(ctx).length, chatBefore, "不得退回普通聊天");
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-011c 失败后context变化retry不重放旧快照", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-011c-retry-stale");
+  const conversation = openConversation(ctx.store);
+  const entry = await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(ctx, conversation, { requestId: "clarify-retry-stale-q" });
+  withDatabase(ctx.store.dbPath, (db) => db.exec(`
+    CREATE TRIGGER fail_forget_selection BEFORE DELETE ON memory_entries
+    WHEN old.id = '${entry.id}'
+    BEGIN SELECT RAISE(ABORT, 'fixture forget failure'); END;
+  `));
+  const first = await answerForget(ctx, conversation, "第 1 条", "clarify-retry-stale-a");
+  assert.equal(first.status, "failed");
+  withDatabase(ctx.store.dbPath, (db) => db.exec("DROP TRIGGER fail_forget_selection"));
+  ctx.store.memory.remember({
+    characterId: "a", factKey: "detail.city", body: "用户住在杭州",
+    kind: "detail", sourceId: "seed-city-retry-stale",
+  });
+  const chatBefore = chatRequests(ctx).length;
+  const retry = await ctx.store.chat.retryRequest({
+    characterId: "a", requestId: "clarify-retry-stale-a",
+  });
+  assert.equal(retry.status, "stale");
+  assert.equal(retry.errorCode, "FORGET_SELECTION_EXPIRED");
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"));
+  assert.equal(chatRequests(ctx).length, chatBefore, "不得重放旧快照或退回普通聊天");
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-011d 失败后新话题再retry不复活", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-011d-new-topic");
+  const conversation = openConversation(ctx.store);
+  const entry = await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(ctx, conversation, { requestId: "clarify-011d-q" });
+  await failSelectionWithTrigger(ctx, conversation, entry, "clarify-011d-a");
+  ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+    reply: "今天天气不错。", memoryCandidates: [], memoryOperation: null,
+  }));
+  const topic = await ctx.store.chat.sendMessage({
+    characterId: "a", conversationId: conversation.id,
+    text: "今天天气怎么样？", requestId: "clarify-011d-topic",
+  });
+  assert.equal(topic.reply, "今天天气不错。");
+  assert.equal(requestRowFull(ctx.store.dbPath, "clarify-011d-a").status, "stale");
+  const chatBefore = chatRequests(ctx).length;
+  const retry = await ctx.store.chat.retryRequest({
+    characterId: "a", requestId: "clarify-011d-a",
+  });
+  assert.equal(retry.status, "stale");
+  assert.equal(retry.errorCode, "FORGET_SELECTION_EXPIRED");
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"));
+  assert.equal(chatRequests(ctx).length, chatBefore);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-011e 失败后新命令再retry不复活", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-011e-new-command");
+  const conversation = openConversation(ctx.store);
+  const coffee = await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await seedChatFact(ctx, conversation, {
+    text: "我住在杭州。", factKey: "detail.city", kind: "detail",
+  });
+  await askForget(ctx, conversation, { requestId: "clarify-011e-q" });
+  await failSelectionWithTrigger(ctx, conversation, coffee, "clarify-011e-a");
+  ctx.server.enqueue(({ body, res }) => sendEnvelope(res, {
+    reply: "好的。",
+    memoryCandidates: [],
+    memoryOperation: {
+      action: "forget", target: targetFromRequest(body, "杭州"),
+      scope: "all", evidence: "请忘记我住在杭州这件事",
+    },
+  }));
+  const command = await ctx.store.chat.sendMessage({
+    characterId: "a", conversationId: conversation.id,
+    text: "请忘记我住在杭州这件事。", requestId: "clarify-011e-new",
+  });
+  assert.equal(command.status, "completed");
+  assert.equal(entryOf(ctx.store, "a", "detail.city"), null);
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"));
+  const chatBefore = chatRequests(ctx).length;
+  const retry = await ctx.store.chat.retryRequest({
+    characterId: "a", requestId: "clarify-011e-a",
+  });
+  assert.equal(retry.status, "stale");
+  assert.equal(retry.errorCode, "FORGET_SELECTION_EXPIRED");
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"));
+  assert.equal(chatRequests(ctx).length, chatBefore);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-011f 失败后取消再retry不复活", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-011f-cancel");
+  const conversation = openConversation(ctx.store);
+  const entry = await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(ctx, conversation, { requestId: "clarify-011f-q" });
+  await failSelectionWithTrigger(ctx, conversation, entry, "clarify-011f-a");
+  const cancelled = ctx.store.chat.cancelRequest({
+    characterId: "a", requestId: "clarify-011f-a",
+  });
+  assert.equal(cancelled.cancelled, false);
+  assert.equal(requestRowFull(ctx.store.dbPath, "clarify-011f-a").status, "stale");
+  const chatBefore = chatRequests(ctx).length;
+  const retry = await ctx.store.chat.retryRequest({
+    characterId: "a", requestId: "clarify-011f-a",
+  });
+  assert.equal(retry.status, "stale");
+  assert.equal(retry.errorCode, "FORGET_SELECTION_EXPIRED");
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"));
+  assert.equal(chatRequests(ctx).length, chatBefore);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-011g 失败后关闭会话再retry不复活", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-011g-close");
+  const conversation = openConversation(ctx.store);
+  const entry = await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(ctx, conversation, { requestId: "clarify-011g-q" });
+  await failSelectionWithTrigger(ctx, conversation, entry, "clarify-011g-a");
+  ctx.store.chat.closeConversation({
+    characterId: "a", conversationId: conversation.id,
+  });
+  const retry = await ctx.store.chat.retryRequest({
+    characterId: "a", requestId: "clarify-011g-a",
+  });
+  assert.equal(retry.status, "stale");
+  assert.equal(retry.errorCode, "FORGET_SELECTION_EXPIRED");
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"));
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-012 同requestId幂等不重复删除", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-012-duplicate");
+  const conversation = openConversation(ctx.store);
+  await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(ctx, conversation, { requestId: "clarify-dup-q" });
+  const first = await answerForget(ctx, conversation, "第 1 条", "clarify-dup-a");
+  assert.equal(first.status, "completed");
+  const userMessages = conversationMessages(ctx, conversation.id)
+    .filter((message) => message.role === "user").length;
+  const relations = relationRequests(ctx).length;
+  const again = await answerForget(ctx, conversation, "第 1 条", "clarify-dup-a");
+  assert.equal(again.status, "completed");
+  assert.equal(again.assistantMessageId, first.assistantMessageId);
+  assert.equal(
+    conversationMessages(ctx, conversation.id).filter((message) => message.role === "user").length,
+    userMessages,
+  );
+  assert.equal(relationRequests(ctx).length, relations);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-013 取消/过期/取消回答均不执行旧forget", async (t) => {
+  const cancelCtx = await setupContext(t, "FORGET-CLARIFY-013-cancel");
+  const cancelConversation = openConversation(cancelCtx.store);
+  await seedChatFact(cancelCtx, cancelConversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(cancelCtx, cancelConversation, { requestId: "clarify-cancel-q" });
+  const cancelled = cancelCtx.store.chat.cancelRequest({
+    characterId: "a", requestId: "clarify-cancel-q",
+  });
+  assert.equal(cancelled.cancelled, false);
+  assert.equal(cancelled.status, "completed");
+  cancelCtx.server.enqueue(({ res }) => sendEnvelope(res, {
+    reply: "好的。", memoryCandidates: [], memoryOperation: null,
+  }));
+  const afterCancel = await cancelCtx.store.chat.sendMessage({
+    characterId: "a", conversationId: cancelConversation.id,
+    text: "第 1 条", requestId: "clarify-cancel-a",
+  });
+  assert.equal(afterCancel.status, "completed");
+  assert.ok(entryOf(cancelCtx.store, "a", "pref.coffee"));
+
+  const timeoutCtx = await setupContext(t, "FORGET-CLARIFY-013-timeout");
+  const timeoutConversation = openConversation(timeoutCtx.store);
+  await seedChatFact(timeoutCtx, timeoutConversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(timeoutCtx, timeoutConversation, { requestId: "clarify-timeout-q" });
+  timeoutCtx.advance(11 * 60 * 1000);
+  const chatBeforeTimeout = chatRequests(timeoutCtx).length;
+  const expired = await answerForget(timeoutCtx, timeoutConversation, "第 1 条", "clarify-timeout-a");
+  assert.equal(expired.status, "completed");
+  assert.match(expired.reply, /已经过期/u);
+  assert.ok(entryOf(timeoutCtx.store, "a", "pref.coffee"));
+  assert.equal(chatRequests(timeoutCtx).length, chatBeforeTimeout);
+  assert.equal(relationRequests(timeoutCtx).length, 0);
+
+  const cancelAnswerCtx = await setupContext(t, "FORGET-CLARIFY-013-cancel-answer");
+  const cancelAnswerConversation = openConversation(cancelAnswerCtx.store);
+  await seedChatFact(cancelAnswerCtx, cancelAnswerConversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(cancelAnswerCtx, cancelAnswerConversation, { requestId: "clarify-skip-q" });
+  const chatBeforeSkip = chatRequests(cancelAnswerCtx).length;
+  const skipped = await answerForget(
+    cancelAnswerCtx, cancelAnswerConversation, "算了", "clarify-skip-a",
+  );
+  assert.equal(skipped.status, "completed");
+  assert.match(skipped.reply, /没有删除任何记忆/u);
+  assert.ok(entryOf(cancelAnswerCtx.store, "a", "pref.coffee"));
+  assert.equal(chatRequests(cancelAnswerCtx).length, chatBeforeSkip);
+  assert.equal(relationRequests(cancelAnswerCtx).length, 0);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-013c 跨本地午夜未满10分钟即过期", async (t) => {
+  const ctx = await setupContext(t, "FORGET-CLARIFY-013c-midnight");
+  const conversation = openConversation(ctx.store);
+  await seedChatFact(ctx, conversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  advanceToLocalTime(ctx, 23, 59, 30);
+  await askForget(ctx, conversation, { requestId: "clarify-midnight-q" });
+  ctx.advance(40 * 1000);
+  const chatBefore = chatRequests(ctx).length;
+  const answer = await answerForget(ctx, conversation, "第 1 条", "clarify-midnight-a");
+  assert.equal(answer.status, "completed");
+  assert.match(answer.reply, /已经过期/u);
+  assert.ok(entryOf(ctx.store, "a", "pref.coffee"));
+  assert.equal(chatRequests(ctx).length, chatBefore);
+  assert.equal(relationRequests(ctx).length, 0);
+});
+
+test("POL-CHATMEM-FORGET-CLARIFY-013b close/dispose清理pending", async (t) => {
+  const closeCtx = await setupContext(t, "FORGET-CLARIFY-013b-close");
+  const closeConversation = openConversation(closeCtx.store);
+  await seedChatFact(closeCtx, closeConversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(closeCtx, closeConversation, { requestId: "clarify-close-q" });
+  const closed = closeCtx.store.chat.closeConversation({
+    characterId: "a", conversationId: closeConversation.id,
+  });
+  assert.ok(closed.conversation.closedAt);
+  assert.ok(entryOf(closeCtx.store, "a", "pref.coffee"));
+
+  const disposeCtx = await setupContext(t, "FORGET-CLARIFY-013b-dispose");
+  const disposeConversation = openConversation(disposeCtx.store);
+  await seedChatFact(disposeCtx, disposeConversation, {
+    text: "我平时喝咖啡一定要加糖。", factKey: "pref.coffee",
+  });
+  await askForget(disposeCtx, disposeConversation, { requestId: "clarify-dispose-q" });
+  await disposeCtx.store.chat.dispose();
+  assert.ok(entryOf(disposeCtx.store, "a", "pref.coffee"));
+  await assert.rejects(
+    () => disposeCtx.store.chat.sendMessage({
+      characterId: "a", conversationId: disposeConversation.id,
+      text: "第 1 条", requestId: "clarify-dispose-a",
+    }),
+    /聊天服务已关闭/u,
+  );
+});
+
 test("POL-CHATMEM-CLARIFY-002g2 显式null第三方内容零写", async (t) => {
   const ctx = await setupContext(t, "POL-CHATMEM-CLARIFY-002g2-third-party");
   seedOperationFact(ctx.store, {

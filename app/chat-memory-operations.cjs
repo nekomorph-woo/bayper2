@@ -111,6 +111,12 @@ const REPLIES = Object.freeze({
   relayNotProcessed: "我这次没有转告任何内容。",
   temporaryAmbiguous:
     "这件事今天有多条还没法确定关联的记录，我这次先不改动；你能说要更新哪一条吗？",
+  forgetTargetInvalid: "我没有确认你要选的是哪一条，这次没有改动任何记忆。",
+  forgetTargetChanged:
+    "我准备删除的那条记忆已经变化，这次没有改动；请重新告诉我要忘记哪件事。",
+  forgetTargetExpired:
+    "这次确认已经过期，我没有改动任何记忆；如果还要忘记，请重新告诉我要忘记哪件事。",
+  forgetTargetCancelled: "好，这次没有删除任何记忆。",
 });
 
 const FORGET_PATTERNS = Object.freeze([
@@ -638,6 +644,156 @@ function matchingCandidates(candidates, context) {
   return candidates.filter((candidate) => candidateScore(candidate, normalized) > 0);
 }
 
+const FORGET_SELECTION_CANCEL = new Set([
+  "取消", "算了", "不用了", "先不删了", "不改了", "不删了", "先不忘了",
+]);
+const FORGET_SELECTION_AFFIRM =
+  /^(?:对|是|是的|对[，,]?就(?:这|那)条|就(?:这|那)条|(?:这|那)(?:一)?条)$/u;
+const FORGET_SELECTION_NUMBER =
+  /^(?:第\s*([0-9]+|[一二三四五六七八九十]+)\s*条|M\s*([0-9]+))$/iu;
+const FORGET_SELECTION_DESCRIPTIVE = /^(.+?)(?:那|这)(?:一)?条(?:吧|就行)?$/u;
+const CHINESE_SELECTION_NUMBERS = Object.freeze({
+  一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10,
+});
+const FORGET_SELECTION_MAX_BODY = 160;
+
+function forgetBodyCore(body) {
+  return normalizeGrounding(body).replace(/^(?:用户|我们|我|角色)/u, "");
+}
+
+function forgetSelectionBody(body) {
+  const text = String(body ?? "").replace(/\s+/gu, " ").trim();
+  return text.length > FORGET_SELECTION_MAX_BODY
+    ? `${text.slice(0, FORGET_SELECTION_MAX_BODY)}…`
+    : text;
+}
+
+/* 只把与当前命令 topic 词面匹配的候选纳入授权；recentText 带来的无关候选
+   不能凭“也在候选列表里”参与提问或删除。这里明确不是语义 NLU。
+   过期临时项已由 searchMemories 过滤；未过期临时项沿用既有 forget 语义，
+   不在本层静默排除。 */
+function forgetTopicCandidates(intent, candidates) {
+  if (intent.action !== "forget" || intent.reason) {
+    return [];
+  }
+  return matchingCandidates(candidates, intent.authorizedText)
+    .filter((candidate) => candidate.entry);
+}
+
+/* 模型显式 null 时，唯一 forget + 至少一条 topic 匹配候选 + 未完整点名时，
+   本地生成一次确认/选择问题。完整点名唯一候选仍走既有 notProcessed，
+   本轮不扩展 exact-unique 本地补全。 */
+function forgetTargetClarification({ intent, candidates }) {
+  const authorized = forgetTopicCandidates(intent, candidates);
+  if (authorized.length === 0) {
+    return null;
+  }
+  const command = normalizeGrounding(intent.authorizedText);
+  const complete = authorized.filter((candidate) =>
+    command.includes(forgetBodyCore(candidate.entry.body)));
+  if (authorized.length === 1 && complete.length === 1) {
+    return null;
+  }
+  const lines = authorized.map((candidate, index) =>
+    `[第 ${index + 1} 条] ${forgetSelectionBody(candidate.entry.body)}`);
+  const reply = authorized.length === 1
+    ? `我只找到一条可能相关的记忆：\n${lines[0]}\n\n`
+      + "要忘记这条吗？回复“第 1 条”，或说出候选里的关键词加“那条”。"
+    : `我找到 ${authorized.length} 条可能相关的记忆：\n${lines.join("\n")}\n\n`
+      + "要忘记第几条？回复“第 1 条”，或说出候选里的关键词加“那条”。";
+  return {
+    reply,
+    evidence: intent.authorizedText,
+    scope: intent.scope,
+    candidates: authorized,
+  };
+}
+
+function forgetSelectionNumber(plain) {
+  const match = plain.match(FORGET_SELECTION_NUMBER);
+  if (!match) {
+    return null;
+  }
+  const raw = match[1] ?? match[2];
+  const value = /^[0-9]+$/u.test(raw) ? Number(raw) : CHINESE_SELECTION_NUMBERS[raw];
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function forgetSelectionLike(plain, pending) {
+  if (/(?:第\s*(?:[0-9]+|[一二三四五六七八九十]+)\s*条|M\s*[0-9]+)/iu.test(plain)) {
+    return true;
+  }
+  if (!/(?:这|那)(?:一)?条/u.test(plain)) {
+    return false;
+  }
+  const normalized = normalizeGrounding(plain);
+  return pending.candidates.some((candidate) =>
+    (forgetBodyCore(candidate.body).length >= 2
+      && normalized.includes(forgetBodyCore(candidate.body)))
+    || contentTokensOf(candidate.body).some((token) =>
+      token.length >= 2 && normalized.includes(token)));
+}
+
+/* 先判断输入是否在选择语法内；只有选择式输入才应用问号/引用/假设拒绝。
+   普通闲聊的问句或假设不能被选择语法一刀切拦掉。 */
+function forgetSelectionShaped(plain, pending) {
+  return FORGET_SELECTION_NUMBER.test(plain)
+    || FORGET_SELECTION_AFFIRM.test(plain)
+    || FORGET_SELECTION_DESCRIPTIVE.test(plain)
+    || forgetSelectionLike(plain, pending);
+}
+
+/* 回答只做选择控制：select/cancel/invalid 不构成新授权；none 交给普通聊天。
+   选择式输入中的问句、引号、假设、转述、越界编号和带新内容的“那条”返回
+   invalid，由本地明确未操作；普通闲聊不在选择语法内时返回 none。 */
+function parseForgetTargetAnswer(text, pending) {
+  const raw = String(text ?? "").trim();
+  if (!raw) {
+    return { kind: "none" };
+  }
+  const plain = raw.normalize("NFKC").replace(/[。！!]+$/u, "").trim();
+  if (FORGET_SELECTION_CANCEL.has(plain)) {
+    return { kind: "cancel" };
+  }
+  if (!forgetSelectionShaped(plain, pending)) {
+    return { kind: "none" };
+  }
+  if (/[？?]\s*$/u.test(raw)) {
+    return { kind: "invalid" };
+  }
+  if (/[“”"「」『』‘’]/u.test(raw)) {
+    return { kind: "invalid" };
+  }
+  if (hasMatch(HYPOTHETICAL, raw) || hasMatch(REPORTED_SPEECH, raw)) {
+    return { kind: "invalid" };
+  }
+  const number = forgetSelectionNumber(plain);
+  if (number !== null) {
+    return number <= pending.candidates.length
+      ? { kind: "select", index: number - 1 }
+      : { kind: "invalid" };
+  }
+  if (FORGET_SELECTION_AFFIRM.test(plain)) {
+    return pending.candidates.length === 1
+      ? { kind: "select", index: 0 }
+      : { kind: "invalid" };
+  }
+  const descriptive = plain.match(FORGET_SELECTION_DESCRIPTIVE);
+  if (descriptive) {
+    const phrase = normalizeGrounding(descriptive[1]);
+    if (phrase.length >= 2) {
+      const matches = pending.candidates
+        .map((candidate, index) => ({ candidate, index }))
+        .filter(({ candidate }) => normalizeGrounding(candidate.body).includes(phrase));
+      if (matches.length === 1) {
+        return { kind: "select", index: matches[0].index };
+      }
+    }
+    return { kind: "invalid" };
+  }
+  return { kind: "invalid" };
+}
+
 /* 当前话题或近期对话必须留下实际依据；唯一条目本身不算指代证据。
    纠正只移除新内容 token，保留用户原话里的否定对象（如“不是茶”）。 */
 function resolveTarget({ action, candidates, userText, recentText, excerpt = "", target = null }) {
@@ -1007,6 +1163,12 @@ function planOperation({
         return { kind: "respond", reply: completed.reply };
       }
     }
+    if (operationNull && intent.action === "forget") {
+      const clarification = forgetTargetClarification({ intent, candidates });
+      if (clarification) {
+        return { kind: "clarifyForget", reply: clarification.reply, clarification };
+      }
+    }
     if (intent.action === "correct" && intent.temporalHint === "vague") {
       return { kind: "respond", reply: REPLIES.temporalClarification };
     }
@@ -1151,10 +1313,13 @@ function applyChatOperation({ memory, characterId, operation, nowMs, userSourceI
     return memory.keepExclusive(selection);
   }
   if (operation.action === "forget") {
+    const sourceIdsToExclude = [...new Set(
+      [userSourceId, operation.commandSourceId].filter(Boolean),
+    )];
     return memory.forget({
       ...selection,
       scope: operation.scope,
-      sourceIdsToExclude: [userSourceId],
+      sourceIdsToExclude,
     });
   }
   return memory.restrictSharing(selection);
@@ -1214,6 +1379,8 @@ module.exports = {
   characterCandidatesText,
   detectOperationIntent,
   planOperation,
+  forgetTargetClarification,
+  parseForgetTargetAnswer,
   applyChatOperation,
   operationReply,
   relayFailureReply,

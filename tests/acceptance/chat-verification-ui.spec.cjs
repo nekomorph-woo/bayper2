@@ -362,6 +362,140 @@ async function openSeededUi(t) {
   };
 }
 
+async function openForgetClarifyUi(t) {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bayper-forget-clarify-ui-"));
+  const server = await startServer();
+  let app = null;
+  t.after(async () => {
+    if (app) {
+      try { await app.close(); } catch { /* 已关闭 */ }
+    }
+    await server.close();
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  });
+  let launched = await launchApp(dataDir);
+  app = launched.app;
+  await completeOnboarding(launched.page, server.baseUrl);
+  await app.close();
+  app = null;
+
+  const store = createStore(dataDir, {
+    now: () => Date.now(),
+    chat: {
+      timeoutMs: 2000,
+      fetchImpl: fetch,
+      recoverInterrupted: false,
+      getCredentials: () => ({ baseUrl: server.baseUrl, modelName: MODEL_NAME, apiKey: API_KEY }),
+    },
+  });
+  try {
+    store.db.prepare(
+      "INSERT OR IGNORE INTO relationships (character_id, accepted_at) VALUES (?, ?)",
+    ).run("hu", "2026-01-01T00:00:00.000Z");
+    store.db.prepare(
+      "INSERT OR IGNORE INTO character_stats (character_id, intimacy, energy, mood) VALUES (?, 10, 100, 0)",
+    ).run("hu");
+    for (const [characterId, text, factKey] of [
+      ["hu", "我的咖啡都要甜的。", "pref.coffeeB"],
+    ]) {
+      const conversation = store.chat.openConversation({ characterId }).conversation;
+      server.enqueue(({ response }) => sendStructured(response, {
+        reply: "我记下了。",
+        memoryCandidates: [{
+          factKey, body: text.replace(/。$/u, ""), kind: "preference",
+          trust: "stated", evidence: text.replace(/。$/u, ""),
+        }],
+        memoryOperation: null,
+      }));
+      const result = await store.chat.sendMessage({
+        characterId, conversationId: conversation.id, text, requestId: crypto.randomUUID(),
+      });
+      assert.equal(result.status, "completed");
+    }
+  } finally {
+    store.close();
+  }
+
+  launched = await launchApp(dataDir);
+  app = launched.app;
+  const page = launched.page;
+  await page.locator('[data-step="home"]').waitFor({ state: "visible", timeout: 20000 });
+  await openChat(page);
+  server.enqueue(({ response }) => sendStructured(response, {
+    reply: "我记下了。",
+    memoryCandidates: [{
+      factKey: "pref.coffee", body: "我平时喝咖啡一定要加糖",
+      kind: "preference", trust: "stated", evidence: "我平时喝咖啡一定要加糖",
+    }],
+    memoryOperation: null,
+  }));
+  await page.locator("#chat-input").fill("我平时喝咖啡一定要加糖。");
+  await page.locator("#chat-send").click();
+  await waitForAssistantText(page, "我记下了");
+  return {
+    app,
+    page,
+    server,
+    dataDir,
+    equivalentResponder(delayMs = 500) {
+      return ({ body, response }) => {
+        const pairs = pairsOf(body);
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            sendStructured(response, { results: pairs.map((pair) => relationResult(pair)) });
+            resolve();
+          }, delayMs);
+        });
+      };
+    },
+  };
+}
+
+test("POL-CHATMEM-FORGET-CLARIFY-GUI-001 本地提问后可选择并两阶段删除", { timeout: 180000 }, async (t) => {
+  const shotDir = createShotDir();
+  const ui = await openForgetClarifyUi(t);
+  const bLong = readEntry(ui.dataDir, "hu", "pref.coffeeB");
+  assert.ok(readEntry(ui.dataDir, "rin", "pref.coffee"));
+
+  ui.server.enqueue(({ response }) => sendStructured(response, {
+    reply: "模型说已经删除了。", memoryCandidates: [], memoryOperation: null,
+  }));
+  await ui.page.locator("#chat-input").fill("请忘记我喜欢咖啡这件事。");
+  await ui.page.locator("#chat-send").click();
+  await waitForAssistantText(ui.page, "要忘记这条吗");
+  await ui.page.screenshot({ path: path.join(shotDir, "clarify-question.png") });
+  assert.equal(await ui.page.locator("#chat-input").isDisabled(), false);
+  assert.ok(readEntry(ui.dataDir, "rin", "pref.coffee"), "提问阶段不得删除");
+  assert.deepEqual(readEntry(ui.dataDir, "hu", "pref.coffeeB"), bLong);
+
+  ui.server.enqueue(ui.equivalentResponder(500));
+  await ui.page.locator("#chat-input").fill("第 1 条");
+  await ui.page.locator("#chat-send").click();
+  await waitForAssistantText(ui.page, "正在核对");
+  await ui.page.screenshot({ path: path.join(shotDir, "clarify-phase1-pending.png") });
+  const during = await ui.page.locator(".chat-bubble-assistant").count();
+  assert.equal(await ui.page.locator("#chat-input").isDisabled(), true);
+  assert.equal(readEntry(ui.dataDir, "rin", "pref.coffee"), null, "阶段1删除A");
+  assert.deepEqual(readEntry(ui.dataDir, "hu", "pref.coffeeB"), bLong, "独立B阶段1不变");
+
+  await waitForAssistantText(ui.page, "一并删除");
+  await ui.page.screenshot({ path: path.join(shotDir, "clarify-phase2-final.png") });
+  assert.equal(
+    await ui.page.locator(".chat-bubble-assistant").count(),
+    during,
+    "阶段2必须原位更新同一 assistant",
+  );
+  await ui.page.waitForFunction(() => {
+    const input = document.querySelector("#chat-input");
+    return input && !input.disabled;
+  });
+  assert.equal(readEntry(ui.dataDir, "rin", "pref.coffee"), null);
+  assert.equal(readEntry(ui.dataDir, "hu", "pref.coffeeB"), null);
+  const finalText = await ui.page.locator(".chat-bubble-assistant").last().textContent();
+  assert.equal(finalText.includes("更正"), false);
+  console.log(`S03O_B_GUI_SHOTS ${shotDir}`);
+});
+
 test("POL-SEMOP-003a GUI 阶段 1 先显示，阶段 2 原位刷新同一 assistant", { timeout: 180000 }, async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bayper-verification-ui-"));
   const shotDir = path.join(

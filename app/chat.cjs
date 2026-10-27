@@ -13,6 +13,7 @@ const {
   characterCandidatesText,
   detectOperationIntent,
   planOperation,
+  parseForgetTargetAnswer,
   applyChatOperation,
   operationReply,
   relayFailureReply,
@@ -46,6 +47,10 @@ const NEGATION_CHARS = new Set(["不", "没", "无", "别", "未", "非", "勿"]
 /* S03k 本地设置写入/确认失败的稳定业务码；只标记该分支可重试，
    不把其他未知 SQLite 错误统一放开。 */
 const LOCAL_SHARING_SETTING_ERROR = "LOCAL_SHARING_SETTING_FAILED";
+const FORGET_SELECTION_FAILED = "FORGET_SELECTION_FAILED";
+const FORGET_SELECTION_EXPIRED = "FORGET_SELECTION_EXPIRED";
+const FORGET_CLARIFICATION_TTL_MS = 10 * 60 * 1000;
+const FORGET_SELECTION_MARKER = JSON.stringify({ kind: "forget-selection", version: 1 });
 const RETRYABLE_ERRORS = new Set([
   "TIMEOUT",
   "NETWORK_ERROR",
@@ -53,6 +58,7 @@ const RETRYABLE_ERRORS = new Set([
   "INVALID_RESPONSE",
   "INTERRUPTED",
   LOCAL_SHARING_SETTING_ERROR,
+  FORGET_SELECTION_FAILED,
 ]);
 /* 操作目标在模型响应期间被本地修改或删除时，整笔请求转为 stale，
    不展示迟到回复，也不执行旧目标。 */
@@ -124,6 +130,8 @@ function createChatService({
   const controllers = new Map();
   const verifications = new Map();
   const inFlight = new Set();
+  const forgetClarifications = new Map();
+  const forgetSelections = new Map();
   let disposed = false;
   const verification = memorySourceContext
     ? createChatMemoryVerification({
@@ -171,6 +179,189 @@ function createChatService({
       return fallback;
     }
     return cleanText(value, "请求ID", MAX_REQUEST_ID_CHARS);
+  }
+
+  function forgetClarificationKey(characterId, conversationId) {
+    return `${characterId}\u0000${conversationId}`;
+  }
+
+  function localDayOf(ms) {
+    const date = new Date(ms);
+    return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+  }
+
+  function forgetClarificationAlive(pending, at) {
+    return at - pending.createdAt <= FORGET_CLARIFICATION_TTL_MS &&
+      localDayOf(at) === localDayOf(pending.createdAt);
+  }
+
+  function peekForgetClarification(characterId, conversationId, at) {
+    const key = forgetClarificationKey(characterId, conversationId);
+    const pending = forgetClarifications.get(key);
+    if (!pending) {
+      return { pending: null, expired: false };
+    }
+    if (forgetClarificationAlive(pending, at)) {
+      return { pending, expired: false };
+    }
+    forgetClarifications.delete(key);
+    return { pending, expired: true };
+  }
+
+  function clearForgetClarification(characterId, conversationId) {
+    forgetClarifications.delete(forgetClarificationKey(characterId, conversationId));
+  }
+
+  function registerForgetClarification({ request, userMessage, clarification, at }) {
+    const candidates = clarification.candidates.map((candidate) => ({
+      target: candidate.target,
+      entryId: candidate.entry.id,
+      version: candidate.entry.version,
+      factIdentityId: candidate.entry.factIdentityId,
+      sourceIdHash: sourceHash(candidate.entry.sourceId),
+      body: candidate.entry.body,
+    }));
+    forgetClarifications.set(forgetClarificationKey(request.characterId, request.conversationId), {
+      characterId: request.characterId,
+      conversationId: request.conversationId,
+      originalRequestId: request.id,
+      originalUserMessageId: userMessage.id,
+      originalSourceId: userMessage.sourceId,
+      originalCommandText: userMessage.content,
+      evidence: clarification.evidence,
+      scope: clarification.scope,
+      contextVersion: request.contextVersion,
+      createdAt: at,
+      candidates,
+    });
+  }
+
+  /* 失败的选择回合在用户开启新回合时转为 stale；不能仅清标记后让 retry
+     退回普通聊天，也不能打断仍在途的请求。 */
+  function invalidateFailedForgetSelections(characterId, conversationId, at) {
+    for (const [requestId, snapshot] of [...forgetSelections]) {
+      if (snapshot.characterId !== characterId || snapshot.conversationId !== conversationId) {
+        continue;
+      }
+      const request = store.getRequest(requestId);
+      if (request?.status === "failed") {
+        store.updateRequest(requestId, {
+          status: "stale",
+          completedAt: at,
+          errorCode: FORGET_SELECTION_EXPIRED,
+          memoryApplied: 0,
+        });
+        store.clearOperationProof(requestId);
+        forgetSelections.delete(requestId);
+      } else if (request?.status !== "pending") {
+        forgetSelections.delete(requestId);
+      }
+    }
+  }
+
+  function forgetSelectionMarkerOf(request) {
+    try {
+      const proof = JSON.parse(request?.operationProof ?? "null");
+      return proof?.kind === "forget-selection" ? proof : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function forgetSelectionChanged(snapshot, at) {
+    if (!forgetClarificationAlive(snapshot, at)) {
+      return REPLIES.forgetTargetExpired;
+    }
+    const entry = memory.getHeldEntry({
+      characterId: snapshot.characterId,
+      entryId: snapshot.entryId,
+    });
+    if (!entry ||
+      entry.version !== snapshot.version ||
+      entry.factIdentityId !== snapshot.factIdentityId ||
+      sourceHash(entry.sourceId) !== snapshot.sourceIdHash) {
+      return REPLIES.forgetTargetChanged;
+    }
+    if (entry.expiresAt !== null && entry.expiresAt !== undefined && entry.expiresAt <= at) {
+      return REPLIES.forgetTargetChanged;
+    }
+    const excluded = new Set(memory.listExcludedSources(snapshot.characterId));
+    if (excluded.has(sourceHash(snapshot.originalSourceId)) ||
+      excluded.has(sourceHash(snapshot.answerSourceId)) ||
+      excluded.has(sourceHash(entry.sourceId))) {
+      return REPLIES.forgetTargetChanged;
+    }
+    if (!memory.isContextCurrent(snapshot.characterId, snapshot.contextVersion)) {
+      return REPLIES.forgetTargetChanged;
+    }
+    if (memorySourceContext) {
+      try {
+        const resolved = memorySourceContext.resolve({
+          characterId: snapshot.characterId,
+          entryId: entry.id,
+          expectedVersion: entry.version,
+          nowMs: at,
+        });
+        if (resolved.status !== "ok") {
+          return REPLIES.forgetTargetChanged;
+        }
+      } catch {
+        return REPLIES.forgetTargetChanged;
+      }
+    }
+    return null;
+  }
+
+  async function completeForgetSelectionReply({ request, reply }) {
+    try {
+      return await runModelRequest({
+        request: store.getRequest(request.id),
+        messages: [],
+        contextVersion: request.contextVersion,
+        preplannedPlan: { kind: "respond", reply },
+      });
+    } finally {
+      forgetSelections.delete(request.id);
+    }
+  }
+
+  async function runForgetSelection({ request, snapshot }) {
+    const at = currentMs();
+    const changed = forgetSelectionChanged(snapshot, at);
+    if (changed) {
+      store.clearOperationProof(request.id);
+      return completeForgetSelectionReply({
+        request: store.getRequest(request.id),
+        reply: changed,
+      });
+    }
+    const entry = memory.getHeldEntry({
+      characterId: snapshot.characterId,
+      entryId: snapshot.entryId,
+    });
+    const operation = {
+      action: "forget",
+      target: { target: snapshot.target, entry },
+      scope: snapshot.scope,
+      evidence: snapshot.evidence,
+      commandSourceId: snapshot.originalSourceId,
+    };
+    const result = await runModelRequest({
+      request: store.getRequest(request.id),
+      messages: [],
+      contextVersion: request.contextVersion,
+      preplannedPlan: { kind: "execute", operation },
+      selection: true,
+    });
+    if (result.status === "failed" && result.errorCode === FORGET_SELECTION_FAILED) {
+      // 事务未提交：保留快照和 operation_proof 选择标记，允许同 request 重试。
+      return result;
+    }
+    forgetSelections.delete(request.id);
+    if (result.status !== "completed") {
+      store.clearOperationProof(request.id);
+    }
+    return result;
   }
 
   function conversationOf(characterId, value) {
@@ -606,7 +797,9 @@ function createChatService({
 
   /* 用户消息与 pending 请求同事务写入；本地设置指令和普通模型回合共用，
      避免请求已存在但没有对应原话，或原话落库但无法幂等重放。 */
-  function recordUserTurn({ characterId, conversationId, userText, requestId, at, contextVersion }) {
+  function recordUserTurn({
+    characterId, conversationId, userText, requestId, at, contextVersion, operationProof = null,
+  }) {
     const userMessageId = crypto.randomUUID();
     const sourceId = `chat:${userMessageId}`;
     store.transaction(() => {
@@ -628,6 +821,9 @@ function createChatService({
         contextVersion,
         createdAt: at,
       });
+      if (operationProof) {
+        store.setOperationProof(requestId, operationProof);
+      }
     });
     return userMessageId;
   }
@@ -1146,11 +1342,14 @@ function createChatService({
     return currentAnchor;
   }
 
-  function deleteApprovedCandidates(inside, proof, approved, nowMs) {
-    const userMessage = store.getMessage(inside.userMessageId);
-    if (!userMessage) {
+  function deleteApprovedCandidates(inside, proof, approved, nowMs, commandSourceId = null) {
+    const answerMessage = store.getMessage(inside.userMessageId);
+    if (!answerMessage) {
       throw new AppError("REQUEST_NOT_FOUND", "原消息不存在。");
     }
+    const excludedSources = [...new Set(
+      [commandSourceId ?? proof.commandSourceId, answerMessage.sourceId].filter(Boolean),
+    )];
     // 所有候选必须在首删前完成精确复核；事务内后续删除自增的控制不再反过来拒候选。
     const deletable = [];
     let skipped = 0;
@@ -1174,7 +1373,7 @@ function createChatService({
         expectedVersion: selection.version,
         scope: proof.scope,
         sourceIdsToExclude: selection.characterId === inside.characterId
-          ? [userMessage.sourceId]
+          ? excludedSources
           : [],
         nowMs,
         inTransaction: true,
@@ -1193,6 +1392,7 @@ function createChatService({
      核对、候选资格与第二事务操作三处。 */
   async function runVerification({
     request, proof, targetEvidence, candidates, truncated, controller,
+    commandSourceId = null,
   }) {
     const forget = proof.action === "forget";
     const temporary = proof.version === 3 && proof.mode === "temporary";
@@ -1309,7 +1509,9 @@ function createChatService({
           return;
         }
         if (forget) {
-          const { results, skipped } = deleteApprovedCandidates(inside, proof, approved, nowMs);
+          const { results, skipped } = deleteApprovedCandidates(
+            inside, proof, approved, nowMs, commandSourceId,
+          );
           writeVerificationResult(inside, "completed", {
             applied: results.length,
             unconfirmed: unresolved + skipped,
@@ -1352,10 +1554,12 @@ function createChatService({
     }
   }
 
-  function startVerification({ request, proof, targetEvidence, candidates, truncated }) {
+  function startVerification({
+    request, proof, targetEvidence, candidates, truncated, commandSourceId = null,
+  }) {
     const controller = new AbortController();
     const promise = runVerification({
-      request, proof, targetEvidence, candidates, truncated, controller,
+      request, proof, targetEvidence, candidates, truncated, controller, commandSourceId,
     }).then((status) => {
       notifyVerificationSettled(store.getRequest(request.id) ?? request, status);
       return status;
@@ -1378,6 +1582,8 @@ function createChatService({
     messages,
     contextVersion,
     operationContext = { candidates: [], recentText: "" },
+    preplannedPlan = null,
+    selection = false,
   }) {
     const controller = new AbortController();
     controllers.set(request.id, controller);
@@ -1388,57 +1594,64 @@ function createChatService({
       if (!pending || pending.status !== "pending") {
         return requestResult(pending);
       }
-      const credentials = await getCredentials();
-      const afterCredentials = store.getRequest(request.id);
-      if (!afterCredentials || afterCredentials.status !== "pending") {
-        return requestResult(afterCredentials);
-      }
-      if (!credentials) {
-        return failRequest(request.id, "CREDENTIALS_UNAVAILABLE");
-      }
-      if (!memory.isContextCurrent(request.characterId, contextVersion)) {
-        return staleRequest(request.id);
-      }
-      const response = await requestChatCompletion(
-        {
-          ...credentials,
-          messages,
-          timeoutMs,
-          signal: controller.signal,
-        },
-        fetchImpl,
-      );
-
-      const afterResponse = store.getRequest(request.id);
-      if (!afterResponse || afterResponse.status !== "pending") {
-        return requestResult(afterResponse);
-      }
-      if (!memory.isContextCurrent(request.characterId, contextVersion)) {
-        return staleRequest(request.id);
-      }
-
+      let afterResponse = pending;
       let parsed;
-      const userText = messages.at(-1).content;
-      try {
-        parsed = parseAssistantContent(response.content, userText);
-      } catch (error) {
-        return failRequest(request.id, error?.code ?? "INVALID_RESPONSE");
+      if (preplannedPlan) {
+        operationPlan = preplannedPlan;
+        parsed = { reply: "", memoryCandidates: [] };
+        afterResponse = pending;
+      } else {
+        const credentials = await getCredentials();
+        const afterCredentials = store.getRequest(request.id);
+        if (!afterCredentials || afterCredentials.status !== "pending") {
+          return requestResult(afterCredentials);
+        }
+        if (!credentials) {
+          return failRequest(request.id, "CREDENTIALS_UNAVAILABLE");
+        }
+        if (!memory.isContextCurrent(request.characterId, contextVersion)) {
+          return staleRequest(request.id);
+        }
+        const response = await requestChatCompletion(
+          {
+            ...credentials,
+            messages,
+            timeoutMs,
+            signal: controller.signal,
+          },
+          fetchImpl,
+        );
+
+        afterResponse = store.getRequest(request.id);
+        if (!afterResponse || afterResponse.status !== "pending") {
+          return requestResult(afterResponse);
+        }
+        if (!memory.isContextCurrent(request.characterId, contextVersion)) {
+          return staleRequest(request.id);
+        }
+
+        const userText = messages.at(-1).content;
+        try {
+          parsed = parseAssistantContent(response.content, userText);
+        } catch (error) {
+          return failRequest(request.id, error?.code ?? "INVALID_RESPONSE");
+        }
+        operationPlan = planOperation({
+          operationPresent: parsed.operationPresent,
+          operationNull: parsed.operationNull,
+          operation: parsed.operation,
+          relayPresent: parsed.relayPresent,
+          relay: parsed.relay,
+          intent: operationContext.intent ?? detectOperationIntent(userText),
+          candidates: operationContext.candidates,
+          characters: operationContext.characters ?? [],
+          characterCandidates: operationContext.characterCandidates ?? [],
+          currentCharacterId: request.characterId,
+          userText,
+          recentText: operationContext.recentText,
+          nowMs: currentMs(),
+        });
       }
-      operationPlan = planOperation({
-        operationPresent: parsed.operationPresent,
-        operationNull: parsed.operationNull,
-        operation: parsed.operation,
-        relayPresent: parsed.relayPresent,
-        relay: parsed.relay,
-        intent: operationContext.intent ?? detectOperationIntent(userText),
-        candidates: operationContext.candidates,
-        characters: operationContext.characters ?? [],
-        characterCandidates: operationContext.characterCandidates ?? [],
-        currentCharacterId: request.characterId,
-        userText,
-        recentText: operationContext.recentText,
-        nowMs: currentMs(),
-      });
 
       const operation = operationPlan.kind === "execute" ? operationPlan.operation : null;
       const twoPhaseCorrect =
@@ -1670,7 +1883,12 @@ function createChatService({
               anchorIdentityId: control.identityId,
               initiatorCharacterId: request.characterId,
               initiatorContextVersion: memory.getContextVersion(request.characterId),
-              commandSourceHash: sourceHash(userMessage.sourceId),
+              commandSourceHash: sourceHash(
+                operationPlan.operation.commandSourceId ?? userMessage.sourceId,
+              ),
+              ...(operationPlan.operation.commandSourceId
+                ? { commandSourceId: operationPlan.operation.commandSourceId }
+                : {}),
               verification: "pending",
               ...control,
             };
@@ -1716,13 +1934,25 @@ function createChatService({
           sourceId: userMessage.sourceId,
           createdAt: completedAt,
         });
-        return store.updateRequest(request.id, {
+        const updated = store.updateRequest(request.id, {
           status: "completed",
           completedAt,
           assistantMessageId: assistantId,
           memoryApplied,
         });
+        if (selection) {
+          store.clearOperationProof(request.id);
+        }
+        return updated;
       });
+      if (operationPlan.kind === "clarifyForget" && completed?.status === "completed") {
+        registerForgetClarification({
+          request: completed,
+          userMessage,
+          clarification: operationPlan.clarification,
+          at: completedAt,
+        });
+      }
       if (verificationStart) {
         startVerification({
           request: completed,
@@ -1730,6 +1960,7 @@ function createChatService({
           targetEvidence: verificationStart.targetEvidence,
           candidates: verificationStart.candidates,
           truncated: verificationStart.truncated,
+          commandSourceId: operationPlan.operation?.commandSourceId ?? null,
         });
       }
       return requestResult(completed);
@@ -1743,6 +1974,14 @@ function createChatService({
         STALE_OPERATION_CODES.has(error?.code)
       ) {
         return staleRequest(request.id, error.code);
+      }
+      if (selection) {
+        return failRequest(
+          request.id,
+          error instanceof AppError
+            ? error.code ?? FORGET_SELECTION_FAILED
+            : FORGET_SELECTION_FAILED,
+        );
       }
       const code = error?.code ?? "NETWORK_ERROR";
       return failRequest(request.id, code);
@@ -1817,6 +2056,75 @@ function createChatService({
       return requestResult(existing);
     }
 
+    invalidateFailedForgetSelections(characterId, conversation.id, at);
+    const clarificationState = peekForgetClarification(characterId, conversation.id, at);
+    if (clarificationState.pending) {
+      const pending = clarificationState.pending;
+      const intent = detectOperationIntent(userText);
+      if (intent.action || intent.reason === "multiple_actions") {
+        clearForgetClarification(characterId, conversation.id);
+      } else {
+        const answer = parseForgetTargetAnswer(userText, pending);
+        if (answer.kind === "none") {
+          clearForgetClarification(characterId, conversation.id);
+        } else {
+          clearForgetClarification(characterId, conversation.id);
+          const answerContextVersion = memory.getContextVersion(characterId);
+          const userMessageId = recordUserTurn({
+            characterId,
+            conversationId: conversation.id,
+            userText,
+            requestId: id,
+            at,
+            contextVersion: answerContextVersion,
+            operationProof: answer.kind === "select" ? FORGET_SELECTION_MARKER : null,
+          });
+          const answerRequest = store.getRequest(id);
+          if (clarificationState.expired) {
+            return completeForgetSelectionReply({
+              request: answerRequest,
+              reply: REPLIES.forgetTargetExpired,
+            });
+          }
+          if (answer.kind === "cancel") {
+            return completeForgetSelectionReply({
+              request: answerRequest,
+              reply: REPLIES.forgetTargetCancelled,
+            });
+          }
+          if (answer.kind === "invalid") {
+            return completeForgetSelectionReply({
+              request: answerRequest,
+              reply: REPLIES.forgetTargetInvalid,
+            });
+          }
+          const selected = pending.candidates[answer.index];
+          const answerMessage = store.getMessage(userMessageId);
+          const snapshot = {
+            characterId,
+            conversationId: conversation.id,
+            originalRequestId: pending.originalRequestId,
+            originalUserMessageId: pending.originalUserMessageId,
+            originalSourceId: pending.originalSourceId,
+            originalCommandText: pending.originalCommandText,
+            evidence: pending.evidence,
+            scope: pending.scope,
+            contextVersion: pending.contextVersion,
+            createdAt: pending.createdAt,
+            answerSourceId: answerMessage.sourceId,
+            target: selected.target,
+            entryId: selected.entryId,
+            version: selected.version,
+            factIdentityId: selected.factIdentityId,
+            sourceIdHash: selected.sourceIdHash,
+            body: selected.body,
+          };
+          forgetSelections.set(id, snapshot);
+          return trackRequest(runForgetSelection({ request: answerRequest, snapshot }));
+        }
+      }
+    }
+
     /* 无条件全局设置指令只在本轮原话中识别；命中后不组装模型上下文，
        也不读取凭据。无授权或混合任务的输入只做本地未更改说明。 */
     const setting = detectSharingSetting(userText);
@@ -1875,6 +2183,29 @@ function createChatService({
     if (!userMessage) {
       throw new AppError("REQUEST_NOT_FOUND", "原消息不存在。");
     }
+    const selectionSnapshot = forgetSelections.get(request.id);
+    if (!selectionSnapshot &&
+      (forgetSelectionMarkerOf(request) || request.errorCode === FORGET_SELECTION_FAILED)) {
+      return staleRequest(request.id, FORGET_SELECTION_EXPIRED);
+    }
+    if (selectionSnapshot) {
+      const retryAt = currentMs(nowMs);
+      const changed = forgetSelectionChanged(selectionSnapshot, retryAt);
+      if (changed) {
+        forgetSelections.delete(request.id);
+        store.clearOperationProof(request.id);
+        return staleRequest(request.id, FORGET_SELECTION_EXPIRED);
+      }
+      const selectionPending = store.prepareRetry(
+        request.id,
+        memory.getContextVersion(characterId),
+        FORGET_SELECTION_MARKER,
+      );
+      return trackRequest(runForgetSelection({
+        request: selectionPending,
+        snapshot: selectionSnapshot,
+      }));
+    }
     if (
       new Set(memory.listExcludedSources(characterId)).has(sourceHash(userMessage.sourceId))
     ) {
@@ -1906,6 +2237,26 @@ function createChatService({
     if (!request || request.characterId !== characterId) {
       throw new AppError("REQUEST_NOT_FOUND", "请求不存在。");
     }
+    const at = currentMs(nowMs);
+    const clarification = forgetClarifications.get(
+      forgetClarificationKey(characterId, request.conversationId),
+    );
+    if (clarification?.originalRequestId === request.id) {
+      clearForgetClarification(characterId, request.conversationId);
+    }
+    const selectionSnapshot = forgetSelections.get(request.id);
+    if (selectionSnapshot && request.status !== "pending") {
+      forgetSelections.delete(request.id);
+      store.clearOperationProof(request.id);
+      if (request.status === "failed") {
+        store.updateRequest(request.id, {
+          status: "stale",
+          completedAt: at,
+          errorCode: FORGET_SELECTION_EXPIRED,
+          memoryApplied: 0,
+        });
+      }
+    }
     if (request.status !== "pending") {
       if (request.status === "completed" && request.verificationStatus === "pending") {
         store.transaction(() => {
@@ -1921,13 +2272,16 @@ function createChatService({
       }
       return { cancelled: false, status: request.status, requestId: request.id };
     }
-    const at = currentMs(nowMs);
     store.updateRequest(request.id, {
       status: "cancelled",
       completedAt: at,
       memoryApplied: 0,
     });
     controllers.get(request.id)?.abort();
+    if (selectionSnapshot) {
+      forgetSelections.delete(request.id);
+      store.clearOperationProof(request.id);
+    }
     return { cancelled: true, status: "cancelled", requestId: request.id };
   }
 
@@ -1942,6 +2296,15 @@ function createChatService({
       return { conversation: existing, cancelledRequestIds: [] };
     }
     const at = currentMs(nowMs);
+    clearForgetClarification(characterId, existing.id);
+    invalidateFailedForgetSelections(characterId, existing.id, at);
+    for (const requestId of [...forgetSelections.keys()]) {
+      const snapshot = forgetSelections.get(requestId);
+      if (snapshot?.characterId === characterId && snapshot?.conversationId === existing.id) {
+        store.clearOperationProof(requestId);
+        forgetSelections.delete(requestId);
+      }
+    }
     const closed = store.closeConversation(existing.id, at);
     const cancelledRequestIds = [];
     for (const request of store.listPendingRequests(existing.id)) {
@@ -1974,7 +2337,22 @@ function createChatService({
       return { cancelled: 0 };
     }
     disposed = true;
-    const cancelled = store.cancelAllPendingRequests(currentMs());
+    const at = currentMs();
+    for (const requestId of [...forgetSelections.keys()]) {
+      const request = store.getRequest(requestId);
+      if (request?.status === "failed") {
+        store.updateRequest(requestId, {
+          status: "stale",
+          completedAt: at,
+          errorCode: FORGET_SELECTION_EXPIRED,
+          memoryApplied: 0,
+        });
+      }
+      store.clearOperationProof(requestId);
+      forgetSelections.delete(requestId);
+    }
+    forgetClarifications.clear();
+    const cancelled = store.cancelAllPendingRequests(at);
     for (const controller of controllers.values()) {
       controller.abort();
     }

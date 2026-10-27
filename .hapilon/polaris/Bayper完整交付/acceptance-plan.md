@@ -98,3 +98,11 @@ S08 最终验收入口的 Part B 已在该 Contract 文件内按 setup/driver/ob
 - **master 验收（2026-10-27）**：独立最终 [master-s03o-a-final-O584PFa8](evidence/master-s03o-a-final-O584PFa8/) 五套 **277/277、0 skip、exit 0、before/after 一致**；据此**受托接受 S03o-A 已测单轮明确 correct 本地补全有限能力**（非用户亲自确认）。先前 [master-s03o-a-review-kXFjGV8d](evidence/master-s03o-a-review-kXFjGV8d/) 虽 277/277 但 tests 变更，只作过程证据。
 - **live**：[master-s03o-a-live-Z7Y05M66](evidence/master-s03o-a-live-Z7Y05M66/) 10 REVIEW / 1 FAIL（C07），44 chat + 10 relation + 1 models，模型为 `/models` 验证的 `deepseek-flash`；C03 原始 `memoryOperation=null` 后 actual/effective correct，A/B 长期 body/version 不变、两条当日 temporary `expires=1793116799999`，单 assistant 如实说明、关系 equivalent；falseMerge 0、wrongDelete 0、wrongSync 0、leak 0，11 临时目录无残留。C07 different vs uncertain 仍 FAIL。
 - 接受边界：C02 本次成功不代表多轮澄清已修好；旧 C02/C03/C07 FAIL/Expected 保留。未覆盖 GUI/live 泛化、多轮澄清/pending、自然指代、C07、完整 S03 与 `POL-SEMOP-001～008` 聚合。版本 `0.1.200 → 0.1.201`（10 文件 11 处）待 snap；生产 150 行/测试 608 行经 master 审查为必要规模，本批不再重构。
+
+## S03o-B forget 目标澄清（2026-10-27 r77 批准，2026-10-28 r79 有限接受）
+
+- 计划与 Case：[s03o-b-target-plan.md](s03o-b-target-plan.md)；正式入口见 [cases.md](cases.md) `POL-CHATMEM-FORGET-CLARIFY-001～013`、`GUI-001`。
+- 范围：模型显式 `memoryOperation:null`、唯一 forget、topic 匹配候选时本地一次提问与选择承接；复用既有两阶段 forget；同 identity 阶段 1 直接删除、独立 identity 关系核验；原命令与回答 source 防回流；scope self 保留。
+- Runner：`node --test tests/acceptance/chat-memory-operations.spec.cjs`；`node --test --test-concurrency=1 --test-timeout=90000 tests/acceptance/memory-semantic-operations.spec.cjs`；`node --test --test-concurrency=1 tests/acceptance/chat-verification-ui.spec.cjs`。
+- 边界：真实 chat.sendMessage/store/SQLite；chat 与关系 HTTP 为构造；GUI 为真实 Electron + 构造 HTTP，不是真实模型/人类体验。C02/C03/C07 原 Expected 不改。
+- **master 有限接受**：独立后端 `evidence/master-s03o-b-core-HAu7KrCs` 313/313、独立 GUI `evidence/master-s03o-b-gui-M3KWYxVe` 9/9，均 0 skip/exit 0/before-after 一致；master 实际查看截图 `evidence/s03m-lifecycle/gui-shots/2026-10-27T16-01-26-121Z-30808`。接受仅限本批已测删除目标澄清，不是完整 S03；未覆盖真实模型/自然泛化、临时跨持有者/回答前到期独立 Case、GUI 多候选/同 identity/临时/self、correct 时间、完整 S03。规模 561 生产/1219 测试经 master 审查允许作为本片成果；未提前报告为执行偏差。

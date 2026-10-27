@@ -4404,3 +4404,61 @@ test("POL-CHATMEM-CLARIFY-002g 显式null负例：每项独立 setup 且全库�
     });
   }
 });
+
+test("POL-CHATMEM-FORGET-CLARIFY-008/008b 独立identity候选只做一次关系核验", async (t) => {
+  for (const relation of ["equivalent", "different"]) {
+    await t.test(relation, async (t2) => {
+      const ctx = await setupContext(t2);
+      const aConversation = openConversation(ctx.store);
+      const bConversation = openConversation(ctx.store, "b");
+      await chatTurn(ctx, aConversation, "我平时喝咖啡一定要加糖。", [{
+        factKey: "pref.coffee", body: "我平时喝咖啡一定要加糖",
+        kind: "preference", trust: "stated", evidence: "我平时喝咖啡一定要加糖",
+      }]);
+      await chatTurn(ctx, bConversation, "我的咖啡都要甜的。", [{
+        factKey: "pref.coffeeB", body: "我的咖啡都要甜的",
+        kind: "preference", trust: "stated", evidence: "我的咖啡都要甜的",
+      }], "b");
+      const bBefore = entryOf(ctx.store, "b", "pref.coffeeB");
+      ctx.server.enqueue(({ res }) => sendEnvelope(res, {
+        reply: "模型说已经删除。", memoryCandidates: [], memoryOperation: null, memoryRelay: null,
+      }));
+      const question = await ctx.store.chat.sendMessage({
+        characterId: "a", conversationId: aConversation.id,
+        text: "请忘记我喜欢咖啡这件事。", requestId: `clarify-008-q-${relation}`,
+      });
+      assert.equal(question.status, "completed");
+      assert.match(question.reply, /\[第 1 条\]/u);
+      ctx.server.enqueue(relationResponder((pairs) =>
+        pairs.map((pair) => relationResult(pair, relation))));
+      const answer = await ctx.store.chat.sendMessage({
+        characterId: "a", conversationId: aConversation.id,
+        text: "第 1 条", requestId: `clarify-008-a-${relation}`,
+      });
+      assert.equal(answer.status, "completed");
+      await waitFor(() =>
+        proofOf(ctx, `clarify-008-a-${relation}`).verification_status !== "pending");
+      assert.equal(
+        proofOf(ctx, `clarify-008-a-${relation}`).verification_status,
+        "completed",
+      );
+      assert.equal(verificationRequests(ctx).length, 1, "整个操作最多一次关系核验");
+      assert.equal(entryOf(ctx.store, "a", "pref.coffee"), null);
+      if (relation === "equivalent") {
+        assert.equal(entryOf(ctx.store, "b", "pref.coffeeB"), null);
+      } else {
+        const bAfter = entryOf(ctx.store, "b", "pref.coffeeB");
+        assert.equal(bAfter.body, bBefore.body);
+        assert.equal(bAfter.version, bBefore.version);
+      }
+      assert.equal(ctx.store.memory.listMemories("c").length, 0);
+      const dCount = withDatabase(ctx.store.dbPath, (db) =>
+        db.prepare("SELECT COUNT(*) AS count FROM memory_entries WHERE character_id = 'd'")
+          .get().count);
+      assert.equal(dCount, 0, "未知D不得新增记忆");
+      const relationships = withDatabase(ctx.store.dbPath, (db) =>
+        db.prepare("SELECT COUNT(*) AS count FROM relationships").get().count);
+      assert.equal(relationships, 3, "不得新增角色关系");
+    });
+  }
+});
