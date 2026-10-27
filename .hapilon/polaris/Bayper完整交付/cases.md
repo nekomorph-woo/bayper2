@@ -125,3 +125,7 @@ S03l-b语义判定前置对照：固定16对Contract见[s03l-semantic-probe-plan
 ## S03l-b 独立留出补充
 
 POL-SEM-HOLD-001及01～16子项见[s03l-holdout-plan.md](s03l-holdout-plan.md)，真实Runner为tools/memory-tuning/semantic-probe.cjs --dataset holdout；Expected调用前冻结。结果与边界见[s03l-holdout-review.md](s03l-holdout-review.md)：14PASS2FAIL、总体FAIL；不得替代原SEM产品Case。
+
+## S03l-b 已核实事实的原子关联
+
+POL-ASSOC-001～005，P0必需、Codex受托确认v1，唯一Contract见[s03l-association-plan.md](s03l-association-plan.md)。Runner tests/acceptance/memory-association.spec.cjs，9项领域测试；整体及邻接最终123项领域、19unit独立通过，逐项依据见[s03l-association-review.md](s03l-association-review.md)。等价关系由构造Fixture提供，本片只验真实事务与管理链，不能替代尚未通过的模型语义/原SEM Case。

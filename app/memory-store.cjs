@@ -288,6 +288,46 @@ function createMemoryStore(db) {
     setEntryIdentity: db.prepare(`
       UPDATE memory_entries SET fact_identity_id = ? WHERE id = ?
     `),
+    /* 关联迁移不重写正文、factKey、来源或派生记录，只换身份并递增版本，
+       使在途的旧版本选择失效；FTS 因此不需要重建。 */
+    reassignEntryIdentity: db.prepare(`
+      UPDATE memory_entries
+      SET fact_identity_id = ?, version = version + 1, updated_at = ?
+      WHERE id = ?
+    `),
+    reassignAliases: db.prepare(`
+      UPDATE memory_fact_aliases SET identity_id = ? WHERE identity_id = ?
+    `),
+    listConflictFingerprints: db.prepare(`
+      SELECT DISTINCT fingerprint FROM memory_fact_alias_conflicts
+      WHERE identity_id = ?
+    `),
+    listConflictIdentityIds: db.prepare(`
+      SELECT identity_id FROM memory_fact_alias_conflicts WHERE fingerprint = ?
+    `),
+    deleteConflictsForFingerprint: db.prepare(`
+      DELETE FROM memory_fact_alias_conflicts WHERE fingerprint = ?
+    `),
+    copyAliasConflicts: db.prepare(`
+      INSERT OR IGNORE INTO memory_fact_alias_conflicts (
+        fingerprint, identity_id, created_at
+      )
+      SELECT fingerprint, ?, created_at
+      FROM memory_fact_alias_conflicts
+      WHERE identity_id = ?
+    `),
+    deleteAliasConflicts: db.prepare(`
+      DELETE FROM memory_fact_alias_conflicts WHERE identity_id = ?
+    `),
+    copyShareIdentityControl: db.prepare(`
+      INSERT OR IGNORE INTO memory_share_identity_controls (identity_id, created_at)
+      SELECT ?, created_at
+      FROM memory_share_identity_controls
+      WHERE identity_id = ?
+    `),
+    reassignLegacyShareControls: db.prepare(`
+      UPDATE memory_share_controls SET identity_id = ? WHERE identity_id = ?
+    `),
     insertFactIdentity: db.prepare(`
       INSERT OR IGNORE INTO memory_fact_identities (identity_id, created_at)
       VALUES (?, ?)
@@ -393,6 +433,16 @@ function createMemoryStore(db) {
     hasForgetIdentityControl: db.prepare(`
       SELECT 1 AS found FROM memory_forget_identity_controls
       WHERE character_id = ? AND identity_id = ?
+    `),
+    /* 身份级删除限制可能由已不再持有条目的角色留下；关联前保守拒绝，
+       因此同时检查旧控制行中指向该身份的引用。 */
+    hasForgetIdentityReference: db.prepare(`
+      SELECT 1 AS found FROM memory_forget_identity_controls
+      WHERE identity_id = ?
+      UNION ALL
+      SELECT 1 AS found FROM memory_forget_controls
+      WHERE identity_id = ?
+      LIMIT 1
     `),
     addForgetIdentityControl: db.prepare(`
       INSERT OR IGNORE INTO memory_forget_identity_controls (
@@ -544,6 +594,36 @@ function createMemoryStore(db) {
     statements.setEntryIdentity.run(identityId, entryId);
   }
 
+  function reassignEntryIdentity(entryId, identityId, updatedAt) {
+    statements.reassignEntryIdentity.run(identityId, updatedAt, entryId);
+  }
+
+  /* 把 from 身份的严格指纹别名、歧义引用与禁分享限制并入 to。
+     只迁移 from 的引用；同一指纹下其他第三方身份保持原样，不消除歧义。
+     若某指纹在合并后只剩 canonical，则本次合并实际消除了该歧义，删除冲突行，
+     让精确正文别名重新可用；仍有第三方身份时保留 canonical 与第三方的冲突。 */
+  function mergeFactIdentities(fromIdentityId, toIdentityId) {
+    const resolvedConflictFingerprints = statements.listConflictFingerprints
+      .all(fromIdentityId)
+      .map((row) => row.fingerprint)
+      .filter((fingerprint) => {
+        const otherIdentityIds = statements.listConflictIdentityIds
+          .all(fingerprint)
+          .map((row) => row.identity_id)
+          .filter((identityId) => identityId !== fromIdentityId);
+        return otherIdentityIds.every((identityId) => identityId === toIdentityId);
+      });
+    statements.reassignAliases.run(toIdentityId, fromIdentityId);
+    statements.copyAliasConflicts.run(toIdentityId, fromIdentityId);
+    statements.deleteAliasConflicts.run(fromIdentityId);
+    for (const fingerprint of resolvedConflictFingerprints) {
+      statements.deleteConflictsForFingerprint.run(fingerprint);
+    }
+    statements.copyShareIdentityControl.run(toIdentityId, fromIdentityId);
+    statements.removeShareIdentityControl.run(fromIdentityId);
+    statements.reassignLegacyShareControls.run(toIdentityId, fromIdentityId);
+  }
+
   function insertFactIdentity(identityId, createdAt) {
     statements.insertFactIdentity.run(identityId, createdAt);
   }
@@ -618,6 +698,12 @@ function createMemoryStore(db) {
 
   function hasForgetIdentityControl(characterId, identityId) {
     return Boolean(statements.hasForgetIdentityControl.get(characterId, identityId));
+  }
+
+  function hasForgetIdentityReference(identityId) {
+    return Boolean(
+      statements.hasForgetIdentityReference.get(identityId, identityId),
+    );
   }
 
   function addForgetIdentityControl(characterId, identityId, createdAt) {
@@ -718,6 +804,8 @@ function createMemoryStore(db) {
     listEntriesByIdentity,
     getEntryByCharacterIdentity,
     setEntryIdentity,
+    reassignEntryIdentity,
+    mergeFactIdentities,
     insertFactIdentity,
     getAliasIdentity,
     listAliasIdentityIds,
@@ -729,6 +817,7 @@ function createMemoryStore(db) {
     search,
     getForgetControl,
     hasForgetIdentityControl,
+    hasForgetIdentityReference,
     addForgetIdentityControl,
     hasDeletedFactFingerprint,
     addDeletedFactFingerprint,

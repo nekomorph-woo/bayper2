@@ -1077,14 +1077,17 @@ test("POL-ANALYSIS-010 历史 checkpoint 验证数量有界", async (t) => {
   const sourceIds = [];
   for (let index = 0; index < 9; index += 1) {
     const sourceId = `external:${index.toString(16).padStart(64, "0")}`;
-    ctx.memory.remember({
+    // 每次使用不同正文，避免被上一轮删除原文的防回流控制拦下。
+    const remembered = ctx.memory.remember({
       characterId: "c",
       factKey: `seed.${index}`,
-      body: "旧理解",
+      body: `旧理解第${index + 1}条`,
       kind: "detail",
       sourceId,
     });
-    ctx.memory.forget({ characterId: "c", factKey: `seed.${index}` });
+    assert.equal(remembered.created, true);
+    const forgotten = ctx.memory.forget({ characterId: "c", factKey: `seed.${index}` });
+    assert.equal(forgotten.deleted, 1);
     sourceIds.push(sourceId);
   }
   const insert = ctx.db.prepare(`

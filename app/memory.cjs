@@ -325,6 +325,43 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     );
   }
 
+  /* 关联执行器只接受上层已确认的等价决定；这里不判断正文语义，只复用既有
+     事实校验与来源控制。整组都必须有效：任何成员过期、来源被排除、主题见闻、
+     推断事实或 metadata 不一致都拒绝，避免只校验选中的两条。 */
+  function assertAssociableEntries(entries, nowMs) {
+    for (const entry of entries) {
+      if (entry.expiresAt !== null && entry.expiresAt <= nowMs) {
+        throw new MemoryError("ASSOCIATION_REJECTED", "已到期的记忆不能关联。");
+      }
+      if (store.hasSourceControl(entry.characterId, sourceIdHash(entry.sourceId))) {
+        throw new MemoryError("ASSOCIATION_REJECTED", "来源已被排除，不能关联。");
+      }
+      if ((entry.sourceKind ?? "user") === "theme") {
+        throw new MemoryError("ASSOCIATION_REJECTED", "主题见闻不能关联。");
+      }
+      if (entry.trust === "inferred") {
+        throw new MemoryError("ASSOCIATION_REJECTED", "推断事实不能关联。");
+      }
+    }
+    const reference = entries[0];
+    if (!entries.every((entry) => sameFactMetadata(reference, entry))) {
+      throw new MemoryError(
+        "ASSOCIATION_REJECTED",
+        "身份组内存在类别、性质、来源种类或有效期限不同的记忆。",
+      );
+    }
+  }
+
+  function associationSelection(value, side) {
+    if (!value || typeof value !== "object") {
+      throw new MemoryError("INVALID_INPUT", `${side} 必须包含记忆ID与版本。`);
+    }
+    return {
+      entryId: cleanText(value.entryId, "记忆ID", 200),
+      expectedVersion: expectedVersionOf(value.expectedVersion),
+    };
+  }
+
   /* 分享/转告接收者：逐身份检查相关控制，并核对接收者已删除原文的
      本角色指纹；孤儿旧行按旧键兼容。删除指纹只阻止该角色学回同文，
      不合并双方身份。 */
@@ -1212,6 +1249,96 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     });
   }
 
+  /* S03l-b 事实等价决定的内部执行器：只供可信应用内核验层在确认等价后调用，
+     不绑定 IPC/HTTP/模型输出，也不负责判断正文是否等价。关联不新增持有者、
+     不覆盖正文/factKey/来源/派生记录，只把两组既有身份并入确定的 canonical
+     身份。两个身份 id 的排序在选择前固定，重复执行得到同一结果。 */
+  function associateFacts(input = {}) {
+    const leftSelection = associationSelection(input.left, "left");
+    const rightSelection = associationSelection(input.right, "right");
+    const nowMs = resolveNow(input.nowMs);
+    if (leftSelection.entryId === rightSelection.entryId) {
+      throw new MemoryError("INVALID_INPUT", "不能把一条记忆与自身关联。");
+    }
+
+    const applyAssociation = () => {
+      const left = store.getEntryById(leftSelection.entryId);
+      if (!left) {
+        throw new MemoryError("ENTRY_NOT_FOUND", "左侧记忆不存在。");
+      }
+      const right = store.getEntryById(rightSelection.entryId);
+      if (!right) {
+        throw new MemoryError("ENTRY_NOT_FOUND", "右侧记忆不存在。");
+      }
+      if (
+        left.version !== leftSelection.expectedVersion ||
+        right.version !== rightSelection.expectedVersion
+      ) {
+        throw new MemoryError("MEMORY_CHANGED", "记忆已更新，请重新确认。");
+      }
+
+      const leftIdentityId = identityOfEntry(left, nowMs);
+      const rightIdentityId = identityOfEntry(right, nowMs);
+      // 已同一身份：当前版本重复确认是幂等的，不重复写控制或递增版本。
+      if (leftIdentityId === rightIdentityId) {
+        return {
+          associated: false,
+          alreadyAssociated: true,
+          identityId: leftIdentityId,
+          mergedIdentityId: null,
+          affectedEntries: 0,
+          affectedCharacters: [],
+          contextVersions: {},
+        };
+      }
+
+      const entries = [
+        ...store.listEntriesByIdentity(leftIdentityId),
+        ...store.listEntriesByIdentity(rightIdentityId),
+      ];
+      // 整组有效性必须在任何关联写入前核对；第三持有者的来源限制同样生效。
+      assertAssociableEntries(entries, nowMs);
+      // 身份级删除限制可能由已不持有条目的角色留下，保守拒绝整体关联。
+      if (
+        store.hasForgetIdentityReference(leftIdentityId) ||
+        store.hasForgetIdentityReference(rightIdentityId)
+      ) {
+        throw new MemoryError(
+          "ASSOCIATION_FORGET_RESTRICTED",
+          "待关联记忆上存在删除限制，不能关联。",
+        );
+      }
+
+      const canonicalIdentityId =
+        leftIdentityId < rightIdentityId ? leftIdentityId : rightIdentityId;
+      const mergedIdentityId =
+        canonicalIdentityId === leftIdentityId ? rightIdentityId : leftIdentityId;
+      for (const entry of entries) {
+        store.reassignEntryIdentity(entry.id, canonicalIdentityId, nowMs);
+      }
+      store.mergeFactIdentities(mergedIdentityId, canonicalIdentityId);
+
+      const affectedCharacters = [
+        ...new Set(entries.map((entry) => entry.characterId)),
+      ].sort();
+      const contextVersions = {};
+      for (const characterId of affectedCharacters) {
+        contextVersions[characterId] = store.bumpContextVersion(characterId, nowMs);
+      }
+      return {
+        associated: true,
+        alreadyAssociated: false,
+        identityId: canonicalIdentityId,
+        mergedIdentityId,
+        affectedEntries: entries.length,
+        affectedCharacters,
+        contextVersions,
+      };
+    };
+    // 身份、别名、禁分享限制与版本递增必须同一事务；任何失败整体回滚。
+    return store.transaction(applyAssociation);
+  }
+
   /* 供 S03b 组装上下文：核心设定、重要偏好与经历分段并有字符预算，
      不是把所有历史塞进提示词。最近聊天分段不在本切片。 */
   function buildContext(input = {}) {
@@ -1321,6 +1448,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     setAutoShareEnabled,
     restrictSharing,
     allowSharing,
+    associateFacts,
     buildContext,
     getContextVersion,
     isContextCurrent,
