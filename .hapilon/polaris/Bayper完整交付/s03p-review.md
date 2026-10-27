@@ -150,6 +150,18 @@
 
 master基于实际diff、真实chat/SQLite业务Case与独立执行结果，有限接受 preference 模糊时间→“就今天”的后端承接、双来源有效读、更正删除防回流与重试生命周期；不接受完整S03或整个产品。生产630行增量按必要职责审查保留，未预先报告超规模的执行偏差保留，后续不机械照搬。
 
-证据：`evidence/master-s03p-core-JfUqOFGB` 五套353/353、0skip、exit0、前后SHA一致；补齐后 `evidence/master-s03p-coverage-c10d1Wal` 两套242/242、0skip、exit0、前后SHA一致，其他三套生产未变。模型为构造HTTP，非真实模型体验。GUI Runner仅静态检查，POL-CHATMEM-CORRECT-TIME-GUI-001仍NOT_COVERED；等待睡眠任务释放GUI后继续。
+证据：`evidence/master-s03p-core-JfUqOFGB` 五套353/353、0skip、exit0、前后SHA一致；补齐后 `evidence/master-s03p-coverage-c10d1Wal` 两套242/242、0skip、exit0、前后SHA一致，其他三套生产未变。模型为构造HTTP，非真实模型体验。该后端快照时GUI尚未执行；后续GUI结果见本文末“S03p GUI与失效投影有限接受”，历史边界保留。
 
 本阶段按snap保存实现、Case、Runner及记录；快照不代表GUI或父级通过，不推送。
+
+## 历史：master GUI首轮及修后复验（2026-10-28）
+
+完整chat-verification-ui套件两次均9/10，不能接受新增GUI。第一轮`evidence/master-s03p-gui-yqiBxr5F`在最后来源失效fixture处因SELECT漏id导致SQLite绑定undefined，属Runner ERROR；Claude补id和断言后第二轮`evidence/master-s03p-gui-saNPuBEE`等待失效标签超时，随后确认为IPC丢字段，修复与接受见下节。两轮各before/after一致，9项旧GUI通过。新Case前面的两轮澄清、今日临时、长期保留、B同步及面板正文均通过，不代表最后标签完成。master查看首次三个实际截图，澄清与结果文字可读；未取得人类体验。当时退回Claude调查，未据前半段通过接受整条GUI；既有后端有限验收结论保留。
+
+## S03p GUI与失效投影有限接受（2026-10-28，Codex受托）
+
+master独立完整GUI10/10、0skip、exit0，证据`evidence/master-s03p-gui-LJcNfoKf`，before/after SHA一致；文案同步后专属Case1/1、0skip、exit0，`evidence/master-s03p-label-44AoRgY3`，before/after一致。实际查看澄清问题、今日结果、长期与临时并列及失效标签截图，文字可读且无裁切。本轮接受POL-CHATMEM-CORRECT-TIME-GUI-001及已跑旧GUI回归，不代表真实模型、人类体验、全部S03或Goal。
+
+修复经过：第一次Runner漏SELECT id是ERROR；第二次暴露真实main memoryEntryForRenderer漏effective布尔，导致后端无效状态未到renderer。Claude补1行布尔投影，并把“只显示当前有效记忆”的矛盾文案改为来源失效会标注；不暴露sourceId等内部字段。测试补ID/更新命中和失败诊断。原两次失败保留；失效来源仍为协议夹具，不冒充公开撤权入口。
+
+受托决定：此记忆修复自洽且已独立验证，可单独snap；main仅暂存effective投影一行，睡眠/通知改动不混入。后端已有有限接受保持，真实模型语义及父级待办继续。

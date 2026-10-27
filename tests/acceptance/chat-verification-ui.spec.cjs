@@ -221,13 +221,40 @@ function readTemporaryRows(dataDir) {
   db.exec("PRAGMA busy_timeout = 2000");
   try {
     return db.prepare(`
-      SELECT character_id, body, fact_identity_id, expires_at, source_id
+      SELECT id, character_id, body, fact_identity_id, expires_at, source_id
       FROM memory_entries WHERE expires_at IS NOT NULL
       ORDER BY character_id ASC, id ASC
     `).all();
   } finally {
     db.close();
   }
+}
+
+/* 失效标签超时时保留 DB 命中、临时 link、IPC 投影与 DOM 文本；只诊断，不改变断言。 */
+async function dumpS03pPanelDiagnostics({ ui, page, shotDir, tempId }) {
+  const db = new DatabaseSync(path.join(ui.dataDir, DB_FILE));
+  db.exec("PRAGMA busy_timeout = 2000");
+  try {
+    const row = db.prepare(
+      "SELECT id, character_id, source_id, expires_at, fact_identity_id " +
+      "FROM memory_entries WHERE id = ?",
+    ).get(tempId);
+    const entryLinks = db.prepare(
+      "SELECT * FROM memory_temporary_entry_links WHERE entry_id = ?",
+    ).all(tempId);
+    console.log("S03P_DIAG_DB", JSON.stringify({ row, entryLinks }));
+  } finally {
+    db.close();
+  }
+  const ipc = await page.evaluate(async () => (
+    window.bayperMemory
+      ? window.bayperMemory.listMemories({ characterId: "rin", page: 0 })
+      : { missing: "bayperMemory" }
+  ));
+  console.log("S03P_DIAG_IPC", JSON.stringify(ipc));
+  const dom = await page.locator(".memory-entry-meta").allTextContents();
+  console.log("S03P_DIAG_DOM", JSON.stringify(dom));
+  await page.screenshot({ path: path.join(shotDir, "time-memory-invalid-label-timeout.png") });
 }
 
 function readLatestRequestStatus(dataDir) {
@@ -898,18 +925,34 @@ test("POL-CHATMEM-CORRECT-TIME-GUI-001 两轮时间澄清与面板失效标签",
   await page.screenshot({ path: path.join(shotDir, "time-memory-panel.png") });
 
   // 协议 fixture：只把来源改坏以验证“已失效”标签，不声称存在聊天撤权入口。
+  assert.ok(aTemps[0].id, "夹具更新前必须存在临时条目ID");
   const db = new DatabaseSync(path.join(ui.dataDir, DB_FILE));
   db.exec("PRAGMA busy_timeout = 2000");
   db.prepare("UPDATE memory_entries SET source_id = ? WHERE id = ?")
     .run(`${aTemps[0].source_id}:garbage`, aTemps[0].id);
   db.close();
+  const updatedTemp = readTemporaryRows(ui.dataDir).find((row) => row.id === aTemps[0].id);
+  assert.equal(
+    updatedTemp?.source_id,
+    `${aTemps[0].source_id}:garbage`,
+    "SQLite 更新必须命中临时条目",
+  );
   await page.locator("#memory-close").click();
   await page.locator("#memory-open").click();
   await page.locator("#memory-overlay").waitFor({ state: "visible" });
   await page.locator("#memory-character").selectOption("rin");
-  await page.waitForFunction(() => Array.from(
-    document.querySelectorAll(".memory-entry-meta"),
-  ).some((node) => node.textContent.includes("已失效（来源已变化）")));
+  try {
+    await page.waitForFunction(() => Array.from(
+      document.querySelectorAll(".memory-entry-meta"),
+    ).some((node) => node.textContent.includes("已失效（来源已变化）")));
+  } catch (error) {
+    try {
+      await dumpS03pPanelDiagnostics({ ui, page, shotDir, tempId: aTemps[0].id });
+    } catch (diagnosticError) {
+      console.log("S03P_DIAG_FAILED", diagnosticError?.message ?? diagnosticError);
+    }
+    throw error;
+  }
   await page.screenshot({ path: path.join(shotDir, "time-memory-invalid-label.png") });
   console.log(`S03P_GUI_SHOTS ${shotDir}`);
 });

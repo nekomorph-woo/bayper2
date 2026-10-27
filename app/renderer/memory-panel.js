@@ -13,7 +13,7 @@
             <div>
               <p class="eyebrow">本地记忆</p>
               <h2 id="memory-title">记忆</h2>
-              <p id="memory-subtitle" class="status-text">只显示当前有效的记忆，可纠正或删除。</p>
+              <p id="memory-subtitle" class="status-text">可查看、更正或删除记忆；来源失效的内容会标注。</p>
             </div>
             <button id="memory-close" class="btn btn-ghost btn-small" type="button" aria-label="关闭记忆">
               关闭

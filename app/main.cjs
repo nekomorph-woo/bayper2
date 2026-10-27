@@ -732,6 +732,7 @@ function memoryEntryForRenderer(entry) {
     narratorCharacterId: entry.narratorCharacterId ?? null,
     derived: entry.derived,
     sharingRestricted: entry.sharingRestricted === true,
+    effective: entry.effective !== false,
   };
 }
 

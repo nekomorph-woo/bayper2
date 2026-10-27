@@ -188,4 +188,4 @@ S08 是最终验收入口，不新增 S09 父级；7 个 `POL-FINAL` ID 是既�
 
 ## S03p 今日时间澄清（2026-10-28）
 
-POL-CHATMEM-CORRECT-TIME-001～011及002b/004b/010b/010c：Contract见[s03p-temporal-clarification-plan.md](s03p-temporal-clarification-plan.md)，细分Runner及证据见[s03p-review.md](s03p-review.md)。master受托批准并有限接受已测后端范围；真实chat/SQLite+构造模型HTTP。POL-CHATMEM-CORRECT-TIME-GUI-001为真实界面两轮承接与失效标签，Runner位于tests/acceptance/chat-verification-ui.spec.cjs，已编写但未执行，NOT_COVERED。
+POL-CHATMEM-CORRECT-TIME-001～011及002b/004b/010b/010c：Contract见[s03p-temporal-clarification-plan.md](s03p-temporal-clarification-plan.md)，细分Runner及证据见[s03p-review.md](s03p-review.md)。master受托批准Contract；真实chat/SQLite+构造模型HTTP，执行结果见review。POL-CHATMEM-CORRECT-TIME-GUI-001为真实界面两轮承接与失效标签，Runner位于tests/acceptance/chat-verification-ui.spec.cjs，实际执行与受托判断见s03p-review.md；该Case已完成独立GUI验收。

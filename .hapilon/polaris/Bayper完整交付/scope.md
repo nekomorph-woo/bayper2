@@ -12,6 +12,12 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 
 此处保存用户对active Goal的当前执行约束；系统Goal工具仅能更新状态，不能改写仍进行中的objective原文，因此不把本文同步冒称系统Goal字段已修改。原系统Goal本已包含Polaris master与流程迭代要求，本条将其持续执行方式明确化。
 
+## 当前阶段（2026-10-28，S03p后端已保存，S07睡眠验收中）
+
+S03p preference 时间澄清后端已受托有限接受并snap `376bf33` / `0.1.206`；证据与未覆盖项以[s03p-review.md](s03p-review.md)为准，真实界面两轮Case及失效标签已独立10/10回归、最终文案1/1验收，不代表S03整体完成。GUI当前由master掌控，睡眠独立验收及通知连续可读性问题仍待收口。S07睡眠接线与唤醒仍在修复/验收中，不宣称候选正式发布；见[s07-sleep-master-review.md](s07-sleep-master-review.md)。
+
+接续顺序：收口这两项实际产品路径→按其影响验收并snap→回到S01～S08与最终Contract缺口。既有真实模型语义、其余记忆场景、角色/服装/36动作覆盖、故事与最终原生体验仍在Goal范围，不用局部计数替代父级闭环。详细历史阶段仅供追溯，不与本节竞争当前状态。
+
 ## 按可用路径推进
 
 | 切片 | 用户结果与覆盖来源 | 当前结果 |
@@ -76,7 +82,7 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 
 工具组织REQ-41贯穿所有切片：现有SQLite/造型目录工具是已存在能力，新增项目工具仍须自包含审查，不将此横向约束标作一次性完成。
 
-## 当前阶段：S03o-B forget 目标澄清已测有限接受；不是完整 S03（2026-10-28 r79）
+## 历史阶段：S03o-B forget 目标澄清已测有限接受；不是完整 S03（2026-10-28 r79）
 
 master 2026-10-28 **受托有限接受 S03o-B 本批已测删除目标澄清能力**（非用户亲自确认，不是完整 S03）。独立后端 `evidence/master-s03o-b-core-HAu7KrCs` **313/313、0 skip、exit 0、before/after 一致**；独立 GUI `evidence/master-s03o-b-gui-M3KWYxVe` **9/9、0 skip、exit 0、before/after 一致**；当前 SHA 均核对 OK。master 实际查看截图 `evidence/s03m-lifecycle/gui-shots/2026-10-27T16-01-26-121Z-30808` 的 clarify-question/phase1-pending/phase2-final：真实候选问题、输入、单 assistant 原位更新与输入恢复可读；真实 Electron/SQLite + 构造 HTTP，不是人类体验或真实模型。
 
