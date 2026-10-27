@@ -326,6 +326,7 @@ function createChatMemoryVerification({
         messages: buildRelationMessages(pairs),
         timeoutMs: VERIFICATION_TIMEOUT_MS,
         maxTokens: MAX_VERIFICATION_TOKENS,
+        temperature: 0,
         signal,
       },
       undefined,

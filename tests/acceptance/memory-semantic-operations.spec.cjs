@@ -783,6 +783,31 @@ test("POL-SEMOP-006 普通聊天/无候选不发额外请求；有候选最多�
   assert.equal(ctx.store.automaticBudget, null);
 });
 
+test("POL-SEMOP-001a 关系核验使用 temperature 0，普通聊天仍为 0.7", async (t) => {
+  const ctx = await setupContext(t);
+  const aConversation = openConversation(ctx.store);
+  const bConversation = openConversation(ctx.store, "b");
+  await seedCoffeeA(ctx, aConversation);
+  await chatTurn(ctx, bConversation, "我也爱喝咖啡。", [
+    { factKey: "pref.coffeeB", body: "用户也爱喝咖啡", kind: "preference", trust: "stated", evidence: "我也爱喝咖啡" },
+  ], "b");
+  const isRelation = (body) => body?.messages?.some((message) =>
+    message.role === "system" && message.content.includes("记忆事实关系判定器"));
+  const result = await sendCorrection(ctx, aConversation, "不是咖啡，我更喜欢茶，请帮我改过来。", {
+    needle: "咖啡", excerpt: "我更喜欢茶", evidence: "请帮我改过来",
+  }, {
+    verification: relationResponder((pairs) => pairs.map((pair) => relationResult(pair, "equivalent"))),
+  });
+  await waitFor(() => verificationRequests(ctx).length === 1);
+  const chatBodies = ctx.server.requests.filter((body) => !isRelation(body));
+  assert.equal(verificationRequests(ctx)[0].temperature, 0);
+  assert.equal(chatBodies.length, 3);
+  for (const body of chatBodies) assert.equal(body.temperature, 0.7);
+  await waitFor(() => ctx.store.chat.getRequest({
+    characterId: "a", requestId: result.requestId,
+  }).verificationStatus !== "pending");
+});
+
 test("POL-SEMOP-005d 候选来源被排除时不发核验请求", async (t) => {
   const ctx = await setupContext(t);
   const aConversation = openConversation(ctx.store);

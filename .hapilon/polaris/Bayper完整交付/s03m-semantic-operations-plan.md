@@ -687,3 +687,47 @@ master 独立两套件 **127/127 pass、0 skipped、exit 0**、before/after 相�
 - 规模：本轮生产 **+22 行**（总计 +123/−11，含 r58/r59）；测试 **+51 行**（总计 +282）；未超 <40/<100。报告 `evidence/s03m-b2/c10c-subject-boundary-report.md`。
 - 接受结论（2026-10-27 r61）：master 实际审查最终 diff 并独立稳定复验 `evidence/master-c10-stable-oC19XDFt/`：tests **130/130 pass、0 skipped、exit 0**，L1/L2 dry 各 **11 DRY-RUN、exit 0**，before/after 完全一致，22 个临时路径无残留。据此**受托接受本批已测 C10 事件时间/主体授权有限修复与 B2 工具 dry 能力**；不是完整 S03、真实模型或用户人工确认。上一 `master-c10-final-tBIvlAZo` 虽全绿但 before/after 变动，不能作最终验收，保留说明。历史 FAIL/旧 Expected 不覆盖。
 - 收口：VERSION `0.1.197 → 0.1.198`（既有 10 文件 11 处字面量，不升级依赖/不重生成 lock），本轮只改文档/版本，待 master snap。snap 后直接接真实模型 L1/L2，不再扩内部探针；父级 S03 与 36 动画等待办保留。
+
+### 13.19 B2 R1 temperature 修复与 L2 首次结果（2026-10-27 r63，待 master 独立复验）
+
+- master 受托批准 R1：关系校验请求显式 `temperature: 0`；本轮仅改 `app/chat-memory-verification.cjs` +1 行；在既有 `tests/acceptance/memory-semantic-operations.spec.cjs` 增 25 行，从真实 `store.chat.sendMessage` 入口断言 relation 请求 0、普通 chat 3 次均 0.7；不改 Case/dataset/Expected/prompt/工具评分/其他生产/版本/Git/skill，未调 API、未读 `.env`。
+- 先保留有效失败基线 `attempt-20261027-213147-b2-r1-temp-baseline/`：**1 test / 0 pass / 1 fail / exit 1**，失败为 `0.7 !== 0`；修后 focused `attempt-20261027-213151-b2-r1-temp-focused/` 因测试 after 钩子未等待异步收口而进程 exit 1（1 pass/1 fail），补等待后 `attempt-20261027-213158-b2-r1-temp-focused2/` **1/1、exit 0**；旧 attempt 保留。
+- 两套件独立 attempt：`attempt-20261027-213200-b2-r1-chat-memory-final/` **37/37、0 fail、0 skipped、exit 0**；`attempt-20261027-213204-b2-r1-semantic-final/` **94/94、0 fail、0 skipped、exit 0**（原 93 + 新 1）；四次 attempt before/after SHA 均一致。
+- master L2 证据 `evidence/master-b2-live-l2-EqIUvIpd/`：**8 FAIL / 3 REVIEW / 0 PASS，exit 1**；chat/relation/核心全真实，40 chat + 3 relation + 1 models；master 只确认 11 个临时路径不存在且 probe 已终止，未另做全局 `ps` 扫描。分析 `evidence/s03m-b2/live-l2-analysis-r1.md`。
+- L2 根因：4 例（C01/C06/C07/C08）模型 `evidence` 填整句，本地 `validEvidence` 只认 `authorizedText`（`请帮我改过来`），操作在核验前被拒；2 例（C03/C04）B 的 body 被改写，未通过 `bodyCoreOf` 逐字检查；2 例（C05 A、C10 A/B）模型返回空候选。C02/C09/C11 行为正确（C02 双删、C09/C11 A 更新/B 不变）。
+- 协议歧义而非模型乱答：C11 同样整句 evidence 却因 `explicitCorrectionOf` 把整句并入授权而通过，与 C01 双口径；prompt 说 body“贴近原话”、本地要求核心逐字。C05 转述与 C10 参与者不明属产品口径缺口，C05/C10 的 candidates=1 属评估假设，均不改 Expected。
+- R1 未被本批 L2 覆盖（L2 在修改前采集，3 次 relation 均 0.7），**真实模型效果未验证、未接受**；下一步仅建议 prompt 明确 evidence/body 契约，产品口径由 master 决定，不引入重试、相似度合并或工具改动。未提交，停止等待 master 独立测试/live。
+
+### 13.20 B2 R2 prompt 对齐（2026-10-27 r64，结果待 master live）
+
+- master 独立 R1 证据 `evidence/master-b2-r1-ojwQRswp`：131/131 pass、0 skip、exit 0、before/after 一致；live L1 仍 **7 PASS / 4 FAIL**，C01-04 uncertain、missedPositive 4，C10 转 uncertain，raw/effective/databaseFalseMerge 0，10 次 relation 均 temperature 0。R1 只证明参数生效，不证明语义完成。
+- master 受托批准 R2：只改 `app/memory-relation-protocol.cjs` 与 `app/chat.cjs` 的 prompt，保留 R1 temperature 0；不改本地校验/存储/函数控制流/工具评分/原 Case/Expected/dataset，不提高预算、无重试/同义词表/新框架。
+- 关系 prompt（2 行改写）：非引述且明确陈述本人事实的第一人称可规范 subject=用户并引用“我”，引号/转述内第一人称归被引述者，讲述者身份不能代替被谈论者；同主体同属性同取值仅语序/同义可等价，程度、时间、参与者、条件等额外差异不能抹平；subject/scope/time 证据不满足时 raw relation 也须 uncertain。
+- 聊天 prompt（净增 2 行）：body 必须用本轮原话连续完整事实片段而非改写摘要；evidence 只填命令分句，不含被纠正内容/否定对比整句；区分新告知经历与“是否记得旧事”的询问，不因库内无记录拒绝新告知；用户明确讲述且有价值的第三人偏好可记但保留主体与转述层级，“我们”参与者不明可存原话但不得补造成员/虚构角色亲历或跨角色关联；不要求每句话必记。
+- 依据：Mem0 先按身份过滤候选；Graphiti `_dedupe_extracted_edge` 先规范化事实再分离重复与矛盾。本次仅让 prompt 明确“同义可等价、额外差异不等价”，不引入相似度合并或本地词表。
+- 5 套既有验收，均独立 attempt、before/after SHA 一致、exit 0：chat-memory `attempt-20261027-213732-b2-r2-chat-memory-final/` **37/37**；semantic `attempt-20261027-213736-b2-r2-semantic-final/` **94/94**；relation-protocol `attempt-20261027-213815-b2-r2-relation-protocol-final/` **8/8**；source-relation `attempt-20261027-213817-b2-r2-source-relation-final/` **4/4**；corrected-source `attempt-20261027-213820-b2-r2-corrected-source-final/` **99/99**。未新增仅镜像 prompt 的假测试；本地规则未变，旧断言继续覆盖授权/逐字/隔离/噪声。
+- 风险：prompt 更积极识别同义与第三人/共同经历，可能提高 C07/C10 类相关但不等价内容被判等价、或候选增多的 false merge 风险；本地 `equivalentReasons` 仍会因主体/时间证据不足降级，但不能替代 live 验证。C05 转述与 C10 参与者不明的产品口径按 master 判断记录，未改 Expected。
+- 未验证：真实模型 L1/L2 效果、生产 prompt 对应留出对照、GUI/人工体验。未调 API、未读 `.env`、未改版本/Git/skill、未提交，停止等待 master 独立 live 与留出对照。
+
+### 13.21 R2 真实结果与 holdout 诊断（2026-10-27 r65，只读，未接受）
+
+- master 证据 `evidence/master-b2-r2-qvhEbTCE`：五套件 **242/242 pass、0 skip、exit 0、before/after 一致**；L1 **10 PASS / 1 FAIL（C07 different，Expected uncertain）**；L2 **10 REVIEW / 1 FAIL（C07 同因）**，44 chat + 10 relation + 1 models；holdout grounded **14/16**，pair 12 raw/effective equivalent（falseMerge 1）、pair 15 different。完整真实模型效果不接受，全部原结果保留。
+- holdout 12 输入 `用户说她喜欢蓝色` vs `用户喜欢蓝色`，无 sourceContext；模型 subject=`用户`、subjectQuote=`用户`。本地 `parseDescription` 只校验引用是正文子串，`equivalentReasons` 只比较 subject/scope/time/来源世界，未要求引用是事实谓词主语，也未识别内嵌“她”无先行词，因此 effective 放行。历史同一 `s03l-grounded-relation-v1`、temperature 0 的 grounded holdout 的 pair 12 同样 equivalent，**是既有缺口而非 R2 回归**。
+- C07 同属“相关但不等价被模型选成 different”：R1 PASS → R2 FAIL，与 holdout 15 的既有缺口一致；操作本身 A 更新、B 不变，仅关系分类错误。不能把 subject/scope/time 相同一律降 uncertain（会误伤 `喜欢蓝色` vs `喜欢红色` 等真实不同取值）。
+- 建议（未实施）：仅对 equivalent 增加“引号外第三人称代词无同句/来源上下文先行词 → effective uncertain”的窄门；引号内、有明确前文主体/称谓的转述不触发；不禁止第三方事实、不关闭关联、不硬编码。配真实 chat 正负例：无前文“她说/她喜欢”负例、有前文“我妹妹…她说”正例、引号内姐姐“我”正例、蓝/红真 different 正例。different 门暂无安全本地判据，建议保留语义限制。
+- L2 十个 REVIEW 已逐项复核：种子逐字、无 C 记录/B 消息变化/私有标记泄漏；C01/C04 传播、C02 双删、C03 当日临时（A/B 长期不变、到期日末、B copy）、C05/C06/C09/C10/C11 A 改 B 不变、C08 设计内 0 候选，均属可接受已测操作，不等于语义总体验收。报告 `evidence/s03m-b2/live-r2-analysis-r1.md`。
+- 两轮调优已用完，禁止第三轮 prompt/参数盲调；S03 未完成。未调 API、未读 `.env`、未改代码/测试/版本/Git/skill、未用子代理，停止等待 master 决策。
+- skill 复盘：留出组捕获了主 11 未暴露的 false merge，说明“主集+留出+原始结果保留”的证据分层有效；本轮未发现需修改 skill 的实际流程缺陷，不机械修订。
+
+### 13.22 第三人称绑定门方案（2026-10-27 r66，待 master 审核，未批准未实施）
+
+- 触发：holdout 12 中模型把外层说话者“用户”当作内层“她”的主体，现有 `subjectQuote` 只验字面子串，`equivalentReasons` 只比较 subject/scope/time，导致无绑定证据仍 effective equivalent。
+- 方案短文 [third-person-binding-gate-plan.md](evidence/s03m-b2/third-person-binding-gate-plan.md)：评估现有字段能否表达绑定、方案 A（复用 subjectQuote 要求明确身份原话 + 唯一窗口 + 排除否定/假设/截断，生产约 60～80 行、测试 100～160 行）、方案 B（纯本地保守，误伤正例）、方案 C（新增 subjectBinding 字段，规模更大）；附正例 P1～P4、负例 N1～N9 与数据库 Oracle。
+- 明确不采用：引号内一律豁免、前文出现人物词即算绑定、全量禁第三人称/第三方事实、硬编码样例、改 Expected/评分、关闭关联。
+- 仅文档与方案，未改代码/测试/Expected/dataset/评分，未调第三轮 prompt/API/.env/skill/子代理；待 master 决定是否实施及选 A 还是 C。
+
+### 13.23 R2 有限接受与 0.1.199 收口（2026-10-27 r66，待 master snap）
+
+- master 审查接受 R1/R2 **已测参数与聊天证据契约改进**：独立五套件 **242/242 pass、0 skip、exit 0、before/after 一致**，L1 **10/11**，L2 十项实际操作审查可接受；**语义总体验收明确不接受**，holdout 12 既有安全缺口与 C07/holdout 15 分类 FAIL 保留，不改 Expected/数据/评分。
+- 版本 `0.1.198 → 0.1.199`，严格既有 10 文件 11 处字面量，不升级依赖、不重生成 lock、未 Git。工作区生产/测试/工具保持 master-r2 证据 SHA，本轮未再改。
+- 绑定门方案见 §13.22 与 `evidence/s03m-b2/third-person-binding-gate-plan.md`，待 master 审核，未批准未实施。S03 与真实模型语义仍 NOT_COVERED；未调 API/.env/skill/子代理，未用子代理。

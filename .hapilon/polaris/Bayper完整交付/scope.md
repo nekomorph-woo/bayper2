@@ -76,13 +76,14 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 
 工具组织REQ-41贯穿所有切片：现有SQLite/造型目录工具是已存在能力，新增项目工具仍须自包含审查，不将此横向约束标作一次性完成。
 
-## 当前阶段：S03m B2 C10 事件时间/主体授权有限修复与 B2 工具 dry 能力已受托接受；下一步真实模型 L1/L2（2026-10-27 r61）
+## 当前阶段：S03m B2 R1/R2 已测参数与聊天证据契约改进获有限接受；语义总体不接受，VERSION `0.1.199` 待 snap（2026-10-27 r66）
 
-master 实际审查最终 diff 并独立稳定复验 `master-c10-stable-oC19XDFt`：tests **130/130 pass、0 skip、exit 0**，L1/L2 dry 各 **11 DRY-RUN、exit 0**，before/after 完全一致，22 个临时路径无残留。据此**受托接受本批已测 C10 事件时间/主体授权有限修复与 B2 工具 dry 能力**（不是用户亲自确认、不是真实模型/GUI/人类体验，不接受完整 S03/Goal）。上一 `master-c10-final-tBIvlAZo` 全绿但 before/after 变动，不作最终验收，保留说明。
+master 独立五套件 **242/242 pass、0 skip、exit 0、before/after 一致**，L1 **10/11**，L2 十项实际操作审查可接受；据此接受 R1/R2 **已测参数与聊天证据契约改进**（不是用户亲自确认、不是真实模型语义/人类体验，不接受完整 S03/Goal）。**语义总体验收明确不接受**：holdout 12 未绑定“她”的既有 false merge、C07/holdout 15 的 different vs Expected uncertain 均保留，不改 Expected/数据/评分。
 
-- 已验边界：C10 昨日/今日已完成经历 replace、未来/当前年保守澄清、同主体我/用户/我们、明确主体更正、不同/未知主体零写澄清、省略式同类更正；B2 dry L1/L2 入口/清理/预算/loopback。真实依赖为正式 store/chat/memory/SQLite；聊天/关系为构造/fixture。
-- 未覆盖：真实模型 L1/L2、正式资源、UI IPC/live、跨角色独立同义、完整 S03 与 `POL-SEMOP-001～008` 聚合；父级 S03 与 36 动画等待办全部保留；历史原 FAIL 不覆盖。
-- 本轮只改文档/版本 `0.1.197 → 0.1.198`（10 文件 11 处），待 master snap；未改代码/测试/工具逻辑、未跑测试/API/GUI、未 Git/skill、未用子代理。snap 后直接接真实模型 L1/L2，不再扩内部探针。
+- 已验边界：关系请求 temperature 0 生效；聊天候选 body 逐字、操作 evidence 命令分句、新告知经历提炼、第三人/“我们”原话保存口径在 L2 十项操作中可接受。
+- 未覆盖：真实模型语义总体、holdout 12 安全缺口、C07/15 分类边界、完整 S03 与 `POL-SEMOP-001～008` 聚合；父级 S03 与 36 动画等待办全部保留。
+- 本轮只改文档/版本 `0.1.198 → 0.1.199`（10 文件 11 处），待 master snap；工作区代码/测试/工具保持 master-r2 SHA，未再改。第三人称绑定门方案 [third-person-binding-gate-plan.md](evidence/s03m-b2/third-person-binding-gate-plan.md) 待 master 审核，未实施。
+
 
 ## 历史阶段：S03m temporary/forget 生命周期与 Electron GUI 有限能力已受托接受（2026-10-27 r54）
 
