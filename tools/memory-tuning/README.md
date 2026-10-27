@@ -105,8 +105,8 @@ Codex 场景 top1：`char` 0/3、`segment` 1/3、`expanded` 1/3、`hybrid` 3/3�
 
 ## 边界
 
-- 不使用 embedding、向量库、外部检索服务或模型请求。
-- 不实现自然语言语义定位；纠正/删除仍要求业务层给出明确 `factKey`。
+- 上述本地检索对照不使用 embedding、向量库、外部检索服务或模型请求；下面的独立语义 probe 会显式调用已配置模型。
+- 本地检索对照不实现自然语言语义定位；明确管理由业务层提供 `factKey` 或条目 ID，传播范围按正式记忆服务的事实身份判断。
 - 不自动判断否定或事实真值；否定词保留在候选正文与来源中，交后续理解。
 - 派生持有者可以发起纠正和默认删除；自动二次分享仍拒绝，用户明确转告留给 S03b。
 - 不验证真实模型提炼、真实聊天取消、桌面 UI 或权限目录。
@@ -132,3 +132,18 @@ node tools/memory-tuning/semantic-baseline.cjs --out /tmp/semantic-baseline.json
 Codex 独立基线（生产版本0.1.168）：`results/semantic-baseline-codex-r2.json`及同名`.log`，
 8个场景为1 PASS、7 FAIL、0 ERROR；表示发现了当前产品缺口，不是修复通过。
 源文件内容摘要与每场景临时路径/清理结果在报告内，旧轮结果不覆盖；技术决策由项目Polaris记录承接。
+
+## 真实语义关系 probe
+
+`semantic-probe.cjs` 只对 `semantic-pairs.json` 的16组构造事实做关系判定，不修改产品记忆，不读取真实会话。Expected留在本地评分，模型只见事实和允许的元数据。它与上面的正式服务SEM基线是两个不同观察层：关系分类正确不等于纠正/删除链路已经接通。
+
+```sh
+node tools/memory-tuning/semantic-probe.cjs --dry-run
+node tools/memory-tuning/semantic-probe.cjs --out tools/memory-tuning/results/semantic-probe-local-001.json
+```
+
+实际模式使用根 `.env` 的 `OPEN_AI_BASE_URL` / `OPEN_AI_API_KEY`，只在执行时读取；先通过一次 `/models` 验证 `deepseek-flash` 存在，再最多一次 chat，无自动重试。禁止把Key作为命令参数或写进结果。必须显式指定输出文件，已有文件不会覆盖；dry-run不读取凭据、不联网。没有embedding或额外服务依赖。
+
+结果包含实际调用次数、延迟、严格响应结构检查、逐项关系、错误合并/漏关联/不确定统计及源文件摘要。ERROR表示配置、网络或结构未形成有效判定，FAIL表示实际关系违背Expected；不能只看退出码。策略提示位于脚本的SYSTEM_PROMPT，修改策略时同步策略版本，并用同一数据与新的独立结果文件对照。少量固定样本不代表生产可靠性，接入预算、隔离、取消与事务需另行验证。
+
+2026-10-27 独立真实对照：策略v1与v2各15/16符合Expected，均0错误合并、0同义正例遗漏；v1错把未知参与者的共同经历判为不同，v2修正为不确定，但把“喜欢牛奶/乳糖不耐受”保守判为不确定。保留两轮FAIL，v2仅作为后续候选，尚未接入产品。证据为`results/semantic-probe-codex-live-r2.json`、`results/semantic-probe-codex-live-v2.json`；两轮总计2次models+2次chat，各批约1秒，不代表稳定延迟或生产效果。
