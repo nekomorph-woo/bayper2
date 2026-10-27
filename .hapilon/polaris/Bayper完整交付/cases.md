@@ -133,3 +133,5 @@ POL-ASSOC-001～005，P0必需、Codex受托确认v1，唯一Contract见[s03l-as
 ## S03l-b 结构化事实核验
 
 POL-REL-001～004，P0/v1/Codex受托确认，唯一Contract见[s03l-grounding-plan.md](s03l-grounding-plan.md)。tests/acceptance/memory-relation-protocol.spec.cjs承担确定性build/parse边界，独立8PASS；tools/memory-tuning/semantic-probe.cjs --policy grounded承担真实模型两数据集对照，baseline16PASS、holdout14PASS2FAIL，整体语义验收FAIL。详[s03l-grounding-review.md](s03l-grounding-review.md)，不替代原SEM产品验收。
+
+POL-MODEL-COMP-001：同grounded协议模型对照，Contract见[s03l-model-comparison-plan.md](s03l-model-comparison-plan.md)；工具semantic-probe.cjs --model deepseek-v4-pro，真实两批各13PASS3FAIL，整体FAIL。逐项结果及不切换模型的决定见[s03l-model-comparison-review.md](s03l-model-comparison-review.md)，不替代语义产品Case。

@@ -22,6 +22,7 @@ const DATASETS = Object.freeze({
   holdout: path.join(__dirname, "semantic-holdout.json"),
 });
 const MODEL_NAME = "deepseek-flash";
+const MAX_MODEL_LENGTH = 100;
 const POLICY_VERSION = "s03l-semantic-probe-v2";
 const RELATIONS = Object.freeze(["equivalent", "different", "uncertain"]);
 const PAIR_IDS = Object.freeze(Array.from({ length: 16 }, (_, index) => String(index + 1).padStart(2, "0")));
@@ -44,9 +45,10 @@ const SYSTEM_PROMPT = [
 ].join("\n");
 
 function parseArgs(argv) {
-  const options = { dryRun: false, out: null, dataset: "baseline", policy: "baseline" };
+  const options = { dryRun: false, out: null, dataset: "baseline", policy: "baseline", model: MODEL_NAME };
   let datasetSeen = false;
   let policySeen = false;
+  let modelSeen = false;
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === "--dry-run" && !options.dryRun) {
       options.dryRun = true;
@@ -66,6 +68,14 @@ function parseArgs(argv) {
       if (value !== "baseline" && value !== "grounded") throw new Error("--policy 只支持 baseline 或 grounded。");
       options.policy = value;
       policySeen = true;
+      index += 1;
+    } else if (argv[index] === "--model" && !modelSeen) {
+      const value = argv[index + 1];
+      if (!value || value.startsWith("--") || value.length > MAX_MODEL_LENGTH || /\s/u.test(value)) {
+        throw new Error(`--model 需要一个不含空白且不超过 ${MAX_MODEL_LENGTH} 字符的模型 id。`);
+      }
+      options.model = value;
+      modelSeen = true;
       index += 1;
     } else {
       throw new Error(`参数无效或重复：${argv[index]}`);
@@ -302,6 +312,7 @@ function baseRecord(options, datasetPath, data, pairsText, messages) {
     generatedAt: new Date().toISOString(),
     mode: options.dryRun ? "dry-run" : "live",
     policyVersion: grounded ? GROUNDED_POLICY_VERSION : POLICY_VERSION,
+    model: { name: options.model, presentInModels: null },
     input: {
       dataset: options.dataset,
       path: path.relative(REPO_ROOT, datasetPath),
@@ -322,7 +333,7 @@ async function runLive(record, pairs, options) {
   Object.assign(record, {
     network: true,
     credentialsRead: true,
-    model: { name: MODEL_NAME, presentInModels: false },
+    model: { name: options.model, presentInModels: false },
     calls,
     durationsMs: durations,
     request: { maxTokens, temperature: CHAT_TEMPERATURE, timeoutMs: CHAT_TIMEOUT_MS },
@@ -341,9 +352,9 @@ async function runLive(record, pairs, options) {
     } finally {
       durations.modelsMs = Date.now() - modelsStarted;
     }
-    record.model.presentInModels = modelIds.includes(MODEL_NAME);
+    record.model.presentInModels = modelIds.includes(options.model);
     if (!record.model.presentInModels) {
-      record.error = { stage, code: "MODEL_MISSING", message: `GET /models 未返回 ${MODEL_NAME}。` };
+      record.error = { stage, code: "MODEL_MISSING", message: `GET /models 未返回 ${options.model}。` };
       return;
     }
 
@@ -355,7 +366,7 @@ async function runLive(record, pairs, options) {
     try {
       const result = await requestChatCompletion({
         baseUrl: credentials.baseUrl,
-        modelName: MODEL_NAME,
+        modelName: options.model,
         apiKey: credentials.apiKey,
         messages: record.messages,
         maxTokens,

@@ -165,3 +165,7 @@ Codex独立真实结果 `results/semantic-holdout-codex-live-v2.json`：14 PASS�
 `--policy grounded`复用正式候选协议`app/memory-relation-protocol.cjs`，要求逐边主体、scope、时间及连续原文引用；结构不符整批ERROR，缺证据的equivalent降为uncertain。默认`--policy baseline`保留原v2行为。grounded单次maxTokens为6000，仍最多1models+1chat，无重试；先用`--dry-run`审查，live须显式新`--out`。
 
 `results/grounding-baseline-live-codex-v1.json`为16PASS；`grounding-holdout-live-codex-v1.json`为14PASS2FAIL，误合并1次。未知“我们”未误合并，但“用户说她喜欢蓝色”仍错误等同于用户偏好；安静环境与独处从Expected uncertain误判different。rawRelation与effectiveRelation、完整结构和SHA均保留。该协议尚不适用于自动合并/删除；原文引用存在不证明模型正确理解主体，生产尚未接线。两批合计2models+2chat、无产品数据库/GUI。
+
+### 相同输入比较可用模型
+
+可显式传`--model <id>`，默认deepseek-flash；live总是先查询实际/models确认id存在，再发送一次请求。dry仅记录计划模型，不联网。2026-10-27实际服务还提供deepseek-v4-pro，保持grounded消息/Expected不变的两批结果在`results/grounding-pro-*-live-codex.json`：baseline13/16、holdout13/16，holdout仍有1次指代误合并，总耗时各约8秒。该对照不支持替换产品默认；模型名称和更长耗时不代表更可靠，用户配置未改。
