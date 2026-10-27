@@ -214,3 +214,12 @@ POL-REMEMBER-001～005 v1由master受托确认，见[s03r-explicit-remember-plan
 ## S03s 真实模型明确记忆
 
 POL-REMEMBER-LIVE-001～005 v1受托批准，实际模型/SQLite/chat边界与预期见[s03s-live-remember-plan.md](s03s-live-remember-plan.md)；工具拟为tools/memory-tuning/remember-probe.cjs，尚未执行。
+
+### S03s Part C 场景补充
+
+父级S03/REQ-09，master受托Expected见s03s-live-remember-plan.md Part C。Runner为tests/acceptance/memory-explicit-remember.spec.cjs，正式chat/SQLite真实、本地HTTP构造模型；不能代替live。
+
+| ID | Given / When | Expected / Oracle |
+|---|---|---|
+|POL-REMEMBER-006|已有同角色同键用户事实，再明确记住；正文有/无中文句号|只提升重要性且版本恰好+1，保留身份/正文/来源/时间；重复幂等；不同数字/否定/主体/内部标点不得误合，普通提炼语义不放宽。观察SQLite与正式回复。|
+|POL-REMEMBER-007|用户指定授权/拒绝段，模型返回窄/宽/独立事实及错误数值|授权仅指定完整事实，宽混合不入库，拒绝事实的窄/宽提炼不绕过；独立真实事实普通保存，错误数字/标点无来源则不保存；外部引用命令与引用中命令区分。观察chat最终SQLite/importance与回复。|

@@ -421,3 +421,7 @@ POL-REMEMBER-LIVE-001～005尚未执行；S03r构造模型结果不得填入此�
 ## S03s真实明确记忆基线（2026-10-28）
 
 按[s03s-master-review.md](s03s-master-review.md)记录，真实deepseek-flash样本001/003/005通过，004分离候选通过但宽候选在dry中FAIL，002句号差异导致未提升FAIL。工具已独立执行，产品S03未接受；证据路径、调用预算与清理见审查记录。下一步定向修复，不改Expected消除失败。
+
+### S03s Part C 修复复验
+
+master178/178、SHA一致、dry五Case全部通过；POL-REMEMBER-006/007构造HTTP业务场景受托接受。live-r2的001/003/005及004分离候选样本通过，002异factKey重复FAIL，完整S03未接受。详s03s-master-review.md及原始results/remember-master-live-20261028-r2.json；所有本轮临时数据库已清理。

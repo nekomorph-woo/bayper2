@@ -11,6 +11,10 @@ const { test } = require("node:test");
 const { DatabaseSync } = require("node:sqlite");
 const { createStore } = require("../../app/store.cjs");
 const { strictFactFingerprint } = require("../../app/memory-fact-identity.cjs");
+const {
+  analyzeExplicitRemember,
+  resolveExplicitRemember,
+} = require("../../app/memory-explicit-remember.cjs");
 
 const START = Date.UTC(2026, 9, 28, 10, 0, 0);
 const DAY = 24 * 60 * 60 * 1000;
@@ -144,6 +148,13 @@ function candidate({
     evidence,
     ...(importance === undefined ? {} : { importance }),
   };
+}
+
+function resolveFor(text, body, factKey = "probe.fact") {
+  const plan = analyzeExplicitRemember(text);
+  return resolveExplicitRemember(plan, [
+    { factKey, body, kind: "detail", trust: "stated" },
+  ]);
 }
 
 function modelReply({ reply = "嗯，我记下了。", candidates = [], operation = null } = {}) {
@@ -969,5 +980,529 @@ test("POL-REMEMBER-005 来源、临时、删除、管理操作和事务失败边
     assert.equal(contextVersionOf(ctx), contextBefore + 1);
     assert.equal(assistantCount(ctx), assistantBefore + 1);
     assert.equal(rowsFor(ctx, "a").length, 1);
+  });
+});
+
+test("POL-REMEMBER-006 明确记住只容忍末尾中文句号", async (t) => {
+  await t.test("自然提炼后句号差异可提升且旧字段保持不变", async (t2) => {
+    const ctx = await setupContext(t2);
+    const natural = await sendChat(ctx, {
+      text: "我家的门牌是307。",
+      requestId: "s03s-006-natural",
+      envelope: modelReply({
+        reply: "记下了。",
+        candidates: [candidate({
+          factKey: "home_door_number",
+          body: "我家的门牌是307。",
+        })],
+      }),
+    });
+    assert.equal(natural.result.status, "completed");
+    assert.equal(natural.result.memoryApplied, 1);
+    const before = rowByFact(ctx, "a", "home_door_number");
+    assert.ok(before, "自然提炼应写入门牌");
+    assert.equal(before.body, "我家的门牌是307。");
+    assert.equal(before.importance, DEFAULT_DETAIL);
+    assert.equal(before.version, 1);
+    const contextBefore = contextVersionOf(ctx);
+    ctx.advance(HOUR);
+
+    const explicit = await sendChat(ctx, {
+      text: "请记住，我家的门牌是307。",
+      requestId: "s03s-006-explicit",
+      envelope: modelReply({
+        reply: "嗯，我记住了。",
+        candidates: [candidate({
+          factKey: "home_door_number",
+          body: "我家的门牌是307",
+        })],
+      }),
+    });
+    assert.equal(explicit.result.status, "completed");
+    assert.equal(explicit.result.memoryApplied, 0, "提升不是新建");
+    assert.doesNotMatch(explicit.result.reply, /没有保存成长期记忆/u);
+    const after = rowByFact(ctx, "a", "home_door_number");
+    assert.equal(after.id, before.id);
+    assert.equal(after.fact_identity_id, before.fact_identity_id);
+    assert.equal(after.body, before.body);
+    assert.equal(after.kind, before.kind);
+    assert.equal(after.source_id, before.source_id);
+    assert.equal(after.source_version, before.source_version);
+    assert.equal(after.created_at, before.created_at);
+    assert.equal(after.updated_at, before.updated_at);
+    assert.equal(after.importance, IMPORTANT);
+    assert.equal(after.version, before.version + 1);
+    assert.equal(contextVersionOf(ctx), contextBefore + 1);
+
+    const repeat = await sendChat(ctx, {
+      text: "请记住，我家的门牌是307。",
+      requestId: "s03s-006-repeat",
+      envelope: modelReply({
+        reply: "嗯，我记住了。",
+        candidates: [candidate({
+          factKey: "home_door_number",
+          body: "我家的门牌是307",
+        })],
+      }),
+    });
+    assert.equal(repeat.result.status, "completed");
+    assert.equal(rowByFact(ctx, "a", "home_door_number").version, after.version);
+    assert.equal(rowByFact(ctx, "a", "home_door_number").importance, IMPORTANT);
+    assert.equal(contextVersionOf(ctx), contextBefore + 1);
+  });
+
+  await t.test("反向句号差异同样提升", async (t2) => {
+    const ctx = await setupContext(t2);
+    seedRemember(ctx, {
+      factKey: "home_door_number",
+      body: "我家的门牌是307",
+      sourceId: "seed:reverse-period",
+    });
+    const rowBefore = rowByFact(ctx, "a", "home_door_number");
+    ctx.advance(HOUR);
+    const { result } = await sendChat(ctx, {
+      text: "请记住，我家的门牌是307。",
+      requestId: "s03s-006-reverse",
+      envelope: modelReply({
+        reply: "嗯，我记住了。",
+        candidates: [candidate({
+          factKey: "home_door_number",
+          body: "我家的门牌是307。",
+        })],
+      }),
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(result.memoryApplied, 0);
+    const after = rowByFact(ctx, "a", "home_door_number");
+    assert.equal(after.id, rowBefore.id);
+    assert.equal(after.body, rowBefore.body);
+    assert.equal(after.source_id, rowBefore.source_id);
+    assert.equal(after.created_at, rowBefore.created_at);
+    assert.equal(after.updated_at, rowBefore.updated_at);
+    assert.equal(after.importance, IMPORTANT);
+    assert.equal(after.version, rowBefore.version + 1);
+  });
+
+  await t.test("数值/内部标点/否定/主体差异不误合", async (t2) => {
+    const ctx = await setupContext(t2);
+    const cases = [
+      {
+        key: "eq.number.3070",
+        existing: "我家的门牌是307",
+        candidate: "我家的门牌是3070",
+        text: "请记住，我家的门牌是3070。",
+      },
+      {
+        key: "eq.number.30",
+        existing: "我家的门牌是307",
+        candidate: "我家的门牌是30",
+        text: "请记住，我家的门牌是30。",
+      },
+      {
+        key: "eq.decimal.12",
+        existing: "我家的门牌是1.2",
+        candidate: "我家的门牌是12",
+        text: "请记住，我家的门牌是12。",
+      },
+      {
+        key: "eq.decimal.1.2",
+        existing: "我家的门牌是12",
+        candidate: "我家的门牌是1.2",
+        text: "请记住，我家的门牌是1.2。",
+      },
+      {
+        key: "eq.negation",
+        existing: "我家的门牌是307",
+        candidate: "我家的门牌不是307",
+        text: "请记住，我家的门牌不是307。",
+      },
+      {
+        key: "eq.subject",
+        existing: "我家的门牌是307",
+        candidate: "她家的门牌是307",
+        text: "请记住，她家的门牌是307。",
+      },
+    ];
+    for (const item of cases) {
+      seedRemember(ctx, {
+        factKey: item.key,
+        body: item.existing,
+        sourceId: `seed:${item.key}`,
+      });
+      const before = rowByFact(ctx, "a", item.key);
+      ctx.advance(HOUR);
+      const { result } = await sendChat(ctx, {
+        text: item.text,
+        requestId: `s03s-006-${item.key}`,
+        envelope: modelReply({
+          reply: "我记住了。",
+          candidates: [candidate({ factKey: item.key, body: item.candidate })],
+        }),
+      });
+      assert.equal(result.status, "completed");
+      assert.equal(result.memoryApplied, 0);
+      assert.match(result.reply, /没有保存成长期记忆/u, `${item.key} 不得假确认`);
+      const after = rowByFact(ctx, "a", item.key);
+      assert.equal(after.id, before.id);
+      assert.equal(after.body, before.body);
+      assert.equal(after.source_id, before.source_id);
+      assert.equal(after.created_at, before.created_at);
+      assert.equal(after.updated_at, before.updated_at);
+      assert.equal(after.importance, DEFAULT_DETAIL);
+      assert.equal(after.version, 1);
+    }
+  });
+
+  await t.test("普通提炼仍使用严格正文比较", async (t2) => {
+    const ctx = await setupContext(t2);
+    seedRemember(ctx, {
+      factKey: "ordinary.period",
+      body: "我家的门牌是307。",
+      sourceId: "seed:ordinary-period",
+    });
+    const before = rowByFact(ctx, "a", "ordinary.period");
+    ctx.advance(HOUR);
+    const { result } = await sendChat(ctx, {
+      text: "我家的门牌是307。",
+      requestId: "s03s-006-ordinary",
+      envelope: modelReply({
+        reply: "记下了。",
+        candidates: [candidate({
+          factKey: "ordinary.period",
+          body: "我家的门牌是307",
+        })],
+      }),
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(result.memoryApplied, 0);
+    assert.equal(result.reply, "记下了。");
+    const after = rowByFact(ctx, "a", "ordinary.period");
+    assert.equal(after.body, before.body);
+    assert.equal(after.importance, DEFAULT_DETAIL);
+    assert.equal(after.version, 1);
+    assert.equal(after.updated_at, before.updated_at);
+  });
+});
+
+test("POL-REMEMBER-007 明确记住完整授权段与宽候选", async (t) => {
+  await t.test("带主语宽候选被拦截", async (t2) => {
+    const ctx = await setupContext(t2);
+    const { result } = await sendChat(ctx, {
+      text: "请记住，我家的门牌是307，另外我的盆栽叫小叶。",
+      requestId: "s03s-007-wide",
+      envelope: modelReply({
+        reply: "嗯，我记住了。",
+        candidates: [candidate({
+          factKey: "home.mixed",
+          body: "我家的门牌是307，另外我的盆栽叫小叶",
+        })],
+      }),
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(rowByFact(ctx, "a", "home.mixed"), null, "宽候选不得落库");
+    assert.match(result.reply, /不能确定/u);
+    assert.equal(result.reply.includes("我记住了"), false);
+  });
+
+  await t.test("窄+宽+独立盆栽", async (t2) => {
+    const ctx = await setupContext(t2);
+    const { result } = await sendChat(ctx, {
+      text: "请记住，我家的门牌是307，另外我的盆栽叫小叶。",
+      requestId: "s03s-007-mixed",
+      envelope: modelReply({
+        reply: "嗯，我记住了。",
+        candidates: [
+          candidate({ factKey: "home.doorplate", body: "我家的门牌是307" }),
+          candidate({ factKey: "home.plant", body: "我的盆栽叫小叶" }),
+          candidate({
+            factKey: "home.mixed",
+            body: "我家的门牌是307，另外我的盆栽叫小叶",
+          }),
+        ],
+      }),
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(rowByFact(ctx, "a", "home.doorplate").importance, IMPORTANT);
+    assert.equal(rowByFact(ctx, "a", "home.plant").importance, DEFAULT_DETAIL);
+    assert.equal(rowByFact(ctx, "a", "home.mixed"), null);
+    assert.match(result.reply, /能确认的那部分/u);
+  });
+
+  await t.test("请不要记住的完整候选被拦", async (t2) => {
+    const ctx = await setupContext(t2);
+    const { result } = await sendChat(ctx, {
+      text: "请不要记住，我家的备用钥匙放在鞋柜左侧。",
+      requestId: "s03s-007-negative",
+      envelope: modelReply({
+        reply: "好的。",
+        candidates: [candidate({
+          factKey: "home.key",
+          body: "我家的备用钥匙放在鞋柜左侧",
+        })],
+      }),
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(rowByFact(ctx, "a", "home.key"), null);
+    assert.match(result.reply, /没有保存/u);
+  });
+
+  await t.test("授权匹配拒绝部分子串、主体差异与内部标点误合", async () => {
+    const exact = resolveFor("请记住，我家的门牌是307。", "我家的门牌是307");
+    assert.equal(exact.boosted.has("probe.fact"), true);
+    assert.equal(exact.blockedKeys.has("probe.fact"), false);
+
+    const wideComma = resolveFor(
+      "请记住，我家的门牌是307，另外我的盆栽叫小叶。",
+      "我家的门牌是307，另外我的盆栽叫小叶",
+    );
+    assert.equal(wideComma.boosted.has("probe.fact"), false);
+    assert.equal(wideComma.blockedKeys.has("probe.fact"), true);
+
+    const wideNoComma = resolveFor(
+      "请记住，我家的门牌是307，另外我的盆栽叫小叶。",
+      "我家的门牌是307另外我的盆栽叫小叶",
+    );
+    assert.equal(wideNoComma.boosted.has("probe.fact"), false);
+    assert.equal(wideNoComma.blockedKeys.has("probe.fact"), true);
+
+    // 完整授权段之外的窄候选暂不授权；旧“引用事实”用例因此成为已知冲突。
+    const narrow = resolveFor("请记住，我家的门牌是307。", "门牌是307");
+    assert.equal(narrow.boosted.has("probe.fact"), false);
+    assert.equal(narrow.blockedKeys.has("probe.fact"), false);
+
+    for (const [label, body] of [
+      ["3070", "我家的门牌是3070"],
+      ["30", "我家的门牌是30"],
+      ["negation", "我家的门牌不是307"],
+      ["subject-她", "她家的门牌是307"],
+      ["subject-我们", "我们家的门牌是307"],
+      ["subject-角色", "角色家的门牌是307"],
+      ["subject-用户", "用户家的门牌是307"],
+    ]) {
+      const result = resolveFor("请记住，我家的门牌是307。", body);
+      assert.equal(result.boosted.has("probe.fact"), false, `${label} 不得获得明确记住提升`);
+      assert.equal(result.blockedKeys.has("probe.fact"), false, `${label} 不应被当成宽候选`);
+    }
+
+    for (const [label, text, body] of [
+      ["1.2-vs-12", "请记住，我家的门牌是1.2。", "我家的门牌是12"],
+      ["12-vs-1.2", "请记住，我家的门牌是12。", "我家的门牌是1.2"],
+      ["307-vs-3070", "请记住，我家的门牌是3070。", "我家的门牌是307"],
+    ]) {
+      const result = resolveFor(text, body);
+      assert.equal(result.boosted.has("probe.fact"), false, `${label} 不得获得明确记住提升`);
+      assert.equal(result.blockedKeys.has("probe.fact"), false, `${label} 不应被当成宽候选`);
+    }
+
+    const negative = resolveFor(
+      "请不要记住，我家的备用钥匙放在鞋柜左侧。",
+      "我家的备用钥匙放在鞋柜左侧",
+    );
+    assert.equal(negative.boosted.has("probe.fact"), false);
+    assert.equal(negative.blockedKeys.has("probe.fact"), true);
+
+    const negativeWide = resolveFor(
+      "请不要记住，我家的备用钥匙放在鞋柜左侧。",
+      "我家的备用钥匙放在鞋柜左侧，另外我喜欢咖啡",
+    );
+    assert.equal(negativeWide.blockedKeys.has("probe.fact"), true);
+
+    const negativeSubject = resolveFor(
+      "请不要记住，我家的备用钥匙放在鞋柜左侧。",
+      "她家的备用钥匙放在鞋柜左侧",
+    );
+    assert.equal(negativeSubject.blockedKeys.has("probe.fact"), false);
+
+    const quotedFact = resolveFor("请记住“我的门牌是315”。", "我的门牌是315");
+    assert.equal(quotedFact.boosted.has("probe.fact"), true);
+    const quotedCommand = resolveFor("请记住“请记住，门牌是307”。", "门牌是307");
+    assert.equal(quotedCommand.boosted.has("probe.fact"), false);
+    const quotedReport = resolveFor("请记住“他说门牌是307”。", "门牌是307");
+    assert.equal(quotedReport.boosted.has("probe.fact"), false);
+  });
+
+  await t.test("否定窄候选仍拒绝保存", async (t2) => {
+    const ctx = await setupContext(t2);
+    const { result } = await sendChat(ctx, {
+      text: "请不要记住，我家的门牌是307。",
+      requestId: "s03s-007-negative-narrow",
+      envelope: modelReply({
+        reply: "好的。",
+        candidates: [candidate({ factKey: "home.narrow.door", body: "门牌是307" })],
+      }),
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(rowByFact(ctx, "a", "home.narrow.door"), null, "否定窄候选不得普通保存");
+    assert.match(result.reply, /没有保存/u);
+  });
+
+  await t.test("否定窄候选区分数值/内部标点与第三人主体", async (t2) => {
+    const ctx = await setupContext(t2);
+    const turns = [
+      {
+        text: "请不要记住，我家的门牌是307。",
+        rejected: [
+          ["neg.rejected.307", "门牌是307"],
+          ["neg.invalid.30", "门牌是30"],
+        ],
+      },
+      {
+        text: "请不要记住，我家的门牌是3070。",
+        rejected: [
+          ["neg.rejected.3070", "门牌是3070"],
+          ["neg.invalid.307prefix", "门牌是307"],
+        ],
+      },
+      {
+        text: "请不要记住，我家的门牌是1.2。",
+        rejected: [
+          ["neg.rejected.decimal", "门牌是1.2"],
+          ["neg.invalid.integer", "门牌是12"],
+        ],
+      },
+      {
+        text: "请不要记住，我家的门牌是307，另外她家的门牌是308。",
+        rejected: [["neg.rejected.mine", "门牌是307"]],
+        independent: ["neg.saved.other", "她家的门牌是308"],
+      },
+    ];
+    for (const [index, turn] of turns.entries()) {
+      const candidates = turn.rejected.map(([factKey, body]) =>
+        candidate({ factKey, body }));
+      if (turn.independent) {
+        candidates.push(candidate({
+          factKey: turn.independent[0],
+          body: turn.independent[1],
+        }));
+      }
+      const { result } = await sendChat(ctx, {
+        text: turn.text,
+        requestId: `s03s-007-negative-values-${index}`,
+        envelope: modelReply({ reply: "好的。", candidates }),
+      });
+      assert.equal(result.status, "completed");
+      for (const [factKey] of turn.rejected) {
+        assert.equal(rowByFact(ctx, "a", factKey), null, `${factKey} 不得落库`);
+      }
+      if (turn.independent) {
+        const saved = rowByFact(ctx, "a", turn.independent[0]);
+        assert.ok(saved, `${turn.independent[0]} 应正常保存`);
+        assert.equal(saved.importance, DEFAULT_DETAIL);
+      }
+    }
+  });
+
+  await t.test("授权反例经真实 chat 落库后 importance 不越权", async (t2) => {
+    const ctx = await setupContext(t2);
+    const turns = [
+      {
+        text: "请记住，我家的门牌是307。",
+        candidates: [
+          ["auth.exact.307", "我家的门牌是307", IMPORTANT],
+          ["auth.invalid.30", "我家的门牌是30", null],
+        ],
+      },
+      {
+        text: "请记住，我家的门牌是3070。",
+        candidates: [
+          ["auth.exact.3070", "我家的门牌是3070", IMPORTANT],
+          ["auth.invalid.307prefix", "我家的门牌是307", null],
+        ],
+      },
+      {
+        text: "请记住，我家的门牌是1.2。",
+        candidates: [
+          ["auth.exact.decimal", "我家的门牌是1.2", IMPORTANT],
+          ["auth.invalid.integer", "我家的门牌是12", null],
+        ],
+      },
+      {
+        text: "请记住，我家的门牌是12。",
+        candidates: [
+          ["auth.exact.integer", "我家的门牌是12", IMPORTANT],
+          ["auth.invalid.decimal", "我家的门牌是1.2", null],
+        ],
+      },
+      {
+        text: "请记住，我家的门牌是A-12。",
+        candidates: [
+          ["auth.exact.identifier", "我家的门牌是A-12", IMPORTANT],
+          ["auth.invalid.identifier", "我家的门牌是A12", null],
+        ],
+      },
+      {
+        text: "请记住，我家的门牌不是307。",
+        candidates: [
+          ["auth.exact.negated", "我家的门牌不是307", IMPORTANT],
+          ["auth.invalid.dropped-negation", "我家的门牌是307", null],
+        ],
+      },
+      {
+        text: "请记住，我家的门牌是307，另外她家的门牌是308。",
+        candidates: [
+          ["auth.subject.mine", "我家的门牌是307", IMPORTANT],
+          ["auth.subject.other", "她家的门牌是308", DEFAULT_DETAIL],
+        ],
+      },
+    ];
+    for (const [index, turn] of turns.entries()) {
+      const { result } = await sendChat(ctx, {
+        text: turn.text,
+        requestId: `s03s-007-auth-values-${index}`,
+        envelope: modelReply({
+          reply: "嗯，我记住了。",
+          candidates: turn.candidates.map(([factKey, body]) =>
+            candidate({ factKey, body })),
+        }),
+      });
+      assert.equal(result.status, "completed");
+      for (const [factKey, , importance] of turn.candidates) {
+        const row = rowByFact(ctx, "a", factKey);
+        if (importance === null) {
+          assert.equal(row, null, `${factKey} 不得落库`);
+          continue;
+        }
+        assert.ok(row, `${factKey} 应经业务入口落库`);
+        assert.equal(row.importance, importance, `${factKey} importance`);
+      }
+    }
+  });
+
+  await t.test("无主语前缀的宽候选同样拦截，独立事实正常保存", async (t2) => {
+    const ctx = await setupContext(t2);
+    const { result } = await sendChat(ctx, {
+      text: "请记住，我家的门牌是307，另外我喜欢咖啡。",
+      requestId: "s03s-007-wide-narrow-prefix",
+      envelope: modelReply({
+        reply: "嗯，我记住了。",
+        candidates: [
+          candidate({ factKey: "home.mixed.narrow", body: "门牌是307，另外我喜欢咖啡" }),
+          candidate({ factKey: "home.coffee", body: "我喜欢咖啡" }),
+        ],
+      }),
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(rowByFact(ctx, "a", "home.mixed.narrow"), null, "无主语宽候选不得落库");
+    assert.equal(rowByFact(ctx, "a", "home.coffee").importance, DEFAULT_DETAIL);
+    assert.match(result.reply, /能确认的那部分/u);
+  });
+
+  await t.test("否定窄候选带额外内容仍拒绝保存，独立事实正常保存", async (t2) => {
+    const ctx = await setupContext(t2);
+    const { result } = await sendChat(ctx, {
+      text: "请不要记住，我家的门牌是307，另外我喜欢咖啡。",
+      requestId: "s03s-007-negative-narrow-extra",
+      envelope: modelReply({
+        reply: "好的。",
+        candidates: [
+          candidate({ factKey: "neg.mixed.narrow", body: "门牌是307，另外我喜欢咖啡" }),
+          candidate({ factKey: "neg.coffee", body: "我喜欢咖啡" }),
+        ],
+      }),
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(rowByFact(ctx, "a", "neg.mixed.narrow"), null, "否定窄+额外候选不得落库");
+    assert.equal(rowByFact(ctx, "a", "neg.coffee").importance, DEFAULT_DETAIL);
+    assert.match(result.reply, /没有保存/u);
   });
 });

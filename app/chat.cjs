@@ -55,6 +55,10 @@ const MEMORY_BOUNDARY_NOTE = [
   "没有相关记录时，自然表示现在不确定或想不起来，不要作“你没说过”“从没提过”等历史断言。",
 ].join("\n");
 const NEGATION_CHARS = new Set(["不", "没", "无", "别", "未", "非", "勿"]);
+/* 来源证据按原文核对；只看 ASCII 数字/标识符 token 的边界，不把中文正文
+   当作需要空格的词。连接符仅在两侧仍是 token 时延续同一数值/标识符。 */
+const SOURCE_TOKEN_CHARS = /[A-Za-z0-9_０-９Ａ-Ｚａ-ｚ]/u;
+const SOURCE_CONNECTOR_CHARS = /[.\-/:,，．]/u;
 /* S03k 本地设置写入/确认失败的稳定业务码；只标记该分支可重试，
    不把其他未知 SQLite 错误统一放开。 */
 const LOCAL_SHARING_SETTING_ERROR = "LOCAL_SHARING_SETTING_FAILED";
@@ -855,6 +859,76 @@ function createChatService({
     return core;
   }
 
+  function isSourceTokenChar(value) {
+    return typeof value === "string" && SOURCE_TOKEN_CHARS.test(value);
+  }
+
+  function isSourceConnector(value) {
+    return typeof value === "string" && SOURCE_CONNECTOR_CHARS.test(value);
+  }
+
+  function continuesSourceToken(text, index, step) {
+    const char = text[index];
+    if (isSourceTokenChar(char)) {
+      return true;
+    }
+    if (!isSourceConnector(char)) {
+      return false;
+    }
+    return isSourceTokenChar(text[index + step]);
+  }
+
+  /* 只在 ASCII 数字/标识符 token 两侧要求边界：307 中的 30、1.2 中的 1、
+     A-12 中的 A12 都不能被当作完整来源片段。 */
+  function hasSourceBoundary(text, start, end) {
+    const first = text[start];
+    const last = text[end - 1];
+    if (!isSourceTokenChar(first) && !isSourceTokenChar(last)) {
+      return true;
+    }
+    const beforeOk = start === 0 || !continuesSourceToken(text, start - 1, -1);
+    const afterOk = end === text.length || !continuesSourceToken(text, end, 1);
+    return beforeOk && afterOk;
+  }
+
+  function sourceContains(source, fragment) {
+    if (!fragment) {
+      return false;
+    }
+    let from = 0;
+    while (from <= source.length - fragment.length) {
+      const index = source.indexOf(fragment, from);
+      if (index < 0) {
+        return false;
+      }
+      if (hasSourceBoundary(source, index, index + fragment.length)) {
+        return true;
+      }
+      from = index + 1;
+    }
+    return false;
+  }
+
+  function rawBodyCore(body) {
+    let core = body.trim();
+    for (const prefix of ["用户", "我们", "我", "角色"]) {
+      if (core.startsWith(prefix)) {
+        core = core.slice(prefix.length);
+        break;
+      }
+    }
+    return core.trim();
+  }
+
+  function sourceBodyCoreSupported(evidence, body) {
+    const core = rawBodyCore(body);
+    if (sourceContains(evidence, core)) {
+      return true;
+    }
+    const withoutPeriod = core.replace(/。$/u, "");
+    return withoutPeriod !== core && sourceContains(evidence, withoutPeriod);
+  }
+
   function evidenceCoversCore(core, evidenceNormalized) {
     let from = 0;
     let index = -1;
@@ -868,6 +942,8 @@ function createChatService({
   }
 
   /* 只接受能被用户原话和完整 evidence 覆盖的事实核心。
+     evidence 按用户原文做连续片段核对，并检查 ASCII 数字/标识符 token 边界，
+     防止 307 被截成 30、1.2 被改成 12；body 核心也须由 evidence 原文支持。
      模型 body 仅用于核对，不直接落库；写入正文保留用户 evidence 原文，
      避免把模型重述自动升级为用户明确事实，也避免“我”这类宽泛引用。
      证据核心若紧跟在否定字后，则不作为肯定确认。 */
@@ -875,7 +951,6 @@ function createChatService({
     if (!Array.isArray(value)) {
       return [];
     }
-    const userNormalized = normalizeGrounding(userText);
     const seen = new Set();
     const candidates = [];
     for (const candidate of value) {
@@ -899,9 +974,9 @@ function createChatService({
         !evidence ||
         evidence.length > MEMORY_BODY_CHARS ||
         evidenceNormalized.length < 3 ||
-        !userNormalized.includes(evidenceNormalized) ||
+        !sourceContains(userText, evidence) ||
+        !sourceBodyCoreSupported(evidence, body) ||
         core.length < 2 ||
-        !userNormalized.includes(core) ||
         !evidenceCoversCore(core, evidenceNormalized) ||
         seen.has(factKey)
       ) {

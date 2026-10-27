@@ -436,6 +436,13 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     return normalizeFactBody(left) === normalizeFactBody(right);
   }
 
+  /* 明确记住的同键比较只容忍末尾中文句号；正文、主体、否定、数字与内部
+     标点仍须一致。普通提炼继续使用严格 sameBody，身份/删除指纹不参与。 */
+  function sameExplicitRememberBody(left, right) {
+    const normalize = (value) => normalizeFactBody(value).replace(/。+$/u, "");
+    return normalize(left) === normalize(right);
+  }
+
   /* 同一来源可以产生多个 factKey。单条 remember 以 (角色, factKey) 幂等；
      对同一来源重扫请使用 applyExtractionBatch，以 (角色, 来源哈希, 来源版本)
      的批次标记保证整次提炼只应用一次。新来源版本视为新提炼，已有 factKey
@@ -481,7 +488,10 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
     }
     const existing = store.getEntryByFact(fact.characterId, fact.factKey);
     if (existing) {
-      if (!sameBody(existing.body, fact.body)) {
+      const bodyMatches = fact.explicitRemember === true
+        ? sameExplicitRememberBody(existing.body, fact.body)
+        : sameBody(existing.body, fact.body);
+      if (!bodyMatches) {
         return {
           created: false,
           promoted: false,

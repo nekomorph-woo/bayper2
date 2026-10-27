@@ -25,6 +25,16 @@ const NEGATED_REMEMBER_COMMAND =
   /^(?:(?:请(?:你)?|帮我|帮忙|麻烦(?:你)?|拜托(?:你)?|让你)(?:帮我|帮忙)?)?(?:不要|别|不用|无需|不必)(?:再)?(?:记住|记一下|记下来|记着|保存)/u;
 const TOPIC_SWITCH =
   /^(?:另外|顺便|还有|同时|而且|并且|至于|对了|不过|但是|可是|然后)/u;
+/* 只用于判断引号内的内容是否仍是命令或转述；不参与正文匹配。 */
+const REPORTED_SPEECH =
+  /^(?:你|他|她|助手|用户)(?:之前|刚才|上次)?(?:说|告诉|提到|讲)/u;
+const QUOTE_PAIRS = Object.freeze([
+  ["“", "”"],
+  ["「", "」"],
+  ["『", "』"],
+  ["‘", "’"],
+  ['"', '"'],
+]);
 /* 去掉命令和引号后仍只剩指代/时间，不算可定位的事实。 */
 const REFERENCE_ONLY =
   /^(?:(?:我)?(?:刚才|刚刚|之前|上次)?(?:说|提|讲)?(?:的)?(?:这|那)(?:个|件|些)?(?:事情?|东西|内容|话|记忆)?|(?:我)?(?:刚才|刚刚|之前|上次)(?:说|提|讲)(?:的)?(?:事情?|东西|内容|话|记忆)?|(?:刚才|刚刚|之前|上次))$/u;
@@ -91,6 +101,29 @@ function sentenceIsQuestion(sentence) {
   return /[？?]\s*$/u.test(text) || /(?:吗|呢)\s*[。！!]?\s*$/u.test(text);
 }
 
+/* 仅展开外部明确命令定位到的完整事实外层一对匹配引号；引号内的命令或
+   转述不展开，保持不授权。内部引号和非完整包裹均原样保留。 */
+function unwrapLocatedQuotes(text) {
+  const pair = QUOTE_PAIRS.find(([open, close]) =>
+    text.length >= open.length + close.length &&
+    text.startsWith(open) &&
+    text.endsWith(close));
+  if (!pair) {
+    return text;
+  }
+  const inner = text
+    .slice(pair[0].length, text.length - pair[1].length)
+    .trim();
+  if (!inner) {
+    return text;
+  }
+  if (REMEMBER_COMMAND.test(inner) || NEGATED_REMEMBER_COMMAND.test(inner) ||
+    REPORTED_SPEECH.test(inner)) {
+    return null;
+  }
+  return inner;
+}
+
 /* 返回命令、否定排除段和无法定位的段。commands 才参与提升；blocked 与
    ambiguous 都只用于把对应候选排除在本轮保存外，不删除已有条目。 */
 function analyzeExplicitRemember(userText) {
@@ -131,6 +164,15 @@ function analyzeExplicitRemember(userText) {
           content = userText.slice(previous.start, previous.end).trim();
         }
       }
+      const unwrapped = unwrapLocatedQuotes(content);
+      if (unwrapped === null) {
+        const normalized = normalizeGrounding(content);
+        if (content || normalized) {
+          ambiguous.push({ content, normalized });
+        }
+        continue;
+      }
+      content = unwrapped;
       const normalized = normalizeGrounding(content);
       const locatable = Boolean(content) && normalized.length >= 2 &&
         !REFERENCE_ONLY.test(normalized);
@@ -163,41 +205,132 @@ function analyzeExplicitRemember(userText) {
 const TRAILING_REMEMBER_COMMAND =
   /(?:请(?:你)?|帮我|帮忙|麻烦(?:你)?|拜托(?:你)?|让你)(?:帮我|帮忙)?(?:记住|记一下|记下来|记着|别忘了|别忘记|不要忘记)$/u;
 
-/* 去掉候选正文可能带的命令前缀/尾随命令与“我/用户”主语，再做方向明确的比较。 */
-function normalizedCandidateBody(body) {
-  let normalized = normalizeGrounding(body).replace(/^(?:用户|我们|我|角色)/u, "");
-  const leading = normalized.match(REMEMBER_COMMAND);
-  if (leading) {
-    normalized = normalized.slice(leading[0].length);
-  }
-  return normalized.replace(TRAILING_REMEMBER_COMMAND, "");
+/* 明确记住的授权比较只忽略末尾中文句号；主体、否定、数字和内部标点
+   均保留。不在这里替换 normalizeGrounding，也不新增引号或主语假设。 */
+function locatedText(value) {
+  return String(value ?? "").normalize("NFC").trim().replace(/。+$/u, "").trim();
 }
 
-/* 正向授权只允许候选完整落在授权事实段内：候选是事实段的一部分可以，
-   反向包含则说明把“另外”等未授权内容也带进来了，必须按含混处理。 */
-function candidateRelation(body, content) {
-  const normalized = normalizedCandidateBody(body);
-  if (normalized.length < 2) {
+/* 候选可带命令前缀/尾随命令；只去掉这些命令边界，不去主语或引号。 */
+function candidateText(body) {
+  let text = locatedText(body);
+  const leading = text.match(REMEMBER_COMMAND);
+  if (leading) {
+    text = text.slice(leading[0].length);
+  }
+  text = text.replace(TRAILING_REMEMBER_COMMAND, "");
+  return locatedText(text
+    .replace(/^[\s，,：:]+/u, "")
+    .replace(/[\s，,：:]+$/u, ""));
+}
+
+function isBoundaryChar(value) {
+  return value === undefined || /[\s\p{P}]/u.test(value);
+}
+
+function hasSemanticText(value) {
+  return /[^\s\p{P}\p{S}]/u.test(value);
+}
+
+/* 只把完整片段算作命中：数字后缀、不同主体或内部标点不同都不构成边界，
+   避免 30/307/3070 与 1.2/12 互相匹配。 */
+function completeSegmentIndexes(candidate, located) {
+  const indexes = [];
+  let from = 0;
+  while (from <= candidate.length - located.length) {
+    const index = candidate.indexOf(located, from);
+    if (index < 0) {
+      break;
+    }
+    const before = index === 0 ? undefined : candidate[index - 1];
+    const after = index + located.length >= candidate.length
+      ? undefined
+      : candidate[index + located.length];
+    const afterBoundary = isBoundaryChar(after) ||
+      TOPIC_SWITCH.test(candidate.slice(index + located.length));
+    if (isBoundaryChar(before) && afterBoundary) {
+      indexes.push(index);
+    }
+    from = index + 1;
+  }
+  return indexes;
+}
+
+/* 候选以定位事实的完整后缀开头、后面再带其他语义内容时，仍是宽候选。 */
+function narrowLocatedPrefixWithExtra(candidate, located) {
+  const max = Math.min(candidate.length, located.length);
+  for (let length = max; length >= 2; length -= 1) {
+    const head = candidate.slice(0, length);
+    if (!located.endsWith(head)) {
+      continue;
+    }
+    const beforeIndex = located.length - length - 1;
+    const before = beforeIndex >= 0 ? located[beforeIndex] : undefined;
+    const startsNumeric = /^[0-9.,]/u.test(head);
+    if (before !== undefined && /[0-9]/u.test(before) && startsNumeric) {
+      continue;
+    }
+    const rest = candidate.slice(length);
+    if (hasSemanticText(rest) &&
+      (isBoundaryChar(rest[0]) || TOPIC_SWITCH.test(rest))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function textRelation(candidate, located) {
+  if (candidate.length < 2 || located.length < 2) {
     return "none";
   }
-  if (content.includes(normalized)) {
+  if (candidate === located) {
     return "authorized";
   }
-  return normalized.includes(content) ? "mixed" : "none";
+  const mixed = completeSegmentIndexes(candidate, located).some((index) => {
+    const prefix = candidate.slice(0, index);
+    const suffix = candidate.slice(index + located.length);
+    return hasSemanticText(prefix) || hasSemanticText(suffix);
+  });
+  return mixed || narrowLocatedPrefixWithExtra(candidate, located)
+    ? "mixed"
+    : "none";
 }
 
-/* 否定/歧义排除的方向不同：候选包含被拒绝事实时整条宽候选都不能落库，
-   不能因为正文更长就漏过。 */
+/* 正向授权要求候选与完整定位事实一致；覆盖完整事实后再带其他语义内容
+   才按 mixed 拦截。窄候选或不同事实返回 none，不做宽松 substring 提升。 */
+function candidateRelation(body, content) {
+  return textRelation(candidateText(body), locatedText(content));
+}
+
+/* 否定保存可保守排除被拒绝事实去掉前缀后的完整后缀，例如
+   “我家的门牌是307” 的 “门牌是307”；但不从数字中间截取，保留
+   30/307/3070 与 1.2/12 的完整性，也不同主体误拦。 */
+function isNarrowRejectedSuffix(candidate, located) {
+  if (!located.endsWith(candidate)) {
+    return false;
+  }
+  const beforeIndex = located.length - candidate.length - 1;
+  const before = beforeIndex >= 0 ? located[beforeIndex] : undefined;
+  const startsNumeric = /^[0-9.,]/u.test(candidate);
+  if (before !== undefined && /[0-9]/u.test(before) && startsNumeric) {
+    return false;
+  }
+  return true;
+}
+
 function rejectedOverlap(body, content) {
-  const normalized = normalizedCandidateBody(body);
-  return normalized.length >= 2 &&
-    (content.includes(normalized) || normalized.includes(content));
+  const candidate = candidateText(body);
+  const located = locatedText(content);
+  if (candidate.length < 2 || located.length < 2) {
+    return false;
+  }
+  return textRelation(candidate, located) !== "none" ||
+    isNarrowRejectedSuffix(candidate, located);
 }
 
 function matchesSpans(spans, candidates) {
   return candidates.filter((item) =>
-    spans.some((span) =>
-      span.normalized && rejectedOverlap(item.body, span.normalized)));
+    spans.some((span) => span.content && rejectedOverlap(item.body, span.content)));
 }
 
 function resolveExplicitRemember(plan, candidates) {
@@ -225,7 +358,7 @@ function resolveExplicitRemember(plan, candidates) {
   for (const item of available) {
     let relation = "none";
     for (const command of plan.commands ?? []) {
-      const next = candidateRelation(item.body, command.normalized);
+      const next = candidateRelation(item.body, command.content);
       if (next === "authorized") {
         relation = "authorized";
         break;
@@ -249,7 +382,7 @@ function resolveExplicitRemember(plan, candidates) {
     matchedFactKeys: available
       .filter((item) =>
         relationByKey.get(item.factKey) === "authorized" &&
-        candidateRelation(item.body, command.normalized) === "authorized")
+        candidateRelation(item.body, command.content) === "authorized")
       .map((item) => item.factKey),
   }));
   const boosted = new Set(matches.flatMap((match) => match.matchedFactKeys));
