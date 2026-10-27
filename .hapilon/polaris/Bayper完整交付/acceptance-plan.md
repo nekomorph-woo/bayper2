@@ -111,3 +111,8 @@ S08 最终验收入口的 Part B 已在该 Contract 文件内按 setup/driver/ob
 ## S07 睡眠运行验收入口
 
 方案与Case：[s07-sleep-runtime-plan.md](s07-sleep-runtime-plan.md)。运行 `node --test --test-concurrency=1 --test-timeout=180000 tests/acceptance/desktop-sleep.spec.cjs`；使用真实Electron/SQLite与隔离构造数据，不请求真实模型。master独立10项结果、清理及视觉边界见[s07-sleep-master-review.md](s07-sleep-master-review.md)。相关unit 9项、公开活动16项及rest/activity/desktop邻近回归各有独立或开发者证据，不混淆操作者。
+
+
+## S05通知高度与回执布局回归
+
+使用`node --test --test-concurrency=1 --test-timeout=240000 tests/acceptance/desktop-notifications.spec.cjs`执行12项。master独立聚焦010/011/012，来源/边界/证据及受托结论见[s05k-notification-height-review.md](s05k-notification-height-review.md)。真实隔离Herdr/Electron/SQLite，不调用模型或用户会话。

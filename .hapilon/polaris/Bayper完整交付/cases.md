@@ -194,3 +194,8 @@ POL-CHATMEM-CORRECT-TIME-001～011及002b/004b/010b/010c：Contract见[s03p-temp
 ## S07 凛睡眠运行 v1
 
 POL-SLEEPUI-001、002、003、004A、004B、005、005B、005C、006、007 与公开服务004B-ACTIVITY的完整Given/When/Expected、边界和Oracle见[s07-sleep-runtime-plan.md](s07-sleep-runtime-plan.md)。master受托确认，仅接凛困倦/睡眠运行；不代表正式动画美术或全部S07。Runner：`tests/acceptance/desktop-sleep.spec.cjs`；门禁补充：`tests/acceptance/character-activities.spec.cjs`。
+
+
+## S05通知连续可读补充
+
+POL-NOTIFY-UI-012 v1及回执稳定布局修订的完整契约见[s05k-notification-height-review.md](s05k-notification-height-review.md)。Runner为`tests/acceptance/desktop-notifications.spec.cjs`；复用010/011分页契约，不改变六秒业务要求。

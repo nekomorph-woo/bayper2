@@ -147,9 +147,16 @@ body {
 
 .item-state {
   flex: none;
+  width: 3em;
   padding-top: 1px;
   font-size: 11px;
   color: #857a6c;
+  white-space: nowrap;
+  visibility: hidden;
+}
+
+.item.acked .item-state {
+  visibility: visible;
 }
 
 .more {

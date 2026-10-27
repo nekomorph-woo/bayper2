@@ -55,7 +55,6 @@ function updateItem(row, item) {
   const state = row.querySelector(".item-state");
   // 只陈述“已真实显示”，不冒充用户已阅读。
   state.textContent = acknowledged ? "已显示" : "";
-  state.hidden = !acknowledged;
 }
 
 function badgeText(channel, items) {
@@ -445,10 +444,12 @@ function naturalHeight() {
       const head = card.querySelector(".card-head");
       const list = card.querySelector(".items");
       const cardStyle = getComputedStyle(card);
+      const listStyle = list ? getComputedStyle(list) : null;
       total += 2
         + (parseFloat(cardStyle.paddingTop) || 0)
         + (parseFloat(cardStyle.paddingBottom) || 0)
         + (head?.getBoundingClientRect().height || 0)
+        + (parseFloat(listStyle?.marginTop) || 0)
         + Math.min(list?.scrollHeight || 0, 150);
     } else {
       total += card.scrollHeight + 2;

@@ -377,3 +377,8 @@ master独立完整GUI10/10、0skip、exit0，证据`evidence/master-s03p-gui-LJc
 master独立POL-SLEEPUI-001/002/003/004A/004B/005/005B/005C/006/007共10/10 PASS，0skip、exit0、源码前后摘要一致；证据`evidence/master-sleep-gui-DEBjNHPB/`及`s07-sleep-runtime/master-sleep-gui-DEBjNHPB/`，10项隔离资源清理成功。公开活动服务16/16、协议/素材边界9/9独立通过。具体观察与各项覆盖见[s07-sleep-master-review.md](s07-sleep-master-review.md)和[开发者报告](s07-sleep-runtime-review.md)。
 
 受托接受范围为已测运行行为：真实20s静坐后困倦/睡眠、聊天唤醒、P0不打断、有限节点换人/探索、暂停/隐藏/错误恢复和透明命中。未覆盖最终人类体验、连续动画美术正式发布及其他角色服装动作。drowsy/sleep仍candidate，S07不作整体接受。通知010历史阅读期裁切仍未归因；通知渲染生产文件本批未修改，独立调查继续，不随此睡眠快照宣称修复。
+
+
+## S05通知高度与回执稳定布局（2026-10-28）
+
+高度漏算与回执后异步扩窗裁切分别取得实际失败，Claude最小修复后完整通知12/12；master独立010/011/012 3/3、0skip、SHA一致，完整hold范围298采样无不可见，清理无异常。受托接受已测修复，证据与历史局限见[s05k-notification-height-review.md](s05k-notification-height-review.md)。旧010无现场失败不宣称唯一因果已证实；全S05/最终原生体验仍按父级待办。

@@ -1484,11 +1484,21 @@ test("POL-NOTIFY-UI-004 不可见不ack、子进程重建、暂停恢复与旧�
     await launched.app.evaluate(({ powerMonitor }) => powerMonitor.emit("lock-screen"));
     await waitFor(async () => (await snapshotOf(page)).system.paused === true, 5000, "系统暂停");
     const pausedEvent = await triggerNotification("blocked", 20);
-    await delay(1200);
+    const hiddenView = await waitFor(async () => {
+      const view = notificationsOf(await snapshotOf(page));
+      return view.window?.actualVisible === false ? view : null;
+    }, 5000, "锁屏期间真实通知窗口未隐藏");
+    await delay(500);
     const pausedRow = ackRow(dataDir, pausedEvent.id);
     const pausedView = notificationsOf(await snapshotOf(page));
     assert.equal(pausedRow?.acknowledged_at ?? null, null, "锁屏期间不得回执不可见通知");
     assert.notEqual(pausedView.window?.visible, true, "锁屏期间通知窗口必须隐藏");
+    assert.equal(
+      pausedView.window?.actualVisible,
+      false,
+      "锁屏期间真实 BrowserWindow.isVisible 必须为 false",
+    );
+    assert.equal(hiddenView.window.actualVisible, false);
     assert.equal(
       queryDb(dataDir, "SELECT notification_status FROM connector_events WHERE id = ?",
         [pausedEvent.id])[0].notification_status,
@@ -2292,12 +2302,16 @@ const LONG_AGENT = (index) =>
 
 /* 真实通知 DOM 的几何快照：不点击、不滚动，只读。 */
 async function sampleNotificationGeometry(cdpPage) {
-  return cdpPage.evaluate(() => {
+  const requestStartedAt = Date.now();
+  const sample = await cdpPage.evaluate(() => {
+    const sampledAt = Date.now();
     const urgent = document.querySelector('.card[data-channel="urgent"]');
     const list = urgent?.querySelector(".items") ?? null;
     const listRect = list?.getBoundingClientRect() ?? null;
     const clipBottom = Math.min(listRect?.bottom ?? 0, window.innerHeight);
     return {
+      sampledAt,
+      innerWidth: window.innerWidth,
       innerHeight: window.innerHeight,
       urgentRect: urgent?.getBoundingClientRect().toJSON() ?? null,
       list: list ? {
@@ -2309,23 +2323,74 @@ async function sampleNotificationGeometry(cdpPage) {
       rows: urgent ? [...urgent.querySelectorAll(".item")].map((row) => {
         const source = row.querySelector(".item-source");
         const meaning = row.querySelector(".item-meaning");
+        const rowRect = row.getBoundingClientRect();
         const sourceRect = source.getBoundingClientRect();
         const meaningRect = meaning.getBoundingClientRect();
+        const sourceClipped = source.scrollHeight > source.clientHeight + 1;
+        const meaningClipped = meaning.scrollHeight > meaning.clientHeight + 1;
+        const fullyVisible = sourceRect.top >= (listRect?.top ?? 0) - 0.5
+          && sourceRect.top >= -0.5
+          && sourceRect.bottom <= clipBottom + 0.5
+          && meaningRect.bottom <= clipBottom + 0.5
+          && sourceRect.left >= -0.5
+          && meaningRect.right <= window.innerWidth + 0.5;
+        const clipReasons = [];
+        if (sourceClipped) clipReasons.push("source-overflow");
+        if (meaningClipped) clipReasons.push("meaning-overflow");
+        if (!fullyVisible) clipReasons.push("outside-window-or-list");
         return {
           eventId: row.dataset.eventId,
           ack: row.dataset.ack,
           source: source.textContent,
           meaning: meaning.textContent,
-          sourceClipped: source.scrollHeight > source.clientHeight + 1,
-          meaningClipped: meaning.scrollHeight > meaning.clientHeight + 1,
-          fullyVisible: sourceRect.top >= (listRect?.top ?? 0) - 0.5
-            && sourceRect.top >= -0.5
-            && sourceRect.bottom <= clipBottom + 0.5
-            && meaningRect.bottom <= clipBottom + 0.5
-            && sourceRect.left >= -0.5
-            && meaningRect.right <= window.innerWidth + 0.5,
+          rowRect: rowRect.toJSON(),
+          sourceRect: sourceRect.toJSON(),
+          meaningRect: meaningRect.toJSON(),
+          sourceClipped,
+          meaningClipped,
+          fullyVisible,
+          clipped: sourceClipped || meaningClipped || !fullyVisible,
+          clipReasons,
         };
       }) : [],
+      layout: urgent ? (() => {
+        const stackEl = document.getElementById("stack");
+        const stackStyle = getComputedStyle(stackEl);
+        const cardStyle = getComputedStyle(urgent);
+        const head = urgent.querySelector(".card-head");
+        const headStyle = head ? getComputedStyle(head) : null;
+        const listStyle = list ? getComputedStyle(list) : null;
+        const px = (value) => parseFloat(value) || 0;
+        return {
+          stack: {
+            rect: stackEl.getBoundingClientRect().toJSON(),
+            paddingTop: px(stackStyle.paddingTop),
+            paddingBottom: px(stackStyle.paddingBottom),
+            rowGap: px(stackStyle.rowGap),
+          },
+          card: {
+            rect: urgent.getBoundingClientRect().toJSON(),
+            borderTop: px(cardStyle.borderTopWidth),
+            borderBottom: px(cardStyle.borderBottomWidth),
+            paddingTop: px(cardStyle.paddingTop),
+            paddingBottom: px(cardStyle.paddingBottom),
+          },
+          head: head ? {
+            rect: head.getBoundingClientRect().toJSON(),
+            marginTop: px(headStyle.marginTop),
+            marginBottom: px(headStyle.marginBottom),
+          } : null,
+          list: list ? {
+            rect: listRect.toJSON(),
+            marginTop: px(listStyle.marginTop),
+            marginBottom: px(listStyle.marginBottom),
+            paddingTop: px(listStyle.paddingTop),
+            paddingBottom: px(listStyle.paddingBottom),
+          } : null,
+          ordinaryHeights: [...document.querySelectorAll('.card[data-channel="ordinary"]')]
+            .map((card) => card.getBoundingClientRect().height),
+        };
+      })() : null,
       ordinary: [...document.querySelectorAll('.card[data-channel="ordinary"]')].map((card) => {
         const rect = card.getBoundingClientRect();
         return {
@@ -2337,6 +2402,7 @@ async function sampleNotificationGeometry(cdpPage) {
               text: element.textContent,
               top: textRect.top,
               bottom: textRect.bottom,
+              rect: textRect.toJSON(),
               clipped: element.scrollHeight > element.clientHeight + 1
                 || element.scrollWidth > element.clientWidth + 1,
             };
@@ -2345,6 +2411,65 @@ async function sampleNotificationGeometry(cdpPage) {
       }),
     };
   });
+  return {
+    ...sample,
+    requestStartedAt,
+    requestEndedAt: Date.now(),
+  };
+}
+
+/* 失败时仍可审查采样时间线：异常/缺失样本都带当次请求区间、几何与 ack/hold。 */
+function absentTimelineEntry(sample, eventId) {
+  return {
+    t: sample.sampledAt,
+    requestStartedAt: sample.requestStartedAt,
+    requestEndedAt: sample.requestEndedAt,
+    rendered: false,
+    fullyVisible: false,
+    eventId,
+    rowRect: null,
+    sourceRect: null,
+    meaningRect: null,
+    listRect: sample.list?.rect ?? null,
+    innerHeight: sample.innerHeight,
+    clipReasons: ["not-rendered"],
+  };
+}
+
+function rowTimelineEntry(sample, row, visible) {
+  return {
+    t: sample.sampledAt,
+    requestStartedAt: sample.requestStartedAt,
+    requestEndedAt: sample.requestEndedAt,
+    rendered: true,
+    fullyVisible: visible,
+    eventId: row.eventId,
+    rowRect: row.rowRect,
+    sourceRect: row.sourceRect,
+    meaningRect: row.meaningRect,
+    listRect: sample.list?.rect ?? null,
+    innerHeight: sample.innerHeight,
+    sourceClipped: row.sourceClipped,
+    meaningClipped: row.meaningClipped,
+    clipped: row.sourceClipped || row.meaningClipped || !row.fullyVisible,
+    clipReasons: row.clipReasons,
+    source: row.source,
+    meaning: row.meaning,
+    ack: row.ack,
+  };
+}
+
+function timelineForEvidence(timeline, dataDir) {
+  const evidence = {};
+  for (const [eventId, entries] of timeline) {
+    const ack = ackRow(dataDir, eventId);
+    evidence[eventId] = entries.map((entry) => ({
+      ...entry,
+      acknowledgedAt: ack?.acknowledged_at ?? null,
+      holdUntil: ack?.hold_until ?? null,
+    }));
+  }
+  return evidence;
 }
 
 test("POL-NOTIFY-UI-010 长Agent名默认分页自动可达；另批查看全部与普通三位并存", {
@@ -2444,21 +2569,18 @@ test("POL-NOTIFY-UI-010 长Agent名默认分页自动可达；另批查看全部
     const autoDeadline = autoStartedAt + 60000;
     let lastFeedAt = 0;
     while (Date.now() < autoDeadline) {
-      const sampledAt = Date.now();
       const sample = await sampleNotificationGeometry(cdp.page);
       const present = new Set(sample.rows.map((row) => row.eventId));
       // 先记录本帧缺席，再记录在场行；缺席同样属于“阅读期内被移出”。
       for (const [eventId, entries] of timeline) {
         if (!present.has(eventId)) {
-          entries.push({ t: sampledAt, rendered: false, fullyVisible: false });
+          entries.push(absentTimelineEntry(sample, eventId));
         }
       }
       for (const row of sample.rows) {
         const visible = row.fullyVisible && !row.sourceClipped && !row.meaningClipped;
         if (!timeline.has(row.eventId)) timeline.set(row.eventId, []);
-        timeline.get(row.eventId).push({
-          t: sampledAt, rendered: true, fullyVisible: visible,
-        });
+        timeline.get(row.eventId).push(rowTimelineEntry(sample, row, visible));
         if (visible) {
           complete.set(row.eventId, {
             eventId: row.eventId,
@@ -2508,6 +2630,8 @@ test("POL-NOTIFY-UI-010 长Agent名默认分页自动可达；另批查看全部
       ordinarySampleCount: ordinarySamples.length,
       autoElapsedMs: Date.now() - autoStartedAt,
     };
+    // 断言前先落盘；失败时仍能按采样时间/几何/ack 复核裁切。
+    record.facts.auto.timeline = timelineForEvidence(timeline, dataDir);
     assert.equal(ackedFirst.length, p0Ids.length,
       `无点击/滚动时六条长名称 P0 必须自动逐条展示；实际仅 ${ackedFirst.length}/6 回执`);
     for (const { eventId, agent } of p0Agents) {
@@ -2818,18 +2942,18 @@ test("POL-NOTIFY-UI-011 短名P0先到、三普通随后到420pt时已回执内�
     const startedAt = Date.now();
     const deadline = startedAt + 40000;
     while (Date.now() < deadline) {
-      const sampledAt = Date.now();
       const sample = await sampleNotificationGeometry(cdp.page);
+      const sampledAt = sample.sampledAt;
       const present = new Set(sample.rows.map((row) => row.eventId));
       for (const [eventId, entries] of timeline) {
         if (!present.has(eventId)) {
-          entries.push({ t: sampledAt, rendered: false, fullyVisible: false });
+          entries.push(absentTimelineEntry(sample, eventId));
         }
       }
       for (const row of sample.rows) {
         const visible = row.fullyVisible && !row.sourceClipped && !row.meaningClipped;
         if (!timeline.has(row.eventId)) timeline.set(row.eventId, []);
-        timeline.get(row.eventId).push({ t: sampledAt, rendered: true, fullyVisible: visible });
+        timeline.get(row.eventId).push(rowTimelineEntry(sample, row, visible));
         if (visible) complete.set(row.eventId, { source: row.source, meaning: row.meaning });
       }
       const pageKey = sample.rows.map((row) => row.eventId).join(",");
@@ -2868,6 +2992,7 @@ test("POL-NOTIFY-UI-011 短名P0先到、三普通随后到420pt时已回执内�
     record.facts.firstAck = firstAck.acknowledged_at;
     record.facts.pageGroups = pageGroups;
     record.facts.ordinarySampleCount = ordinarySamples.length;
+    record.facts.timeline = timelineForEvidence(timeline, dataDir);
     assert.equal(acked.length, 3, "三条短名 P0 必须最终自动全部回执");
     for (const { eventId, agent } of p0Agents) {
       const ack = ackRow(dataDir, eventId);
@@ -2932,5 +3057,222 @@ test("POL-NOTIFY-UI-011 短名P0先到、三普通随后到420pt时已回执内�
     for (const browser of resources.cdp) await browser.close().catch(() => {});
     record.appExits = await teardown(resources, record.cleanupErrors);
     writeCase("011", record, [root, dataDir, home]);
+  }
+});
+
+const CONTINUITY_AGENT = "agent-with-a-very-long-name-00-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+
+test("POL-NOTIFY-UI-012 ack标签挤宽与三普通位重排下长P0连续可读", {
+  timeout: 180000,
+  skip: SKIP_LIVE,
+}, async () => {
+  const root = fs.mkdtempSync("/tmp/bayper-s05j-012-");
+  const dataDir = makeDataDir("012");
+  const home = makeHome();
+  const registryDir = registryDirOf(dataDir);
+  fs.mkdirSync(registryDir, { recursive: true });
+  const resources = { root, dataDir, home, server: null, app: null, cdp: [] };
+  const record = { case: "012", facts: {}, screenshots: [], cleanupErrors: [] };
+  let cdp = null;
+  let timeline = null;
+  try {
+    const session = `s05j-${crypto.randomBytes(3).toString("hex")}`;
+    resources.server = await startRealServer(root, session);
+    setupRealPlugin(resources.server, registryDir);
+    const p0Pane = createPane(resources.server, "s05j-012-p0");
+    reportAgent(resources.server, p0Pane, CONTINUITY_AGENT, "working", 1);
+    const ordinaryPanes = [0, 1, 2].map((index) =>
+      createPane(resources.server, `s05j-012-ordinary-${index}`));
+    for (let index = 0; index < 3; index += 1) {
+      reportAgent(resources.server, ordinaryPanes[index], `fixture-o${index}`, "working", 1);
+    }
+    invokeRegistration(resources.server);
+    await waitRegistration(registryDir, resources.server.child.pid);
+    const launched = await launchApp(dataDir, home, {
+      BAYPER_NOTIFICATION_MAX_HEIGHT: "420",
+    });
+    resources.app = launched.app;
+    const page = launched.page;
+    await waitDesktop(page);
+    await waitOnline(page);
+    // 先用普通位建立真实通知页/CDP，再触发长 P0，避免 350ms ack 先于连接。
+    reportAgent(resources.server, ordinaryPanes[0], "fixture-o0", "unknown", 2);
+    await waitNotificationWindow(page);
+    cdp = await connectNotificationPage(dataDir);
+    resources.cdp.push(cdp.browser);
+    await waitFor(async () =>
+      notificationsOf(await snapshotOf(page)).panels.length === 0,
+    12000, "预热普通通知阅读结束");
+    const beforeId = queryDb(dataDir,
+      "SELECT COALESCE(MAX(id), 0) AS id FROM connector_events")[0].id;
+    reportAgent(resources.server, p0Pane, CONTINUITY_AGENT, "blocked", 10);
+    const event = await waitFor(() => queryDb(dataDir, `
+      SELECT * FROM connector_events WHERE id > ? AND state = 'needs_attention'
+      ORDER BY id ASC LIMIT 1
+    `, [beforeId])[0] ?? null, 8000, "长名称 P0 事件");
+    assert.equal(event.priority, 0, "聚焦场景必须是真 P0");
+    const eventId = String(event.id);
+    record.facts.eventId = eventId;
+    const rowOf = (sample) => sample.rows.find((row) => row.eventId === eventId) ?? null;
+    timeline = new Map([[eventId, []]]);
+    const pushSample = (sample) => {
+      const row = rowOf(sample);
+      timeline.get(eventId).push(row
+        ? rowTimelineEntry(
+          sample,
+          row,
+          row.fullyVisible && !row.sourceClipped && !row.meaningClipped,
+        )
+        : absentTimelineEntry(sample, eventId));
+    };
+    // 直接采样真实通知 DOM，ack 前状态在 350ms 阅读就绪窗口内捕获。
+    const preAck = await waitFor(async () => {
+      const sample = await sampleNotificationGeometry(cdp.page);
+      pushSample(sample);
+      const row = rowOf(sample);
+      return row && row.ack === "0" ? { sample, row } : null;
+    }, 10000, "ack 前长行");
+    record.facts.preAck = preAck.row;
+    record.facts.preWindow = (await snapshotOf(page)).desktop.notifications.window;
+    assert.ok(
+      preAck.row.source.includes(CONTINUITY_AGENT),
+      `DOM 来源未包含预期长名称：${preAck.row.source}`,
+    );
+    const ack = await waitAck(dataDir, event.id, 10000);
+    assert.equal(ack.hold_until - ack.acknowledged_at, 6000, "P0 仍为 6 秒阅读");
+    record.facts.acknowledgedAt = ack.acknowledged_at;
+    record.facts.holdUntil = ack.hold_until;
+    const postAck = await waitFor(async () => {
+      const sample = await sampleNotificationGeometry(cdp.page);
+      pushSample(sample);
+      const row = rowOf(sample);
+      return row && row.ack === "1" ? { sample, row } : null;
+    }, 5000, "ack 标签出现后的长行");
+    record.facts.postAck = postAck.row;
+    record.facts.postWindow = (await snapshotOf(page)).desktop.notifications.window;
+    // 只报告是否真的多折一行；未变化不能称为 2→3 行已覆盖。
+    record.facts.ackSqueeze = {
+      sourceHeightChanged:
+        preAck.row.sourceRect.height !== postAck.row.sourceRect.height,
+    };
+    // 新版“已显示”位首帧预留宽度，ack 不再改变正文折行。
+    assert.equal(
+      postAck.row.sourceRect.width,
+      preAck.row.sourceRect.width,
+      "ack 前后正文宽度必须稳定",
+    );
+    assert.equal(
+      postAck.row.sourceRect.height,
+      preAck.row.sourceRect.height,
+      "ack 前后正文行高必须稳定",
+    );
+
+    let ordinaryTriggeredAt = null;
+    let ordinaryArrival = null;
+    while (true) {
+      const sample = await sampleNotificationGeometry(cdp.page);
+      pushSample(sample);
+      // 先采样，再触发普通位，确保覆盖 resize 发生前后的同一阅读期。
+      if (ordinaryTriggeredAt === null) {
+        ordinaryTriggeredAt = Date.now();
+        record.facts.ordinaryTriggeredAt = ordinaryTriggeredAt;
+        for (let index = 0; index < 3; index += 1) {
+          reportAgent(
+            resources.server,
+            ordinaryPanes[index],
+            `fixture-o${index}`,
+            index === 0 ? "working" : "unknown",
+            index === 0 ? 3 : 2,
+          );
+        }
+      }
+      if (!ordinaryArrival) {
+        const panels = notificationsOf(await snapshotOf(page)).panels.filter(
+          (item) => item.channel === "ordinary",
+        );
+        if (panels.length === 3) {
+          ordinaryArrival = {
+            sampledAt: sample.sampledAt,
+            innerHeight: sample.innerHeight,
+            list: sample.list,
+            layout: sample.layout,
+            panelCount: panels.length,
+            window: (await snapshotOf(page)).desktop.notifications.window,
+          };
+          record.facts.ordinaryArrival = ordinaryArrival;
+        }
+      }
+      if (sample.sampledAt >= ack.hold_until) break;
+      await delay(120);
+    }
+
+    record.facts.timeline = timelineForEvidence(timeline, dataDir);
+    assert.ok(ordinaryArrival, "三普通位未在 6 秒阅读期内到达");
+    // 独立 Oracle：只用 DOM 实际 rect/computed 值推算所需窗口，不调用生产 naturalHeight。
+    const layout = ordinaryArrival.layout;
+    const layoutList = layout.list;
+    const requiredHeight =
+      layout.stack.paddingTop + layout.stack.paddingBottom
+      + layout.stack.rowGap * layout.ordinaryHeights.length
+      + layout.ordinaryHeights.reduce((sum, height) => sum + height, 0)
+      + layout.card.borderTop + layout.card.borderBottom
+      + layout.card.paddingTop + layout.card.paddingBottom
+      + layout.head.rect.height
+      + Math.min(ordinaryArrival.list.scrollHeight, 150)
+      + layoutList.marginTop;
+    const capped = requiredHeight >= 420;
+    record.facts.oracle = {
+      requiredHeight,
+      innerHeight: ordinaryArrival.innerHeight,
+      listClientHeight: ordinaryArrival.list.clientHeight,
+      listScrollHeight: ordinaryArrival.list.scrollHeight,
+      listContentsHeight: Math.min(ordinaryArrival.list.scrollHeight, 150),
+      capped,
+    };
+    if (!capped) {
+      assert.ok(
+        ordinaryArrival.innerHeight + 0.5 >= requiredHeight,
+        `窗口高度不足：required=${requiredHeight}, actual=${ordinaryArrival.innerHeight}`,
+      );
+      assert.ok(
+        ordinaryArrival.list.clientHeight + 0.5 >=
+          Math.min(ordinaryArrival.list.scrollHeight, 150),
+        `列表内容被高度漏算挤压：client=${ordinaryArrival.list.clientHeight}, scroll=${
+          ordinaryArrival.list.scrollHeight}`,
+      );
+    }
+    const holdEntries = record.facts.timeline[eventId].filter(
+      (entry) => entry.t >= ack.acknowledged_at && entry.t <= ack.hold_until,
+    );
+    assert.ok(holdEntries.length >= 5, "6 秒阅读期采样不足");
+    assert.ok(holdEntries[0].t - ack.acknowledged_at <= 800, "阅读期起点未覆盖");
+    assert.ok(ack.hold_until - holdEntries[holdEntries.length - 1].t <= 1000,
+      "阅读期终点未覆盖");
+    let maxGap = 0;
+    for (let index = 1; index < holdEntries.length; index += 1) {
+      maxGap = Math.max(maxGap, holdEntries[index].t - holdEntries[index - 1].t);
+    }
+    assert.ok(maxGap <= 1000, `阅读期采样最大间隙过大：${maxGap}ms`);
+    record.facts.continuity = { samples: holdEntries.length, maxGap };
+    for (const entry of holdEntries) {
+      assert.ok(entry.rendered, `事件 ${eventId} 在阅读期内被移出 DOM`);
+      assert.ok(entry.fullyVisible, `事件 ${eventId} 在阅读期内被裁切`);
+    }
+  } catch (error) {
+    // 时间线已在断言前落盘；不再用最终 debug 几何替代失败现场。
+    record.failure = error;
+    throw error;
+  } finally {
+    // preAck/普通位等待失败时也保存已获得的阶段事实与实际采样。
+    if (timeline) {
+      try {
+        record.facts.timeline = timelineForEvidence(timeline, dataDir);
+      } catch {
+        // 失败现场保留已有 facts，不用采样异常覆盖业务 failure。
+      }
+    }
+    for (const browser of resources.cdp) await browser.close().catch(() => {});
+    record.appExits = await teardown(resources, record.cleanupErrors);
+    writeCase("012", record, [root, dataDir, home]);
   }
 });
