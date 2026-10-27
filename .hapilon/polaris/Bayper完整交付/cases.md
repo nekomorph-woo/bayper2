@@ -129,3 +129,7 @@ POL-SEM-HOLD-001及01～16子项见[s03l-holdout-plan.md](s03l-holdout-plan.md)�
 ## S03l-b 已核实事实的原子关联
 
 POL-ASSOC-001～005，P0必需、Codex受托确认v1，唯一Contract见[s03l-association-plan.md](s03l-association-plan.md)。Runner tests/acceptance/memory-association.spec.cjs，9项领域测试；整体及邻接最终123项领域、19unit独立通过，逐项依据见[s03l-association-review.md](s03l-association-review.md)。等价关系由构造Fixture提供，本片只验真实事务与管理链，不能替代尚未通过的模型语义/原SEM Case。
+
+## S03l-b 结构化事实核验
+
+POL-REL-001～004，P0/v1/Codex受托确认，唯一Contract见[s03l-grounding-plan.md](s03l-grounding-plan.md)。tests/acceptance/memory-relation-protocol.spec.cjs承担确定性build/parse边界，独立8PASS；tools/memory-tuning/semantic-probe.cjs --policy grounded承担真实模型两数据集对照，baseline16PASS、holdout14PASS2FAIL，整体语义验收FAIL。详[s03l-grounding-review.md](s03l-grounding-review.md)，不替代原SEM产品验收。

@@ -2,12 +2,19 @@
 /* S03l-b：语义关系判定的真实服务前置对照。
    只读取构造的 16 对事实，向真实服务提交一次关系判定；Expected 仅用于事后评分，
    不进入模型输入。--dry-run 只输出将发送的 messages，不读取凭据、不访问网络。
+   --policy grounded 直接使用 app/memory-relation-protocol.cjs 的 build/parse 与有效关系；
+   默认 baseline 保持旧 v2 提示与评分行为。
    真实模式必须显式 --out，先 1 次 GET /models 确认模型存在，再最多 1 次 chat，不自动重试。 */
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { parseEnv } = require("node:util");
 const { parseBaseUrl, requestChatCompletion } = require("../../app/model.cjs");
+const {
+  POLICY_VERSION: GROUNDED_POLICY_VERSION,
+  buildRelationMessages,
+  parseRelationResponse,
+} = require("../../app/memory-relation-protocol.cjs");
 
 const REPO_ROOT = path.resolve(__dirname, "../..");
 const DATASETS = Object.freeze({
@@ -20,6 +27,7 @@ const RELATIONS = Object.freeze(["equivalent", "different", "uncertain"]);
 const PAIR_IDS = Object.freeze(Array.from({ length: 16 }, (_, index) => String(index + 1).padStart(2, "0")));
 const SIDE_KEYS = Object.freeze(["text", "kind", "sourceKind", "trust", "holder", "participants"]);
 const CHAT_MAX_TOKENS = 3000;
+const GROUNDED_CHAT_MAX_TOKENS = 6000;
 const CHAT_TEMPERATURE = 0;
 const CHAT_TIMEOUT_MS = 60000;
 const MODELS_TIMEOUT_MS = 20000;
@@ -36,8 +44,9 @@ const SYSTEM_PROMPT = [
 ].join("\n");
 
 function parseArgs(argv) {
-  const options = { dryRun: false, out: null, dataset: "baseline" };
+  const options = { dryRun: false, out: null, dataset: "baseline", policy: "baseline" };
   let datasetSeen = false;
+  let policySeen = false;
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === "--dry-run" && !options.dryRun) {
       options.dryRun = true;
@@ -51,6 +60,12 @@ function parseArgs(argv) {
       if (!Object.hasOwn(DATASETS, value)) throw new Error("--dataset 只支持 baseline 或 holdout。");
       options.dataset = value;
       datasetSeen = true;
+      index += 1;
+    } else if (argv[index] === "--policy" && !policySeen) {
+      const value = argv[index + 1];
+      if (value !== "baseline" && value !== "grounded") throw new Error("--policy 只支持 baseline 或 grounded。");
+      options.policy = value;
+      policySeen = true;
       index += 1;
     } else {
       throw new Error(`参数无效或重复：${argv[index]}`);
@@ -168,6 +183,25 @@ function buildItems(pairs, relations, failed) {
   });
 }
 
+/* grounded：逐项同时保留模型原始关系与本地门禁后的有效关系，指标按有效关系计算。 */
+function buildGroundedItems(pairs, results) {
+  const byId = new Map(results.map((result) => [result.pair, result]));
+  return pairs.map((pair) => {
+    const expected = normalizeExpected(pair.expected, pair.id);
+    const result = byId.get(pair.id);
+    const effectiveRelation = result.effectiveRelation;
+    return {
+      id: pair.id,
+      expected: pair.expected,
+      actual: effectiveRelation,
+      rawRelation: result.relation,
+      effectiveRelation,
+      reasons: result.reasons,
+      verdict: expected.includes(effectiveRelation) ? "PASS" : "FAIL",
+    };
+  });
+}
+
 function summarize(items) {
   const summary = {
     total: items.length,
@@ -253,10 +287,21 @@ function writeResult(filePath, payload) {
 }
 
 function baseRecord(options, datasetPath, data, pairsText, messages) {
+  const grounded = options.policy === "grounded";
+  const modules = {
+    tool: { path: "tools/memory-tuning/semantic-probe.cjs", sha256: sha256(fs.readFileSync(__filename)) },
+    productionModel: { path: "app/model.cjs", sha256: sha256(fs.readFileSync(path.join(REPO_ROOT, "app/model.cjs"))) },
+  };
+  if (grounded) {
+    modules.productionProtocol = {
+      path: "app/memory-relation-protocol.cjs",
+      sha256: sha256(fs.readFileSync(path.join(REPO_ROOT, "app/memory-relation-protocol.cjs"))),
+    };
+  }
   return {
     generatedAt: new Date().toISOString(),
     mode: options.dryRun ? "dry-run" : "live",
-    policyVersion: POLICY_VERSION,
+    policyVersion: grounded ? GROUNDED_POLICY_VERSION : POLICY_VERSION,
     input: {
       dataset: options.dataset,
       path: path.relative(REPO_ROOT, datasetPath),
@@ -264,16 +309,14 @@ function baseRecord(options, datasetPath, data, pairsText, messages) {
       pairCount: data.pairs.length,
       sha256: sha256(pairsText),
     },
-    modules: {
-      tool: { path: "tools/memory-tuning/semantic-probe.cjs", sha256: sha256(fs.readFileSync(__filename)) },
-      productionModel: { path: "app/model.cjs", sha256: sha256(fs.readFileSync(path.join(REPO_ROOT, "app/model.cjs"))) },
-    },
+    modules,
     messages,
   };
 }
 
-async function runLive(record, pairs) {
+async function runLive(record, pairs, options) {
   const pairIds = pairs.map((pair) => pair.id);
+  const maxTokens = options.policy === "grounded" ? GROUNDED_CHAT_MAX_TOKENS : CHAT_MAX_TOKENS;
   const calls = { models: 0, chat: 0 };
   const durations = { modelsMs: null, chatMs: null, totalMs: null };
   Object.assign(record, {
@@ -282,7 +325,7 @@ async function runLive(record, pairs) {
     model: { name: MODEL_NAME, presentInModels: false },
     calls,
     durationsMs: durations,
-    request: { maxTokens: CHAT_MAX_TOKENS, temperature: CHAT_TEMPERATURE, timeoutMs: CHAT_TIMEOUT_MS },
+    request: { maxTokens, temperature: CHAT_TEMPERATURE, timeoutMs: CHAT_TIMEOUT_MS },
     response: null,
     error: null,
   });
@@ -315,7 +358,7 @@ async function runLive(record, pairs) {
         modelName: MODEL_NAME,
         apiKey: credentials.apiKey,
         messages: record.messages,
-        maxTokens: CHAT_MAX_TOKENS,
+        maxTokens,
         temperature: CHAT_TEMPERATURE,
         timeoutMs: CHAT_TIMEOUT_MS,
       });
@@ -325,17 +368,47 @@ async function runLive(record, pairs) {
     }
 
     const parsed = parseResponseContent(content);
-    const validation = parsed.ok
-      ? validateModelOutput(parsed.value, pairIds)
-      : { ok: false, errors: ["响应不是有效 JSON。"], relations: new Map() };
-    record.response = {
-      parseOk: parsed.ok,
-      rawPreview: redact(content).slice(0, MAX_PREVIEW),
-      validation: { ok: validation.ok, errors: validation.errors },
-    };
-    stage = "structure";
-    if (!validation.ok) record.error = { stage, code: "INVALID_RESPONSE", message: validation.errors.join(" ") };
-    record.items = buildItems(pairs, validation.ok ? validation.relations : null, !validation.ok);
+    if (options.policy === "grounded") {
+      let grounded = null;
+      let parseError = null;
+      try {
+        grounded = parseRelationResponse(content, pairs);
+      } catch (error) {
+        parseError = error;
+      }
+      record.response = {
+        parseOk: parsed.ok,
+        raw: redact(content),
+        validation: {
+          ok: parseError === null,
+          errors: parseError ? [redact(parseError.message).slice(0, 300)] : [],
+        },
+        structured: grounded ? grounded.results : [],
+      };
+      stage = "structure";
+      if (parseError) {
+        record.error = {
+          stage,
+          code: parseError.code ?? "INVALID_RESPONSE",
+          message: redact(parseError.message).slice(0, 300),
+        };
+        record.items = buildItems(pairs, null, true);
+      } else {
+        record.items = buildGroundedItems(pairs, grounded.results);
+      }
+    } else {
+      const validation = parsed.ok
+        ? validateModelOutput(parsed.value, pairIds)
+        : { ok: false, errors: ["响应不是有效 JSON。"], relations: new Map() };
+      record.response = {
+        parseOk: parsed.ok,
+        rawPreview: redact(content).slice(0, MAX_PREVIEW),
+        validation: { ok: validation.ok, errors: validation.errors },
+      };
+      stage = "structure";
+      if (!validation.ok) record.error = { stage, code: "INVALID_RESPONSE", message: validation.errors.join(" ") };
+      record.items = buildItems(pairs, validation.ok ? validation.relations : null, !validation.ok);
+    }
   } catch (error) {
     record.error = { stage, ...safeError(error) };
   } finally {
@@ -354,7 +427,10 @@ async function main() {
   if (outPath && fs.existsSync(outPath)) throw new Error(`拒绝覆盖已有结果：${outPath}`);
   const datasetPath = DATASETS[options.dataset];
   const { data, text } = readPairs(datasetPath);
-  const record = baseRecord(options, datasetPath, data, text, buildMessages(data.pairs));
+  const probeMessages = options.policy === "grounded"
+    ? buildRelationMessages(data.pairs)
+    : buildMessages(data.pairs);
+  const record = baseRecord(options, datasetPath, data, text, probeMessages);
 
   if (options.dryRun) {
     Object.assign(record, { network: false, credentialsRead: false, calls: { models: 0, chat: 0, total: 0 } });
@@ -367,7 +443,7 @@ async function main() {
     return 0;
   }
 
-  await runLive(record, data.pairs);
+  await runLive(record, data.pairs, options);
   writeResult(outPath, record);
   console.log(JSON.stringify({ status: record.status, summary: record.summary, output: outPath }, null, 2));
   return record.status === "PASS" ? 0 : 1;

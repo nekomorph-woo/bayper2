@@ -159,3 +159,9 @@ Codex独立真实结果 `results/semantic-holdout-codex-live-v2.json`：14 PASS�
 两次错误equivalent、无正例遗漏。未知“我们”与“她”的指代被误合并；因此本候选策略不能直接驱动
 生产纠正、删除或自动关联。失败Expected保持不变，后续须补主体/时间证据核验，不能凭相同正文或
 模型equivalent直接执行破坏性传播。本批1models+1chat，总约1.61秒，仅构造输入，无产品数据库。
+
+### 结构化事实核验候选（grounded）
+
+`--policy grounded`复用正式候选协议`app/memory-relation-protocol.cjs`，要求逐边主体、scope、时间及连续原文引用；结构不符整批ERROR，缺证据的equivalent降为uncertain。默认`--policy baseline`保留原v2行为。grounded单次maxTokens为6000，仍最多1models+1chat，无重试；先用`--dry-run`审查，live须显式新`--out`。
+
+`results/grounding-baseline-live-codex-v1.json`为16PASS；`grounding-holdout-live-codex-v1.json`为14PASS2FAIL，误合并1次。未知“我们”未误合并，但“用户说她喜欢蓝色”仍错误等同于用户偏好；安静环境与独处从Expected uncertain误判different。rawRelation与effectiveRelation、完整结构和SHA均保留。该协议尚不适用于自动合并/删除；原文引用存在不证明模型正确理解主体，生产尚未接线。两批合计2models+2chat、无产品数据库/GUI。
