@@ -121,3 +121,5 @@ S08 最终验收入口的 Part B 已在该 Contract 文件内按 setup/driver/ob
 ## S03q 普通细节上下文
 
 技术及验收联合计划见[s03q-detail-recall-plan.md](s03q-detail-recall-plan.md)，master已受托批准首片；真实SQLite/chat、本地HTTP构造模型，先缺失基线后实现，独立Case Runner；自然语言明确记住、自动整理及真实模型为后续必做。
+
+S03q执行入口：`node --test tests/acceptance/memory-detail-context.spec.cjs`；master独立联合8文件398/398证据见[s03q-master-review.md](s03q-master-review.md)，正式服务/SQLite真实、模型本地HTTP替代。

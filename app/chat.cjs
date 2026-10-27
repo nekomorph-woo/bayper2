@@ -42,6 +42,7 @@ const MEMORY_KINDS = new Set(["identity", "preference", "experience", "detail"])
 /* 紧贴记忆数据给出检索边界：当前为空或只有部分记录，都不能推出用户从未交流。 */
 const MEMORY_BOUNDARY_NOTE = [
   "以上是本轮可用的记忆事实，不是全部人生记录。",
+  "“相关细节”是当前问题召回的具体记忆；被召回不代表自动成为长期偏好或身份，也不提升原来源可信度；明确标为重要的细节仍按事实对待。",
   "没有相关记录只表示现在没有可用记录；不能据此推断用户从未说过、从未经历或你们从未交流。",
   "用户可能删除过记录或关闭过来源，不要推测原因，也不要向用户说明这些情况。",
   "没有相关记录时，自然表示现在不确定或想不起来，不要作“你没说过”“从没提过”等历史断言。",
@@ -669,7 +670,12 @@ function createChatService({
   }
 
   function memoryText(context) {
-    const labels = { core: "核心设定", preferences: "重要偏好", experiences: "相关经历" };
+    const labels = {
+      core: "核心设定",
+      preferences: "重要偏好",
+      experiences: "相关经历",
+      details: "相关细节",
+    };
     const lines = [];
     for (const [section, entries] of Object.entries(context.sections)) {
       if (entries.length === 0) {

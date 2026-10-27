@@ -24,6 +24,10 @@ const {
 } = require("./memory-retrieval.cjs");
 const { createMemoryTemporary } = require("./memory-temporary.cjs");
 const {
+  DETAIL_CONTEXT_CONFIG,
+  rankDetailCandidates,
+} = require("./memory-retention.cjs");
+const {
   copiedTemporarySource,
   editedTemporarySource,
   parseTemporarySource,
@@ -1903,7 +1907,9 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
   }
 
   /* 供 S03b 组装上下文：核心设定、重要偏好与经历分段并有字符预算，
-     不是把所有历史塞进提示词。最近聊天分段不在本切片。 */
+     不是把所有历史塞进提示词。最近聊天分段不在本切片。
+     details 只来自本轮非空 query 的正式检索；空 query 不主动灌入琐事。
+     年龄只在 details 内部调整相对提及机会，管理与纠正/删除候选不读取它。 */
   function buildContext(input = {}) {
     const characterId = characterIdOf(input.characterId);
     const nowMs = resolveNow(input.nowMs);
@@ -1920,6 +1926,7 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       .slice(0, LIMITS.contextPreferences);
 
     let experiences;
+    let details = [];
     if (typeof input.query === "string" && input.query.trim() !== "") {
       experiences = temporary.annotateContext(
         searchMemories({
@@ -1932,19 +1939,36 @@ function createMemoryService({ db, now = () => Date.now() } = {}) {
       )
         .filter((entry) => entry.kind === "experience")
         .slice(0, LIMITS.contextExperiences);
+      /* 混合类别按原 20 条截断会把 details 饿死，因此 details 另用同一正式
+         检索的有界候选池；过滤出 detail 后按其在 detail 候选内部的相对顺序
+         交给年龄策略，最多取 3 条。有界池不保证任意规模高排他类之后仍召回。 */
+      const detailCandidates = temporary.annotateContext(
+        searchMemories({
+          characterId,
+          nowMs,
+          query: input.query,
+          limit: Math.min(DETAIL_CONTEXT_CONFIG.candidatePool, RETRIEVAL_CONFIG.maxLimit),
+        }),
+        nowMs,
+      ).filter((entry) => entry.kind === "detail");
+      details = rankDetailCandidates(detailCandidates, {
+        nowMs,
+        decay: input.detailDecay ?? DETAIL_CONTEXT_CONFIG.decay,
+      });
     } else {
       experiences = active
         .filter((entry) => entry.kind === "experience")
         .slice(0, LIMITS.contextExperiences);
     }
 
-    const sections = { core: [], preferences: [], experiences: [] };
+    const sections = { core: [], preferences: [], experiences: [], details: [] };
     let charCount = 0;
     let truncated = false;
     for (const [name, entries] of Object.entries({
       core,
       preferences,
       experiences,
+      details,
     })) {
       for (const entry of entries) {
         if (charCount + entry.body.length > maxChars) {

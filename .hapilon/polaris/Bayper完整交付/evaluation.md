@@ -58,7 +58,7 @@
 | POL-MEMORY-004（v1） | PASS | s03a 模块＋S03b/S03c/S03f 实际接入；当前待回归 | `memory.spec.cjs`、`chat.spec.cjs`、`memory-ui.spec.cjs` | [s03a-codex-r4.log](evidence/s03a-codex-r4.log)、[s03b-codex-r2.log](evidence/s03b-codex-r2.log)、[s03c-codex-r3.log](evidence/s03c-codex-r3.log) | 原聊天原文保留、索引/展示清除、旧源不回流分层覆盖 |
 | POL-MEMORY-005（v1） | PASS | s03a 模块＋S03f/S03h 用户语义入口；当前待回归 | `memory.spec.cjs`、`chat-memory-operations.spec.cjs`、`chat-exclusive.spec.cjs` | [s03a-codex-r4.log](evidence/s03a-codex-r4.log)、[s03f-codex-r4-domain.log](evidence/s03f-codex-r4-domain.log)、[s03h-codex-chat-r3.log](evidence/s03h-codex-chat-r3.log) | 异 factKey 语义归并仍未完成 |
 | POL-MEMORY-006（长期/临时/门禁） | PASS | s03a r4＋`memory.spec.cjs` 当前用例；当前待回归 | `memory.spec.cjs` | [s03a-codex-r4.log](evidence/s03a-codex-r4.log) 15/15 | 长期保持、临时到期、时间不放开删除/权限门禁已断言 |
-| POL-MEMORY-006（普通细节降权/整理） | NOT_COVERED | 当前 `memory.spec.cjs` 第341行后仅验到期与门禁，无降权/整理断言 | `memory.spec.cjs`（无对应测试） | 无 | 不把“普通细节可降权”写成已实现；真实活动使用亦未验 |
+| POL-MEMORY-006（普通细节降权/整理） | NOT_COVERED | S03q已独立验收细节上下文降权；自动整理与真实活动仍未验 | `memory.spec.cjs`（无对应测试） | 无 | S03q证据见本页末；此聚合项仍未整体接受 |
 | POL-MEMORY-007（v1） | PASS | s03a 模块＋S03d/S03e/S03g 正式转告；当前待回归 | `memory.spec.cjs`、`memory-sharing.spec.cjs`、`sharing-ui.spec.cjs`、`chat-relay.spec.cjs` | [s03a-codex-r4.log](evidence/s03a-codex-r4.log)、[s03d-codex-domain.log](evidence/s03d-codex-domain.log)、[s03g-codex-main-domain.log](evidence/s03g-codex-main-domain.log) | 指定片段、来源、拒绝二次转发、接收不改名单/单次 HTTP 已断言；自动频率不属本 Case |
 | POL-CHAT-001（v1） | PASS | 2026-10-26 s03b 服务/窗口最终批；结束返回资格由 COMPANION-003 覆盖；当前待回归 | `chat.spec.cjs`、`chat-ui.spec.cjs`、`companionship.spec.cjs` | [s03b-codex-r2.log](evidence/s03b-codex-r2.log) 32/32、[s03b-codex-window-r2.log](evidence/s03b-codex-window-r2.log) 18/18 | 构造 HTTP；真实模型上下文另由 CHAT-008 验证；不覆盖所有语言变体 |
 | POL-CHAT-002（v1） | PASS | s03b 服务批＋第四轮真实模型语义；当前待回归 | `chat.spec.cjs`、`live-chat.spec.cjs` | [s03b-codex-r2.log](evidence/s03b-codex-r2.log)、[s03b-pol-chat-008-live-fourth.json](evidence/s03b-pol-chat-008-live-fourth.json) | 真实模型只覆盖四轮构造对话，不证明通用语义 |
@@ -267,7 +267,7 @@ Codex查看实际窗口截图并核对真实GUI测试操作。当前1200×800及
 | POL-MEMORY-003 | 原始/独立/分享持有者纠正、来源排除、未知角色不新增、事务通过 | 自然语言定位和在途模型发布待S03b |
 | POL-MEMORY-004 | 正文/FTS/相关持有者删除、旧来源防回流、索引重建与重开通过 | 最近聊天拼接与屏幕展示清除待实际接入，不能标全Case PASS |
 | POL-MEMORY-005 | 只A忘记、B保持来源身份且可被用户管理、A不自动恢复、新许可通过 | 用户语义入口待S03b |
-| POL-MEMORY-006 | 长期内容保持、临时到期过滤、时钟构造通过 | 普通细节自然降权/整理与真实活动使用尚未完成 |
+| POL-MEMORY-006 | 长期内容保持、临时到期过滤、时钟构造通过 | 普通细节上下文降权已通过S03q；自动整理与真实活动使用尚未完成 |
 | POL-MEMORY-007 | 定向必要片段、原讲述来源、拒绝自动二次分享通过 | 用户明确再次转告、停止分享/仅自己保留入口待S03b，自动预算待S06 |
 
 注：上表为 2026-10-26 模块阶段快照；后续已补子项、仍未覆盖的服装联动与普通细节降权，以统一矩阵的逐子项拆分为准，不再用 15/15 推断七项全 PASS。
@@ -384,6 +384,16 @@ master独立POL-SLEEPUI-001/002/003/004A/004B/005/005B/005C/006/007共10/10 PASS
 高度漏算与回执后异步扩窗裁切分别取得实际失败，Claude最小修复后完整通知12/12；master独立010/011/012 3/3、0skip、SHA一致，完整hold范围298采样无不可见，清理无异常。受托接受已测修复，证据与历史局限见[s05k-notification-height-review.md](s05k-notification-height-review.md)。旧010无现场失败不宣称唯一因果已证实；全S05/最终原生体验仍按父级待办。
 
 
-## S03q 普通细节上下文：NOT_COVERED
+## S03q 普通细节上下文：有限能力PASS
 
-POL-DETAIL-001～005 v1仅完成计划，尚未执行；不能将importance保护当作自然语言“请记住”已实现。父级MEMORY-006仍未完成，见[s03q-detail-recall-plan.md](s03q-detail-recall-plan.md)。
+独立证据 `evidence/s03q-detail-recall/master-final-SpOgLz1r/tests.log`：8文件398/398，unit.log 21/21，exit0、SHA一致。Runner为`tests/acceptance/memory-detail-context.spec.cjs`。
+
+| Case | 状态 | 观察 |
+| --- | --- | --- |
+| POL-DETAIL-001 | PASS | 真实chat请求含相关细节/来源，无关不灌入，仅1请求 |
+| POL-DETAIL-002 | PASS | 衰减对照改变旧细节入选；混合类别候选池仍取相关细节；管理可见 |
+| POL-DETAIL-003 | PASS | 79/80竞争区分保护，长期类别保持，回拨与重复读取不写库 |
+| POL-DETAIL-004 | PASS | 角色/分享/纠正/删除/到期门禁；004b未到期来源变更和删除均失效 |
+| POL-DETAIL-005 | PASS | 字符预算、重开稳定、读取无请求、后续可保存 |
+
+均为真实SQLite/正式服务＋本地HTTP fixture；未验GUI/真实模型表达。不能将importance保护当作自然语言“请记住”已实现。父级自动整理、实际活动使用及MEMORY-006整体仍未完成，见[s03q-master-review.md](s03q-master-review.md)。

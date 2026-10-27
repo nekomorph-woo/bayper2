@@ -11,7 +11,7 @@
 ## Part A：本片行为和接口
 
 1. `buildContext`增加details分段，最多3条，仅从本轮非空query的正式检索有效候选里选取；空query不主动灌入琐事。原core/preferences/experiences及总字符预算不变，details最后入预算。聊天中添加“相关细节”中文标签与来源边界。管理列表、searchMemories和纠正/删除候选不因年龄而隐藏。
-2. 年龄仅用于details上下文排序：候选有界20条，保留原检索rank；score为`(1/(rank+1)) * retention`。普通detail retention=`max(0.1, 2^(-ageDays/30))`，ageDays来自max(0, now-updatedAt)。importance>=80的detail retention=1；identity/preference/experience完全不使用本策略。30天半衰期/0.1下限/80门槛/3条上限集中在小配置中，提供禁用衰减的基线选项；不把这些内部参数加入设置页。
+2. 年龄仅用于details上下文排序：正式检索混合池最多50条，筛出detail最多20条，保留细节之间的原检索相对顺序并在该列表内编号rank；score为`(1/(rank+1)) * retention`。普通detail retention=`max(0.1, 2^(-ageDays/30))`，ageDays来自max(0, now-updatedAt)。importance>=80的detail retention=1；identity/preference/experience完全不使用本策略。30天半衰期/0.1下限/80门槛/3条上限集中在小配置中，提供禁用衰减的基线选项；不把这些内部参数加入设置页。
 3. 不物理删除、不改原importance、不写last_accessed，不新增定时器/API/迁移。读取和失败重试不更新条目日期；真实纠正沿原updatedAt生效。单条高度相关的旧细节仍可被明确问题召回；降低相对提及机会而非伪造已遗忘/从没说过。
 4. 角色隔离、来源失效、删除防回流、temporary语义与总上下文预算在排序前后均保持；不把theme故事或助手表达写成用户事实。
 5. 明确要求永久记住的自然语言接线、自动整理/归纳及真实模型体验为父级后续必做，本片importance>=80保护只证明已标重要条目，不能冒称已识别所有“请记住”。技术参数是master初始默认，需用对照验证收益，不向用户转嫁调参。
@@ -33,3 +33,7 @@
 允许：app/memory.cjs、app/chat.cjs，必要一个小app/memory-retention.cjs（配置/纯选择职责约80行内），tests/acceptance/memory-detail-context.spec.cjs；受影响既有测试只修新增sections结构的正确预期，先报告。生产合计约100～180行，Runner约250～400行作为审查信号，不压行。首片不改SQL schema/CLI工具/GUI/其他业务，不大规模重构memory.cjs。
 
 Claude先核对search结果混合类别截断是否会饿死details，必要在现有候选上有界筛选并报告；不得为凑3条绕过正式检索或角色过滤。若任何接口/核心事实与方案冲突，先反馈，不能自行扩张。无Codex子代理/Claude子代理；Git与文档最终接受由Codex负责。
+
+## 首版审查后的受托细化
+
+开发者真实25条经历＋4细节探针表明原混合limit20中detail=0；master接受同一正式检索有界池50，筛detail最多20，不改变经历原20条行为，也不声称覆盖50条以外的任意规模。需将混合类别场景并入Runner。POL-DETAIL-004必须包含有效期内权威来源正文变异导致temporary失效，不以到期替代。旧chat固定措辞断言已经HEAD隔离复现失效，允许仅调整为现行experience主体/参与者约束，保持业务Expected。相关细节prompt不得一概否定重要性。证据目录统一本工作evidence/s03q-detail-recall，原始日志不可重写。

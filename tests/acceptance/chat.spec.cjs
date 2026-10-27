@@ -216,7 +216,8 @@ test("POL-CHAT-001 同一 SQLite、已结识角色隔离与名单不变", async 
     assert.ok(systemPrompt.includes(kind));
   }
   assert.ok(systemPrompt.includes("用户长期偏好"));
-  assert.ok(systemPrompt.includes("真实共同经历"));
+  assert.ok(systemPrompt.includes("用户明确讲述的自身经历或共同经历"));
+  assert.ok(systemPrompt.includes("保留原话参与者写法，不补造成员"));
   assert.ok(systemPrompt.includes("factKey"));
   assert.ok(systemPrompt.includes("稳定"));
   assert.ok(systemPrompt.includes("主体"));
