@@ -32,6 +32,7 @@ const TABLES = [
   "memory_deleted_fact_fingerprints", "memory_forget_controls", "memory_share_controls",
   "memory_temporary_links", "memory_temporary_entry_links", "chat_requests", "chat_messages",
 ];
+const MEMORY_TABLES = TABLES.filter((table) => table.startsWith("memory_"));
 const MODELS_TIMEOUT_MS = 20000;
 const SETTLE_TIMEOUT_MS = 30000;
 function fail(message) { throw new Error(message); }
@@ -52,7 +53,7 @@ function isLoopbackUrl(value) {
 }
 
 function parseArgs(argv) {
-  const options = { mode: "l1", dryRun: false, out: null, model: DEFAULT_MODEL };
+  const options = { mode: "l1", dryRun: false, out: null, model: DEFAULT_MODEL, caseId: null };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--dry-run") options.dryRun = true;
@@ -61,9 +62,11 @@ function parseArgs(argv) {
       if (mode !== "l1" && mode !== "l2") fail("--mode 只能是 l1 或 l2。");
       options.mode = mode;
     } else if (arg === "--model") options.model = required(argv[++index], "--model");
+    else if (arg === "--case") options.caseId = required(argv[++index], "--case");
     else if (arg === "--out") options.out = path.resolve(process.cwd(), required(argv[++index], "--out"));
     else fail(`参数无效：${arg}`);
   }
+  if (options.caseId && !/^C\d{2}$/u.test(options.caseId)) fail("--case 必须是 C 加两位数字。");
   if (!options.out) fail("必须显式提供新的 --out 文件路径。");
   if (fs.existsSync(options.out)) fail(`拒绝覆盖已有结果：${options.out}`);
   return options;
@@ -86,6 +89,23 @@ function validateSide(side, label) {
   if (!side.utterance.includes(l1.evidence)) fail(`${label}.l1.evidence 必须是原话子串。`);
 }
 
+function validateFollowupCase(item) {
+  if (item.id !== "C12") fail("followup 只允许 C12。");
+  const expected = item.expected ?? {};
+  if (expected.path !== "clarify" || expected.candidates !== 1 || expected.memory !== "unchanged" ||
+    expected.relationCalls !== 0 || expected.assistantDelta !== 1) fail(`${item.id}.expected 首回合契约无效。`);
+  const operation = item.operation ?? {};
+  if (operation.l1ModelOperation !== "null") fail(`${item.id}.operation.l1ModelOperation 必须为 null。`);
+  required(operation.l1Reply, `${item.id}.operation.l1Reply`);
+  const followup = item.followup ?? {};
+  required(followup.text, `${item.id}.followup.text`);
+  const after = followup.expected ?? {};
+  if (after.action !== "forget" || !RELATIONS.includes(after.relation) || after.deleted?.a !== true ||
+    typeof after.deleted?.b !== "boolean" || after.unknownC !== 0 || after.assistantDelta !== 1 ||
+    after.chatModelCalls !== 0 || after.relationCallsMax !== 1 ||
+    after.sources !== "command-and-answer-excluded") fail(`${item.id}.followup.expected 无效。`);
+}
+
 function readDataset() {
   const text = fs.readFileSync(DATASET_PATH, "utf8");
   const data = JSON.parse(text);
@@ -98,15 +118,19 @@ function readDataset() {
     if (typeof item.id !== "string" || !/^C\d{2}$/u.test(item.id) || ids.has(item.id)) fail("Case id 无效或重复。");
     ids.add(item.id);
     required(item.goal, `${item.id}.goal`);
-    const expected = item.expected ?? {};
-    if (!RELATIONS.includes(expected.relation) || !EFFECTS.includes(expected.effect) ||
-      !Number.isInteger(expected.candidates) || expected.candidates < 0) fail(`${item.id}.expected 无效。`);
-    if (expected.relationModel !== undefined && expected.relationModel !== "not_exercised") {
-      fail(`${item.id}.expected.relationModel 无效。`);
-    }
-    if (expected.aBodyTokens !== undefined &&
-      (!Array.isArray(expected.aBodyTokens) || expected.aBodyTokens.some((token) => typeof token !== "string" || !token))) {
-      fail(`${item.id}.expected.aBodyTokens 无效。`);
+    if (item.followup) {
+      validateFollowupCase(item);
+    } else {
+      const expected = item.expected ?? {};
+      if (!RELATIONS.includes(expected.relation) || !EFFECTS.includes(expected.effect) ||
+        !Number.isInteger(expected.candidates) || expected.candidates < 0) fail(`${item.id}.expected 无效。`);
+      if (expected.relationModel !== undefined && expected.relationModel !== "not_exercised") {
+        fail(`${item.id}.expected.relationModel 无效。`);
+      }
+      if (expected.aBodyTokens !== undefined &&
+        (!Array.isArray(expected.aBodyTokens) || expected.aBodyTokens.some((token) => typeof token !== "string" || !token))) {
+        fail(`${item.id}.expected.aBodyTokens 无效。`);
+      }
     }
     validateSide(item.a, `${item.id}.a`);
     validateSide(item.b, `${item.id}.b`);
@@ -124,8 +148,8 @@ function readDataset() {
   return { data, text };
 }
 
-function buildPlan(data, mode) {
-  const perCase = data.cases.map((item) => {
+function buildPlan(cases, mode) {
+  const perCase = cases.map((item) => {
     const aTurns = item.a.prelude.length + 1;
     const bTurns = item.b.prelude.length + 2; // 事实 + B 独有隐私标记
     return { id: item.id, seedTurns: { a: aTurns, b: bTurns }, operationTurns: 1,
@@ -177,6 +201,7 @@ async function startRelationFixture() {
 function createChatFixture(caseData) {
   const queue = [];
   const requests = [];
+  const turns = [];
   const empty = { reply: "我记下了。", memoryCandidates: [], memoryOperation: null, memoryRelay: null };
   const candidate = (l1) => ({ reply: "我记下了。", memoryCandidates: [{ ...l1, trust: "stated" }],
     memoryOperation: null, memoryRelay: null });
@@ -185,7 +210,7 @@ function createChatFixture(caseData) {
     queue.push(candidate(side.l1));
   }
   queue.push(empty); // B 独有隐私标记消息，不提炼
-  const trace = { holder: null };
+  const trace = { holder: null, turn: null };
   const fetchImpl = async (_url, init) => {
     const body = JSON.parse(init.body);
     const lastUser = [...body.messages].reverse().find((message) => message.role === "user")?.content;
@@ -193,29 +218,34 @@ function createChatFixture(caseData) {
     if (queue.length > 0) {
       envelope = queue.shift();
     } else if (lastUser === caseData.operation.text) {
-      const systemText = body.messages.filter((message) => message.role === "system")
-        .map((message) => message.content).join("\n");
-      const line = systemText.split("\n").find((item) =>
-        /^\[M\d+\]/u.test(item) && item.includes(caseData.operation.targetNeedle));
-      const target = line?.match(/^\[(M\d+)\]/u)?.[1];
-      if (!target) fail(`Case ${caseData.id} 的 L1 目标未出现在候选列表。`);
-      envelope = { reply: "好的。", memoryCandidates: [], memoryRelay: null, memoryOperation: {
-        action: caseData.operation.action, target, evidence: caseData.operation.evidence,
-        ...(caseData.operation.action === "correct" ? { excerpt: caseData.operation.excerpt } : { scope: "all" }),
-      } };
+      if (caseData.followup && caseData.operation.l1ModelOperation === "null") {
+        envelope = { reply: caseData.operation.l1Reply, memoryCandidates: [], memoryOperation: null, memoryRelay: null };
+      } else {
+        const systemText = body.messages.filter((message) => message.role === "system")
+          .map((message) => message.content).join("\n");
+        const line = systemText.split("\n").find((item) =>
+          /^\[M\d+\]/u.test(item) && item.includes(caseData.operation.targetNeedle));
+        const target = line?.match(/^\[(M\d+)\]/u)?.[1];
+        if (!target) fail(`Case ${caseData.id} 的 L1 目标未出现在候选列表。`);
+        envelope = { reply: "好的。", memoryCandidates: [], memoryRelay: null, memoryOperation: {
+          action: caseData.operation.action, target, evidence: caseData.operation.evidence,
+          ...(caseData.operation.action === "correct" ? { excerpt: caseData.operation.excerpt } : { scope: "all" }),
+        } };
+      }
     } else fail(`Case ${caseData.id} 的聊天 fixture 没有可用响应。`);
     requests.push({ holder: trace.holder, messages: body.messages, response: envelope });
+    turns.push(trace.turn);
     return new Response(JSON.stringify({
       choices: [{ message: { role: "assistant", content: JSON.stringify(envelope) } }],
     }), { status: 200, headers: { "content-type": "application/json" } });
   };
-  return { fetch: fetchImpl, requests, trace };
+  return { fetch: fetchImpl, requests, turns, trace };
 }
 
 function installFetchSpy({ budget, dryRun }) {
   const original = globalThis.fetch;
   const calls = [];
-  const trace = { caseId: null, holder: null };
+  const trace = { caseId: null, holder: null, turn: null };
   const guards = { loopbackOnly: dryRun, blocked: [] };
   globalThis.fetch = async (input, init = {}) => {
     const url = typeof input === "string" ? input : input?.url;
@@ -223,7 +253,7 @@ function installFetchSpy({ budget, dryRun }) {
     try { body = init.body ? JSON.parse(init.body) : null; } catch { body = null; }
     const kind = body?.messages?.some((message) =>
       message.role === "system" && message.content.includes("记忆事实关系判定器")) ? "relation" : "chat";
-    const entry = { caseId: trace.caseId, holder: trace.holder, kind, url: redact(url),
+    const entry = { caseId: trace.caseId, holder: trace.holder, turn: trace.turn, kind, url: redact(url),
       request: body, startedAt: Date.now(), fixture: dryRun };
     calls.push(entry);
     if (dryRun && !isLoopbackUrl(url)) {
@@ -372,21 +402,6 @@ function attachRequests(record, chatFixture, spy) {
   record.calls.fixtureChat = chatFixture?.requests.length ?? 0;
   record.calls.networkChat = calls.filter((call) => call.caseId === record.id && call.kind === "chat").length;
   record.calls.relation = calls.filter((call) => call.caseId === record.id && call.kind === "relation").length;
-}
-
-function operationEnvelope(record) {
-  const request = record.requests.chat.filter((item) => item.holder === "a" &&
-    item.messages.at(-1)?.content === record.operation.text).at(-1);
-  if (!request) return null;
-  if (request.response && typeof request.response === "object" && request.response.memoryOperation) {
-    return { source: "fixture-envelope", raw: request.response, modelOperation: request.response.memoryOperation };
-  }
-  if (typeof request.response !== "string") return null;
-  try {
-    const content = JSON.parse(JSON.parse(request.response).choices[0].message.content);
-    return { source: "network-envelope", raw: request.response,
-      modelOperation: content.memoryOperation ?? null, reply: content.reply ?? null };
-  } catch { return { source: "network-envelope", raw: request.response, modelOperation: null }; }
 }
 
 function markFlags(record, caseData) {
@@ -538,20 +553,20 @@ function checkLeak(caseData, record) {
 
 function aggregate(records) {
   const metrics = { cases: records.length, pass: 0, fail: 0, error: 0, dryRun: 0, review: 0,
+    inconclusive: 0, notCovered: 0, notTriggered: 0,
     relationCalls: 0, fixtureChatCalls: 0, networkChatCalls: 0, semanticReviewRequired: 0,
     relationNotExercised: 0, ...Object.fromEntries(FLAG_KEYS.map((key) => [key, 0])) };
   for (const record of records) {
-    if (record.status === "PASS") metrics.pass += 1;
-    else if (record.status === "FAIL") metrics.fail += 1;
-    else if (record.status === "ERROR") metrics.error += 1;
-    else if (record.status === "REVIEW") metrics.review += 1;
-    else if (record.status === "DRY-RUN") metrics.dryRun += 1;
+    const statusKey = { PASS: "pass", FAIL: "fail", ERROR: "error", REVIEW: "review",
+      "DRY-RUN": "dryRun", INCONCLUSIVE: "inconclusive", NOT_COVERED: "notCovered" }[record.status];
+    if (statusKey) metrics[statusKey] += 1;
     for (const key of FLAG_KEYS) if (record.flags[key]) metrics[key] += 1;
     metrics.relationCalls += record.calls.relation;
     metrics.fixtureChatCalls += record.calls.fixtureChat;
     metrics.networkChatCalls += record.calls.networkChat;
     if (record.semanticReviewRequired) metrics.semanticReviewRequired += 1;
     if (record.relation.model === "not_exercised") metrics.relationNotExercised += 1;
+    if (record.clarification?.path && record.clarification.path !== "clarify") metrics.notTriggered += 1;
   }
   return metrics;
 }
@@ -601,6 +616,260 @@ function loadCredentials() {
   return { baseUrl: parseBaseUrl(baseUrl), apiKey };
 }
 
+function changedTables(before, after, tables = MEMORY_TABLES) {
+  return tables.filter((table) =>
+    JSON.stringify(before?.[table] ?? null) !== JSON.stringify(after?.[table] ?? null));
+}
+
+async function settleRequest(store, characterId, requestId) {
+  if (store.chat.getRequest({ characterId, requestId }).verificationStatus === "pending") {
+    await waitUntil(() => store.chat.getRequest({ characterId, requestId }).verificationStatus !== "pending",
+      `请求 ${requestId} 的核验未在时限内收束。`);
+  }
+  return store.chat.getRequest({ characterId, requestId });
+}
+function readProof(store, requestId) {
+  const row = store.db.prepare(
+    "SELECT operation_proof, verification_status, memory_applied FROM chat_requests WHERE id = ?",
+  ).get(requestId);
+  let proof = null;
+  try { proof = row?.operation_proof ? JSON.parse(row.operation_proof) : null; } catch { proof = null; }
+  return { row, proof };
+}
+function note(record, flag, reason) {
+  if (flag) record.flags[flag] = true;
+  record.reasons.push(reason);
+}
+function markTrace(chatFixture, spy, holder, turn) {
+  for (const trace of [chatFixture?.trace, spy.trace]) {
+    if (trace) Object.assign(trace, { holder, turn });
+  }
+}
+function chatEnvelopeForTurn({ chatFixture, spy, caseId, turn, holder, text }) {
+  let call;
+  if (chatFixture) {
+    const index = chatFixture.turns.findIndex((item, position) => item === turn &&
+      chatFixture.requests[position].holder === holder &&
+      chatFixture.requests[position].messages.at(-1)?.content === text);
+    if (index < 0) return { status: "missing" };
+    call = chatFixture.requests[index];
+  } else {
+    const calls = spy.calls.filter((item) => item.caseId === caseId && item.kind === "chat" &&
+      item.turn === turn && item.holder === holder && item.request?.messages?.at(-1)?.content === text);
+    if (calls.length === 0) return { status: "missing" };
+    if (calls.length > 1) return { status: "invalid", reason: "multiple-chat-requests" };
+    call = { messages: calls[0].request?.messages ?? [], response: calls[0].response };
+  }
+  if (call.response && typeof call.response === "object") {
+    if (!Object.prototype.hasOwnProperty.call(call.response, "memoryOperation")) {
+      return { status: "invalid", reason: "memoryOperation-missing", raw: call.response, messages: call.messages };
+    }
+    return { status: "ok", source: "fixture-envelope", raw: call.response,
+      modelOperation: call.response.memoryOperation, reply: call.response.reply ?? null, messages: call.messages };
+  }
+  if (typeof call.response !== "string") {
+    return { status: "invalid", reason: "response-not-text", messages: call.messages };
+  }
+  try {
+    const content = JSON.parse(JSON.parse(call.response).choices[0].message.content);
+    if (!content || typeof content !== "object" ||
+      !Object.prototype.hasOwnProperty.call(content, "memoryOperation")) {
+      return { status: "invalid", reason: "memoryOperation-missing", raw: call.response, messages: call.messages };
+    }
+    return { status: "ok", source: "network-envelope", raw: call.response,
+      modelOperation: content.memoryOperation, reply: content.reply ?? null, messages: call.messages };
+  } catch {
+    return { status: "invalid", reason: "response-parse-failed", raw: call.response, messages: call.messages };
+  }
+}
+
+function bindTurnIndexes(record, caseData) {
+  const chat = record.requests.chat, relation = record.requests.relation;
+  const first = record.clarification?.firstTurn, followup = record.clarification?.followup;
+  const indexOf = (text) => chat.findIndex((item) => item.holder === "a" && item.messages.at(-1)?.content === text);
+  if (first) {
+    first.chatRequestIndex = indexOf(caseData.operation.text);
+    first.relationRequestIndexes = followup ? [] : relation.map((_, index) => index);
+  }
+  if (followup) {
+    followup.chatRequestIndex = indexOf(caseData.followup.text);
+    followup.relationRequestIndexes = relation.map((_, index) => index);
+  }
+}
+
+async function runClarificationTurns({
+  caseData, options, record, store, conversationA, conversationB, chatFixture, spy,
+}) {
+  const clarification = { path: null, firstTurn: null, followup: null, facts: null, outcome: null };
+  record.clarification = clarification;
+  const beforeA = assistantState(store, conversationA, "a");
+  const beforeB = assistantState(store, conversationB, "b");
+  markTrace(chatFixture, spy, "a", "operation");
+  const firstResult = await store.chat.sendMessage({ characterId: "a", conversationId: conversationA.id,
+    text: caseData.operation.text, requestId: record.operation.requestId });
+  if (firstResult.status !== "completed") fail(`Case ${caseData.id} 首回合未完成：${firstResult.status}`);
+  const firstSettled = await settleRequest(store, "a", record.operation.requestId);
+  const firstSnapshot = snapshot(store);
+  record.snapshots.firstTurnAfter = firstSnapshot;
+  const firstProof = readProof(store, record.operation.requestId);
+  const afterA = assistantState(store, conversationA, "a");
+  const envelope = chatEnvelopeForTurn({ chatFixture, spy, caseId: record.id,
+    turn: "operation", holder: "a", text: caseData.operation.text });
+  const firstMemory = changedTables(record.snapshots.before, firstSnapshot);
+  const firstRelationCount = spy.calls.filter((call) =>
+    call.caseId === record.id && call.kind === "relation" && call.turn === "operation").length;
+  const candidateLines = (envelope.messages ?? []).filter((message) => message.role === "system")
+    .flatMap((message) => String(message.content).split("\n")).filter((line) => /^\[M\d+\]/u.test(line));
+  delete envelope.messages;
+  clarification.firstTurn = { requestId: record.operation.requestId, turn: "operation", chatRequestIndex: null,
+    relationRequestIndexes: [], status: firstResult.status, verificationStatus: firstSettled.verificationStatus,
+    memoryApplied: firstResult.memoryApplied, reply: firstResult.reply, modelOperation: envelope,
+    proof: firstProof.proof, assistant: { before: beforeA, after: afterA }, dbChangedTables: firstMemory };
+  if (envelope.status !== "ok") {
+    note(record, "missedOperation",
+      `operation-envelope-${envelope.status}${envelope.reason ? `:${envelope.reason}` : ""}`);
+    record.snapshots.after = firstSnapshot;
+    record.status = chatFixture ? "ERROR" : "FAIL";
+    if (chatFixture) record.error = { stage: "envelope", code: "ENVELOPE_INVALID" };
+    return record;
+  }
+  const assistantBad = afterA.count !== beforeA.count + 1 || afterA.lastId !== firstResult.assistantMessageId;
+  const verificationBad = !["none", "completed"].includes(firstSettled.verificationStatus);
+  const l1Leak = Boolean(chatFixture && String(firstResult.reply ?? "").includes(caseData.operation.l1Reply));
+  const violations = firstMemory.length > 0 || firstRelationCount > 0 || Boolean(firstProof.proof) ||
+    assistantBad || verificationBad || l1Leak;
+  if (assistantBad) note(record, "wrongAssistant", "first-turn-assistant-count");
+  if (verificationBad) note(record, null, `first-verification-${firstSettled.verificationStatus}`);
+  if (l1Leak) note(record, "wrongAssistant", "l1-fake-success-leaked");
+  if (envelope.modelOperation !== null) {
+    clarification.path = "model-direct-operation";
+    clarification.facts = { modelOperation: envelope.modelOperation, reply: firstResult.reply, verificationStatus: firstSettled.verificationStatus };
+    record.snapshots.after = firstSnapshot;
+    record.status = assistantBad || verificationBad || l1Leak ? "FAIL" : "NOT_COVERED";
+    return record;
+  }
+  if (firstMemory.length > 0) note(record, "wrongSync", "first-turn-memory-changed");
+  if (firstRelationCount > 0) note(record, null, "first-turn-relation-called");
+  if (firstProof.proof) note(record, null, "first-turn-proof-present");
+  const replyText = String(firstResult.reply ?? "");
+  const candidateCount = (replyText.match(/\[第\s*\d+\s*条\]/gu) ?? []).length;
+  const observed = (replyText.includes("我只找到一条可能相关的记忆") ||
+    /我找到\s*\d+\s*条可能相关的记忆/u.test(replyText)) && candidateCount > 0 && replyText.includes("加糖");
+  if (!observed) {
+    clarification.path = "null-no-prompt";
+    const seedBody = entryById(record.snapshots.before, record.seed.a.entryId)?.body ?? null;
+    const premise = Boolean(seedBody?.includes("加糖")) &&
+      candidateLines.some((line) => line.includes("加糖")) && caseData.expected.candidates === 1;
+    clarification.facts = { modelNull: true, seedBody, requestLines: candidateLines,
+      expectedCandidates: caseData.expected.candidates, promptObserved: false, gaps: violations || premise ? [] : ["request candidate text or seed premise not proven"] };
+    if (violations) record.status = "FAIL";
+    else if (premise) { note(record, null, "clarification-premise-met-but-no-prompt"); record.status = "FAIL"; }
+    else record.status = "INCONCLUSIVE";
+    record.snapshots.after = firstSnapshot;
+    return record;
+  }
+  clarification.path = "clarify";
+  if (candidateCount !== caseData.expected.candidates) {
+    note(record, "candidateCountMismatch", "prompt-candidate-count-mismatch");
+  }
+  if (record.reasons.length > 0 || Object.values(record.flags).some(Boolean)) {
+    record.status = "FAIL";
+    record.snapshots.after = firstSnapshot;
+    return record;
+  }
+  markTrace(chatFixture, spy, "a", "followup");
+  const followupRequestId = crypto.randomUUID();
+  const answerResult = await store.chat.sendMessage({ characterId: "a", conversationId: conversationA.id,
+    text: caseData.followup.text, requestId: followupRequestId });
+  const phase1 = assistantState(store, conversationA, "a");
+  const answerSettled = await settleRequest(store, "a", followupRequestId);
+  const answerProof = readProof(store, followupRequestId);
+  const finalSnapshot = snapshot(store);
+  record.snapshots.after = finalSnapshot;
+  const finalA = assistantState(store, conversationA, "a");
+  const finalB = assistantState(store, conversationB, "b");
+  const answerChatCount = chatFixture ? chatFixture.turns.filter((turn) => turn === "followup").length
+    : spy.calls.filter((call) => call.caseId === record.id && call.kind === "chat" &&
+      call.turn === "followup").length;
+  const relationCalls = spy.calls.filter((call) =>
+    call.caseId === record.id && call.kind === "relation" && call.turn === "followup");
+  const messages = store.chat.getConversation({ characterId: "a", conversationId: conversationA.id }).messages;
+  const command = messages.find((message) => message.role === "user" && message.content === caseData.operation.text);
+  const answerMessage = messages.find((message) => message.role === "user" && message.content === caseData.followup.text);
+  const commandHash = command ? sha256(command.sourceId) : null;
+  const answerHash = answerMessage ? sha256(answerMessage.sourceId) : null;
+  const proof = answerProof.proof;
+  const excluded = store.memory.listExcludedSources("a");
+  clarification.followup = { requestId: followupRequestId, turn: "followup", chatRequestIndex: null,
+    relationRequestIndexes: [], status: answerResult.status, verificationStatus: answerSettled.verificationStatus,
+    reply: finalA.lastContent, proof, assistant: { phase1, final: finalA },
+    dbChangedTables: changedTables(firstSnapshot, finalSnapshot),
+    relation: { expected: caseData.followup.expected.relation, actual: null, raw: null, pairs: [] },
+    sources: { commandSourceHash: proof?.commandSourceHash ?? null, commandSourceId: proof?.commandSourceId ?? null,
+      answerSourceHash: answerHash, excluded, sourceControls: proof?.sourceControls ?? null } };
+  if (answerResult.status !== "completed") note(record, null, "followup-not-completed");
+  if (answerChatCount > 0) note(record, null, "followup-chat-model-called");
+  if (relationCalls.length > 1) note(record, null, "followup-relation-more-than-once");
+  if (!command || !answerMessage) note(record, null, "source-message-missing");
+  if (proof?.action !== "forget") note(record, "missedOperation", "followup-proof-missing");
+  if (commandHash && proof?.commandSourceHash !== commandHash) note(record, null, "command-source-hash-mismatch");
+  if (command && proof?.commandSourceId !== command.sourceId) note(record, null, "command-source-id-mismatch");
+  if (commandHash && !excluded.includes(commandHash)) note(record, null, "command-source-not-excluded");
+  if (answerHash && !excluded.includes(answerHash)) note(record, null, "answer-source-not-excluded");
+  const sourceControls = Array.isArray(proof?.sourceControls?.a) ? proof.sourceControls.a : null;
+  if (!sourceControls) note(record, null, "proof-source-controls-missing");
+  else {
+    if (commandHash && !sourceControls.includes(commandHash)) note(record, null, "proof-command-source-control-missing");
+    if (answerHash && !sourceControls.includes(answerHash)) note(record, null, "proof-answer-source-control-missing");
+  }
+  if (phase1.count !== beforeA.count + 2 || phase1.lastId !== answerResult.assistantMessageId ||
+    finalA.ids.join("\u0000") !== phase1.ids.join("\u0000")) {
+    note(record, "wrongAssistant", "followup-assistant-not-single-in-place");
+  }
+  if (/正在核对/u.test(finalA.lastContent ?? "")) note(record, null, "assistant-still-verifying");
+  if (relationCalls.length === 1 && answerSettled.verificationStatus !== "completed") {
+    note(record, null, `followup-verification-${answerSettled.verificationStatus}`);
+  }
+  if (JSON.stringify(finalB.ids) !== JSON.stringify(beforeB.ids) ||
+    JSON.stringify(finalB.contents) !== JSON.stringify(beforeB.contents)) {
+    note(record, "wrongAssistant", "b-assistant-messages-changed");
+  }
+  const aAfter = entryById(finalSnapshot, record.seed.a.entryId);
+  const bAfter = entryById(finalSnapshot, record.seed.b.entryId);
+  const bBeforeRow = entryById(record.snapshots.before, record.seed.b.entryId);
+  if (relationCalls.length === 1) {
+    try {
+      const parsed = relationFromCall(relationCalls[0], record.sourceSnapshots);
+      Object.assign(clarification.followup.relation,
+        { actual: parsed.actual, raw: parsed.raw, pairs: parsed.pairs });
+      Object.assign(record.relation,
+        { exercised: true, actual: parsed.actual, raw: parsed.raw, pairs: parsed.pairs });
+      markFlags(record, { expected: { relation: caseData.followup.expected.relation } });
+    } catch {
+      note(record, "noVerification", "relation-response-invalid");
+    }
+  } else if (relationCalls.length === 0) {
+    note(record, "noVerification", "followup-relation-missing");
+    if (!bAfter) note(record, "wrongDelete", "b-deleted-without-relation");
+  }
+  clarification.outcome = { aDeleted: !aAfter, bDeleted: !bAfter, cEntries: entriesOf(finalSnapshot, "c").length, relationActual: record.relation.actual };
+  if (aAfter) note(record, "wrongDelete", "a-not-deleted");
+  if (record.relation.actual === "equivalent" && bAfter) {
+    note(record, "missedPositive", "b-not-deleted-with-equivalent");
+  }
+  if (record.relation.exercised && record.relation.actual !== "equivalent" && !bAfter) {
+    note(record, "wrongDelete", "b-deleted-without-equivalent");
+  }
+  if (record.relation.exercised && record.relation.actual !== "equivalent" && bAfter &&
+    !sameRow(bAfter, bBeforeRow)) {
+    note(record, "wrongSync", "b-changed-without-equivalent");
+  }
+  if (clarification.outcome.cEntries > 0) note(record, "holderLeak", "unknown-c-records-created");
+  if (record.reasons.length > 0 || Object.values(record.flags).some(Boolean)) record.status = "FAIL";
+  else record.status = options.dryRun ? "DRY-RUN" : options.mode === "l2" ? "REVIEW" : "PASS";
+  return record;
+}
+
 async function runCase(caseData, options, credentials, spy, fixedNow) {
   const record = { id: caseData.id, goal: caseData.goal, expected: { ...caseData.expected },
     semanticReviewRequired: options.mode === "l2", status: "ERROR", error: null, cleanup: null,
@@ -627,8 +896,10 @@ async function runCase(caseData, options, credentials, spy, fixedNow) {
     store = openStore(dir, credentials, chatFixture, fixedNow);
     conversationA = store.chat.openConversation({ characterId: "a" }).conversation;
     conversationB = store.chat.openConversation({ characterId: "b" }).conversation;
-    const send = async (holder, conversation, text) => {
-      (chatFixture?.trace ?? spy.trace).holder = holder;
+    const send = async (holder, conversation, text, turn = "seed") => {
+      const trace = chatFixture?.trace ?? spy.trace;
+      trace.holder = holder;
+      trace.turn = turn;
       return store.chat.sendMessage({ characterId: holder, conversationId: conversation.id,
         text, requestId: crypto.randomUUID() });
     };
@@ -666,12 +937,17 @@ async function runCase(caseData, options, credentials, spy, fixedNow) {
       if (chatFixture) record.error = { code: "SEED_EXTRACTION", message: "fixture 种子条目缺失或歧义。" };
       return record;
     }
+    if (caseData.followup) {
+      return await runClarificationTurns({
+        caseData, options, record, store, conversationA, conversationB, chatFixture, spy,
+      });
+    }
     const aBefore = assistantState(store, conversationA, "a");
     const bBefore = assistantState(store, conversationB, "b");
     record.effects.singleAssistant.a.before = aBefore;
     record.effects.singleAssistant.b.before = bBefore;
     const operationStarted = Date.now();
-    (chatFixture?.trace ?? spy.trace).holder = "a";
+    markTrace(chatFixture, spy, "a", "operation");
     const result = await store.chat.sendMessage({ characterId: "a", conversationId: conversationA.id,
       text: caseData.operation.text, requestId: record.operation.requestId });
     record.durationsMs.operation = Date.now() - operationStarted;
@@ -680,16 +956,9 @@ async function runCase(caseData, options, credentials, spy, fixedNow) {
     record.operation.assistantMessageId = result.assistantMessageId ?? null;
     if (result.status !== "completed") fail(`Case ${caseData.id} 操作发送失败：${result.status}`);
     record.effects.singleAssistant.a.phase1 = assistantState(store, conversationA, "a");
-    if (result.verificationStatus === "pending") {
-      await waitUntil(() => store.chat.getRequest({ characterId: "a", requestId: record.operation.requestId })
-        .verificationStatus !== "pending", `Case ${caseData.id} 核验未在时限内收束。`);
-    }
-    const proofRow = store.db.prepare(
-      "SELECT operation_proof, verification_status FROM chat_requests WHERE id = ?",
-    ).get(record.operation.requestId);
-    let proof = { raw: proofRow, proof: null };
-    try { proof.proof = proofRow?.operation_proof ? JSON.parse(proofRow.operation_proof) : null; } catch { proof.proof = null; }
-    record.operation.verificationStatus = proof.raw?.verification_status ?? null;
+    await settleRequest(store, "a", record.operation.requestId);
+    const proof = readProof(store, record.operation.requestId);
+    record.operation.verificationStatus = proof.row?.verification_status ?? null;
     record.operation.candidates = proof.proof?.candidates?.length ?? 0;
     record.operation.actualAction = proof.proof?.action ?? null;
     record.operation.proof = proof.proof ? { version: proof.proof.version, mode: proof.proof.mode,
@@ -717,7 +986,12 @@ async function runCase(caseData, options, credentials, spy, fixedNow) {
     record.relation.model = record.relation.exercised
       ? "exercised" : (caseData.expected.relationModel ?? "not_exercised");
     attachRequests(record, chatFixture, spy);
-    record.operation.modelOperation = operationEnvelope(record);
+    const oldEnvelope = chatEnvelopeForTurn({ chatFixture, spy, caseId: record.id,
+      turn: "operation", holder: "a", text: caseData.operation.text });
+    record.operation.modelOperation = oldEnvelope.status === "ok"
+      ? { source: oldEnvelope.source, raw: oldEnvelope.raw, modelOperation: oldEnvelope.modelOperation,
+        ...(oldEnvelope.source === "network-envelope" ? { reply: oldEnvelope.reply } : {}) }
+      : null;
     record.operation.proofMode = record.operation.proof?.mode ?? null;
     record.operation.target = record.operation.modelOperation?.modelOperation?.target ?? null;
     record.operation.effectiveAction = record.operation.proof?.action ??
@@ -756,6 +1030,10 @@ async function runCase(caseData, options, credentials, spy, fixedNow) {
   } finally {
     try { record.snapshots.after = record.snapshots.after ?? (store ? snapshot(store) : null); } catch { /* 保留错误 */ }
     attachRequests(record, chatFixture, spy);
+    if (caseData.followup) {
+      checkLeak(caseData, record);
+      bindTurnIndexes(record, caseData);
+    }
     record.durationsMs.total = Date.now() - started;
     try {
       if (store) { await store.chat.dispose(); store.close(); }
@@ -777,7 +1055,9 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   const { data, text } = readDataset();
   const fixedNow = Date.parse(data.fixedNow);
-  const plan = buildPlan(data, options.mode);
+  const selected = options.caseId ? data.cases.filter((item) => item.id === options.caseId) : data.cases;
+  if (options.caseId && selected.length === 0) fail(`--case 未找到：${options.caseId}`);
+  const plan = buildPlan(selected, options.mode);
   const record = baseRecord(options, data, text, plan);
   const started = Date.now();
   let credentials = null, fixtureServer = null, spy = null;
@@ -803,8 +1083,8 @@ async function main() {
     spy = installFetchSpy({ budget: { chat: options.dryRun || options.mode === "l1" ? 0 : plan.live.chat,
       relation: plan.live.relation }, dryRun: options.dryRun });
     record.guards = spy.guards;
-    for (const item of data.cases) {
-      if (fixtureServer) fixtureServer.state.relation = item.expected.relation;
+    for (const item of selected) {
+      if (fixtureServer) fixtureServer.state.relation = item.followup?.expected?.relation ?? item.expected.relation;
       record.cases.push(await runCase(item, options, credentials, spy, fixedNow));
     }
     for (const call of spy.calls.filter((item) => !item.fixture)) {
@@ -847,8 +1127,8 @@ async function main() {
     if (!record.metrics) record.metrics = aggregate(record.cases);
     if (record.status === "PENDING") {
       const statuses = record.cases.map((item) => item.status);
-      record.status = statuses.includes("ERROR") ? "ERROR" : statuses.includes("FAIL") ? "FAIL"
-        : statuses.includes("REVIEW") ? "REVIEW" : options.dryRun ? "DRY-RUN" : "PASS";
+      record.status = ["ERROR", "FAIL", "INCONCLUSIVE", "NOT_COVERED", "REVIEW"]
+        .find((status) => statuses.includes(status)) ?? (options.dryRun ? "DRY-RUN" : "PASS");
     }
     writeResult(options.out, record);
   }

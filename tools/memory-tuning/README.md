@@ -215,3 +215,23 @@ node tools/memory-tuning/chat-operation-probe.cjs --mode l2 --out <新文件>.js
   [主体边界报告](../../.hapilon/polaris/Bayper完整交付/evidence/s03m-b2/c10c-subject-boundary-report.md)、
   [C10 修复报告](../../.hapilon/polaris/Bayper完整交付/evidence/s03m-b2/c10fix-report.md) 与
   [计划 §13.17/§13.18](../../.hapilon/polaris/Bayper完整交付/s03m-semantic-operations-plan.md)。
+
+### S03o 删除目标澄清两轮链（POL-LIVE-CLARIFY-001 / 工具 C12）
+
+`--case C12` 只跑两轮链最小切片；不带过滤仍执行 C01～C12。C12 的正式验收 ID 是
+`POL-LIVE-CLARIFY-001`，`C12` 仅工具数据 ID。
+
+- L1：种子与首操作聊天为 fixture，首操作明确 `memoryOperation:null`；relation 真实。
+- L2：种子、首操作与 relation 全部真实，不强制 null；模型直接执行只记
+  `clarification.path="model-direct-operation"`，澄清为 `NOT_COVERED`，不是两轮通过。
+- dry：聊天与 relation 都是本机 fixture，只验证接线、预算与清理。
+- 澄清路径首回合零 memory 写、回答不调用聊天模型、relation 至多一次；B 为独立身份时必须
+  恰好一次 relation，零 relation 却删除 B 记 `wrongDelete`。
+- 输出只保留完整 `requests`/`snapshots` 原件；每回合用 `requestId`、`turn` 和
+  `chatRequestIndex`/`relationRequestIndexes` 绑定，不复制请求或 DB。
+- 模型直执行或 `null` 未提问会保留事实；有效种子且前提齐全仍不提问记 FAIL，证据不足记
+  INCONCLUSIVE，不伪造通过。
+- 预算由实际 `--case`/dataset 计算，不硬编码。默认模型 `deepseek-flash`；master 已完成 C12 live：
+  L1 两轮通过，L2 模型直删、两轮未覆盖，详[独立审查](../../.hapilon/polaris/Bayper完整交付/s03o-live-clarification-review.md)。
+- 证据：`.hapilon/polaris/Bayper完整交付/evidence/s03o-live-clarification/`；旧 11 Case
+  原话、Expected 与输出语义不变。

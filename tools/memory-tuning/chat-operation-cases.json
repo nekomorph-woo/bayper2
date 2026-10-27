@@ -1,5 +1,5 @@
 {
-  "version": "s03m-b2-chat-operation-v2",
+  "version": "s03o-live-clarification-v1",
   "fixedNow": "2026-10-27T10:00:00.000Z",
   "note": "L1 使用 l1 区块构造聊天 envelope；L2 只使用 prelude/utterance/operation.text/privateMarkerUtterance，不把 l1/Expected/aBodyTokens 发送给模型。match 与 aBodyTokens 仅用于事后定位/粗筛。",
   "cases": [
@@ -286,6 +286,52 @@
         "targetNeedle": "流星雨",
         "excerpt": "我在2023年看的是烟花",
         "evidence": "请帮我改过来"
+      }
+    },
+    {
+      "id": "C12",
+      "goal": "forget_target_clarification_two_turn",
+      "expected": {
+        "path": "clarify",
+        "candidates": 1,
+        "memory": "unchanged",
+        "relationCalls": 0,
+        "assistantDelta": 1
+      },
+      "a": {
+        "prelude": [],
+        "utterance": "我平时喝咖啡一定要加糖。",
+        "match": ["加糖", "甜", "糖"],
+        "l1": { "factKey": "b2-c12-a", "body": "我平时喝咖啡一定要加糖。", "kind": "preference", "evidence": "我平时喝咖啡一定要加糖。" }
+      },
+      "b": {
+        "prelude": [],
+        "utterance": "我的咖啡都要甜的。",
+        "match": ["甜", "糖"],
+        "privateMarker": "PRIVATE-B-C12-7F3A",
+        "privateMarkerUtterance": "私人提醒：PRIVATE-B-C12-7F3A，只是记给我自己，不用记住。",
+        "l1": { "factKey": "b2-c12-b", "body": "我的咖啡都要甜的。", "kind": "preference", "evidence": "我的咖啡都要甜的。" }
+      },
+      "operation": {
+        "text": "请忘记我喜欢咖啡这件事。",
+        "action": "forget",
+        "targetNeedle": "加糖",
+        "evidence": "请忘记我喜欢咖啡这件事",
+        "l1ModelOperation": "null",
+        "l1Reply": "MODEL-FAKE-SUCCESS-C12-已删除"
+      },
+      "followup": {
+        "text": "加糖那条",
+        "expected": {
+          "action": "forget",
+          "relation": "equivalent",
+          "deleted": { "a": true, "b": true },
+          "unknownC": 0,
+          "assistantDelta": 1,
+          "chatModelCalls": 0,
+          "relationCallsMax": 1,
+          "sources": "command-and-answer-excluded"
+        }
       }
     }
   ]

@@ -344,3 +344,8 @@ Codex独立窗口回归18/18通过（s03b-codex-window-r2.log）：含8项真实
 最新上下文策略独立服务38/38（s03b-codex-unknown.log）。第四轮真实DeepSeek GET models1/chat4，无自动重试；evidence/s03b-pol-chat-008-live-fourth.json保存完整构造文本与本地状态。Codex逐轮阅读：初次“我记下了”对应实际1条记忆；重启新会话“你喜欢喝温茶”有原话来源；本地纠正后回答热可可；删除后“这个我还不清楚”不再断言从未交流。后续留茶是角色未来提议，不计为真实经历。该构造链路机器与语义均PASS，接受POL-CHAT-008的当前服务边界，不推为所有语言变体、自然语言定位/删除、外部源解析或UI记忆管理完成。
 
 受托接受聊天窗口首个可用切片与固定回复协议：正式管理窗可按角色聊天、取消、显式重试、历史只读及重开；存储和源事实归因改进已实测。仍待本地记忆管理入口、自然语言控制、精力有效互动接线、IPC历史延迟完整UI、native整体视觉和全产品验收。前三批失败证据保留，不覆盖或删除。
+
+
+## POL-LIVE-CLARIFY-001：删除目标两轮澄清（2026-10-28）
+
+正式Given/When/Expected/Oracle与边界见[s03o-live-clarification-plan.md](s03o-live-clarification-plan.md)，工具数据C12，入口`node tools/memory-tuning/chat-operation-probe.cjs --mode l1|l2 --case C12 --out <新文件>`。独立结果见[s03o-live-clarification-review.md](s03o-live-clarification-review.md)：L1构造聊天＋真实关系两轮PASS；L2真实模型直删，完整两轮NOT_COVERED。不得由L1推断全真实两轮或完整S03通过。

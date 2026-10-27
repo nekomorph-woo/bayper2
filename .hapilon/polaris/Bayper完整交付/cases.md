@@ -180,3 +180,8 @@ S08 是最终验收入口，不新增 S09 父级；7 个 `POL-FINAL` ID 是既�
 - POL-MIG-001～006：迁移 v1 已由 master 独立 18 套件 170/170 验收为**有限能力**（2026-10-27，真实 SQLite/构造旧库，无 GUI/API/模型）。缺失历史关系边不恢复、孤儿旧键保持兼容边界、非拆分身份保守检查；不得据此宣称 S03/Goal 或语义策略完成。
 - POL-ANALYSIS-007/009/010：master 已核实原规则到 ID 的映射（007 预算收尾失败与补核；009 在途改写不发布与映射发布回滚；010 8 区段/4MiB 验证上限），现正式登记；不伪称历史编号确认时间，不新增或削弱 Expected。此前 r2 的“查无定义”判断据此更正。
 - GAP-14 最终范围已登记为 POL-FINAL-001 系列（7 组，见 [final-acceptance-contract.md](final-acceptance-contract.md)），归 S08 最终验收入口；master 已受托验收 v1/Part A-B，流程补齐通过。造型资料、正式动画覆盖、故事/服装、全页面单屏、原生证据门、真实模型＋隔离 Herdr、交付纪律均未执行，evaluation 记 NOT_COVERED；动画采用 24＋12 语义覆盖，不要求 36 张或 36 fps；本轮不新增其他业务概念或 Case。snap 后接回 S03。
+
+
+## POL-LIVE-CLARIFY-001：删除目标两轮澄清（2026-10-28）
+
+正式Given/When/Expected/Oracle与边界见[s03o-live-clarification-plan.md](s03o-live-clarification-plan.md)，工具数据C12，入口`node tools/memory-tuning/chat-operation-probe.cjs --mode l1|l2 --case C12 --out <新文件>`。独立结果见[s03o-live-clarification-review.md](s03o-live-clarification-review.md)：L1构造聊天＋真实关系两轮PASS；L2真实模型直删，完整两轮NOT_COVERED。不得由L1推断全真实两轮或完整S03通过。
