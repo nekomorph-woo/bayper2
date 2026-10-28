@@ -16,7 +16,7 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 
 凛的真实 Herdr finished→必达文字→一次欣喜→恢复待机路径，已由 master 独立13/13 GUI及11/11领域/单测受托接受，边界与原始证据见 [s07-work-reaction-review.md](s07-work-reaction-review.md) r160。旧返修记录保留追溯；不代表全量角色动画或最终人类体验通过。
 
-S03s Part F分层接线已独立202/202通过，固定两批真实模型未复现角色场景混入住址或无授权披露承诺；f2/005的“没记过”历史推断仍FAIL，父级S03未完成。详 [s03s-master-review.md](s03s-master-review.md)。Part G三角色U/K有限样本通过，未修改生产或撤销旧失败。S06k自动服装归属已独立37/37通过，见[s06k-master-review.md](s06k-master-review.md)；下一步接服装展示、一次性提示和自然节点穿用实际路径；正式角色/服装配方、其余动画及父级交付路径仍待完成，完整Goal不变。
+S03s Part F分层接线已独立202/202通过，固定两批真实模型未复现角色场景混入住址或无授权披露承诺；f2/005的“没记过”历史推断仍FAIL，父级S03未完成。详 [s03s-master-review.md](s03s-master-review.md)。Part G三角色U/K有限样本通过，未修改生产或撤销旧失败。S06k自动服装归属已独立37/37通过，见[s06k-master-review.md](s06k-master-review.md)；当前推进[s06l-outfit-wear-plan.md](s06l-outfit-wear-plan.md)主动换装完整路径，自动提示预算另批；正式角色/服装配方、其余动画及父级交付路径仍待完成，完整Goal不变。
 
 ## 按可用路径推进
 

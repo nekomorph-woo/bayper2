@@ -247,3 +247,7 @@ POL-WORKREACTION-001～009 v1契约与实现/自动验收计划由master受托�
 ## S06k 自动服装归属
 
 POL-OUTFITRUN-001～004 v1（003含A/B/C）见 [计划](s06k-outfit-runtime-plan.md)，master受托批准；Runner为story-runtime.spec.cjs及story-window.spec.cjs。独立结果见[s06k-master-review.md](s06k-master-review.md)，父级S06/S07未完成。
+
+## S06l 主动换装
+
+POL-OUTFIT-001～007 v1，master受托批准，完整Expected与分阶段聚合条件见[s06l-outfit-wear-plan.md](s06l-outfit-wear-plan.md)。父级S06/S07，未执行不预填结果。

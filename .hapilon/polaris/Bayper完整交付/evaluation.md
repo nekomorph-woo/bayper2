@@ -487,3 +487,7 @@ master独立5文件202/202、0skip、exit0，证据 `evidence/s03s-persona/maste
 ## S06k 自动归属
 
 master独立37/37、0跳过、exit0、SHA稳定；POL-OUTFITRUN-001/002/003A/B/C/004通过，详[s06k-master-review.md](s06k-master-review.md)。本轮内部增量接受；服装提示、穿用及正式素材仍未完成。
+
+## S06l 主动换装
+
+POL-OUTFIT-001～007 NOT_COVERED，计划已受托批准，尚未实施。待执行分领域与真实GUI记录，不预填PASS。

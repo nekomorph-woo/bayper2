@@ -139,3 +139,7 @@ Part A/B见[s03s-live-remember-plan.md](s03s-live-remember-plan.md)，先工具d
 ## S06k 执行入口
 
 复用[s06k-outfit-runtime-plan.md](s06k-outfit-runtime-plan.md)的增量Case与五套件执行入口；[独立验收](s06k-master-review.md)记录SHA、37/37结果与真实SQLite/构造目录边界。不以领域验收替代正式服装GUI/素材。
+
+## S06l 主动换装
+
+实施/验收联合计划见[s06l-outfit-wear-plan.md](s06l-outfit-wear-plan.md)。A领域与资产、B实际IPC/UI/自然节点同属完整切片；A不替代B接受。
