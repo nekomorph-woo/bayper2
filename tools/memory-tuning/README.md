@@ -241,3 +241,15 @@ node tools/memory-tuning/chat-operation-probe.cjs --mode l2 --out <新文件>.js
 `node tools/memory-tuning/remember-probe.cjs --out tools/memory-tuning/results/<新批次>.json`默认仅loopback构造响应。显式增加`--live`才使用根`.env`的OpenAI兼容服务；先确认`/models`实际包含deepseek-flash。Case数据在同目录remember-cases.json。每个Case独立临时SQLite，事实经真实chat产生；召回重开库并新建对话，不手工seed记忆。
 
 预算为1models+9chat，意外关系调用至多2，总HTTP不超过12；不自动重试。输出必须为新路径，保留构造请求/模型响应、SQLite/来源/隔离检查、SHA及清理结果，不保存凭据。FAIL需审查业务失败，REVIEW也不代表语义验收通过。当前基线发现重复事实句号差异无法提升与宽候选漏拦，详见Polaris S03s审查记录；历史结果不覆盖。
+
+
+## 三角色未知表达对照
+
+`unknown-probe.cjs` 读取同目录 `unknown-cases.json`，固定凛/琥珀/澄各一组未知U与已知K。六个Case各用独立临时SQLite，K只经正式聊天保存，再重开库和新对话提问；不直接写入记忆表。
+
+```bash
+node tools/memory-tuning/unknown-probe.cjs --out tools/memory-tuning/results/unknown-local-001.json
+node tools/memory-tuning/unknown-probe.cjs --live --out tools/memory-tuning/results/unknown-live-001.json
+```
+
+输出文件必须尚不存在。默认dry只访问loopback构造服务，不读.env；live使用根.env现有OpenAI兼容配置，先核实/models中的deepseek-flash。每批1models+9chat、总HTTP硬上限12，不自动重试。保留出站messages、原始响应、实际记忆/来源/上下文与清理结果，不保留凭据。`REVIEW`表示待人工语义审查，51项确定性检查全过不等于回复语义合格。U不能猜事实、否定过往或用人格解释不能记忆；K需要准确回忆且身份来源保持。工具当前仅自动检查条目仍存在，完整字段保持和自然语义由审查者核对before/after原始证据；不以弱断言外推全部正确。

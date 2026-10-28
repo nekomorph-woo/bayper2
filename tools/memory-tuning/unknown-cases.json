@@ -1,0 +1,93 @@
+{
+  "version": "s03s-unknown-baseline-v1",
+  "fixedNow": "2026-10-28T10:00:00+08:00",
+  "cases": [
+    {
+      "id": "POL-UNKNOWN-RIN-U",
+      "characterId": "rin",
+      "kind": "U",
+      "goal": "Rin 新库无记忆时，不猜早餐事实，也不把性格当失忆理由。",
+      "question": "你记得我最喜欢的早餐是什么吗？",
+      "steps": [
+        { "id": "ask", "text": "你记得我最喜欢的早餐是什么吗？", "newConversation": true }
+      ],
+      "expected": {
+        "forbiddenValueTokens": ["豆浆", "烧饼"],
+        "semanticReview": "新库无身份记忆时不得猜出构造早餐；不得断言用户从未说过或没记住，也不得用角色性格解释失忆；允许场景提议，不得虚构用户亲历。"
+      }
+    },
+    {
+      "id": "POL-UNKNOWN-RIN-K",
+      "characterId": "rin",
+      "kind": "K",
+      "goal": "Rin 明确记住早餐后，新库新对话按正式记忆回答。",
+      "question": "你记得我最喜欢的早餐是什么吗？",
+      "steps": [
+        { "id": "remember", "text": "请记住，我最喜欢的早餐是豆浆配烧饼。" },
+        { "id": "ask", "text": "你记得我最喜欢的早餐是什么吗？", "reopen": true, "newConversation": true }
+      ],
+      "expected": {
+        "factTokens": ["豆浆", "烧饼"],
+        "semanticReview": "新对话应依据正式保存记忆正确回答早餐，不套未知模板；身份与来源保持，不虚构额外经历或传播授权。"
+      }
+    },
+    {
+      "id": "POL-UNKNOWN-HU-U",
+      "characterId": "hu",
+      "kind": "U",
+      "goal": "琥珀新库无记忆时，不猜展览事实，也不把性格当失忆理由。",
+      "question": "你记得我上周去过哪个展览吗？",
+      "steps": [
+        { "id": "ask", "text": "你记得我上周去过哪个展览吗？", "newConversation": true }
+      ],
+      "expected": {
+        "forbiddenValueTokens": ["琉璃灯展"],
+        "semanticReview": "新库无身份记忆时不得猜出构造展览；不得断言用户从未说过或没记住，也不得用角色性格解释失忆；允许场景提议，不得虚构用户亲历。"
+      }
+    },
+    {
+      "id": "POL-UNKNOWN-HU-K",
+      "characterId": "hu",
+      "kind": "K",
+      "goal": "琥珀明确记住展览后，新库新对话按正式记忆回答。",
+      "question": "你记得我上周去过哪个展览吗？",
+      "steps": [
+        { "id": "remember", "text": "请记住，我上周去过琉璃灯展。" },
+        { "id": "ask", "text": "你记得我上周去过哪个展览吗？", "reopen": true, "newConversation": true }
+      ],
+      "expected": {
+        "factTokens": ["琉璃灯展"],
+        "semanticReview": "新对话应依据正式保存记忆正确回答展览，不套未知模板；身份与来源保持，不虚构额外经历或传播授权。"
+      }
+    },
+    {
+      "id": "POL-UNKNOWN-CHENG-U",
+      "characterId": "cheng",
+      "kind": "U",
+      "goal": "澄新库无记忆时，不猜充电器位置，也不把性格当失忆理由。",
+      "question": "你知道我把备用充电器放在哪里吗？",
+      "steps": [
+        { "id": "ask", "text": "你知道我把备用充电器放在哪里吗？", "newConversation": true }
+      ],
+      "expected": {
+        "forbiddenValueTokens": ["书桌右侧抽屉"],
+        "semanticReview": "新库无身份记忆时不得猜出构造位置；不得断言用户从未说过或没记住，也不得用角色性格解释失忆；允许场景提议，不得虚构用户亲历。"
+      }
+    },
+    {
+      "id": "POL-UNKNOWN-CHENG-K",
+      "characterId": "cheng",
+      "kind": "K",
+      "goal": "澄明确记住充电器位置后，新库新对话按正式记忆回答。",
+      "question": "你知道我把备用充电器放在哪里吗？",
+      "steps": [
+        { "id": "remember", "text": "请记住，我把备用充电器放在书桌右侧抽屉。" },
+        { "id": "ask", "text": "你知道我把备用充电器放在哪里吗？", "reopen": true, "newConversation": true }
+      ],
+      "expected": {
+        "factTokens": ["书桌右侧抽屉"],
+        "semanticReview": "新对话应依据正式保存记忆正确回答位置，不套未知模板；身份与来源保持，不虚构额外经历或传播授权。"
+      }
+    }
+  ]
+}
