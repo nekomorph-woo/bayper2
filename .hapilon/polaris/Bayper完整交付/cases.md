@@ -238,3 +238,8 @@ POL-REMEMBER-LIVE-001～005 v1受托批准，实际模型/SQLite/chat边界与�
 ## S07 E03欣喜候选
 
 POL-HAPPY-ASSET-001～003 v1契约见s07-happy-asset-plan.md，独立执行与边界见s07-happy-asset-review.md；001/002导入和播放入口通过，003仅静态/小尺寸逐帧部分审查，整体NOT_COVERED。不是正式24+12覆盖。
+
+
+## S07/S05 工作事件短反应
+
+POL-WORKREACTION-001～009 v1契约与实现/自动验收计划由master受托批准，见s07-work-reaction-plan.md；现阶段仅凛E03 finished垂直切片，其他角色及反应继续属于完整Goal。Runner拟为tests/acceptance/desktop-work-reaction.spec.cjs；未执行不预填PASS。
