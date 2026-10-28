@@ -47,4 +47,18 @@
 | POL-AUTONOTICE-005 | 准备后源资格失效、旧token、DB写入失败→ACK/重试 | 无半确认：收据与归属pending/邀请状态同时成功或全回滚；失败后正确重试一次；旧回执不写，无资源/未发布不展示。 |
 | POL-AUTONOTICE-006 | 真实气泡可见→查看衣装/邀请或收起；同时工作事件到达 | 文案清楚、单屏可读，不伪装工作状态；仅用户点击才打开正确角色/故事；动画/通知必要信息不丢，普通位/加急位约束保持；不是只查返回值。 |
 
-目前只有Expected，均NOT_COVERED。每批按snap保存通过的自洽成果，主功能未接真实窗口不能接受完整切片。禁止子代理、真实API、正式素材/PRD/skill/版本/Git自行修改；代码全部单Claude CLI实现。工具无需新增；若需要专用工具严格tools/<能力名>自包含。
+初始计划未执行；现行Part A子项结果见s06m-master-review.md r182，完整GUI Case尚未通过。每批按snap保存通过的自洽成果，主功能未接真实窗口不能接受完整切片。禁止子代理、真实API、正式素材/PRD/skill/版本/Git自行修改；代码全部单Claude CLI实现。工具无需新增；若需要专用工具严格tools/<能力名>自包含。
+
+## r182 Part B实施边界（master受托批准）
+
+A已独立78/78接受，详s06m-master-review.md。本批完成两种正常告知的真实窗口与主动跳转，并覆盖关键抢占/回执边界；不再只做内部模块。自动机会仍唯一入口，runActivity先尝试告知，成功占用本次机会，不继续API活动；无可用内容/告知额度不足可沿用既有活动。全局暂停/聊天/不可见等当前门禁不允许为了fallback绕过。选中名单角色可作为分享者，但不为展示切换在屏角色；文案明确分享者与故事所属/目标角色，不让其冒充同一个人。
+
+允许文件：新增app/automatic-notice-runtime.cjs（约220～320行，持有展示副本、到期/抢占、ACK/action，不做泛用调度器）；窄改app/main.cjs、app/desktop-host.cjs、app/desktop/main.cjs、app/desktop/notification-preload.cjs、app/desktop/renderer/notification.js及notification.css；可新增独立companion-notice.js并在通知html引用，以免复杂工作通知渲染器继续膨胀；管理窗app/preload.cjs、app/renderer/app.js和story-panel.js只加明确目标跳转。若需要固定衣装文案映射，与既有outfit-panel映射保持一致，不新建外观数据库或改正式发布。新tests/acceptance/automatic-notices-ui.spec.cjs（首批约500～800行）及必要runtime场景测试（约180～250行）；现有通知测试仅作回归，不削弱断言。若scope/规模显著超出先交分析说明，不生成框架。
+
+协议为通知payload中独立companionNotice，不伪造presentations/items/eventId。传输token/generation与领域noticeId/noticeToken同时核对，限当前子进程/当前可见通知窗；ACK和action各自具名IPC。现有connector验证函数保持原正整数事件约束。有效ACK后A会清active，runtime保留本次只读展示副本直到6秒结束/用户操作/工作通知抢占；重复ACK不续命、不再次计数。无ACK的卡也需有界等待（最多10秒），失败撤下内容留待下一次正常机会，不无限占窗或立即重发。当前卡ACK之前的查看/收起仅在实际完整可见350ms条件已满足时确认，未达到不得假确认或抢先执行跳转；renderer与子进程均核对窗口可见，master验证结果。
+
+沿现有tick统一组合通知视图；出现任意工作presentation即取消自动卡并优先工作，不挤普通3位/加急位。聊天开始、暂停、退出、隐藏、桌面进程丢失、角色休息/探索/自然动作进行中或等待切换时取消自动卡；ACK前保留待告知，ACK后不重播。恢复只走现有30分钟机会，不新增补发。禁止为场景绿灯自动关闭聊天或切角色。资源回调用实际固定白名单和desktop-assets检查；不将catalog布尔当实际资源；未就绪角色不自动邀请。
+
+仅用户有效点击打开管理窗并导航：衣装选择所属角色概览并显示衣装区域；邀请进入故事页并选对应storyId（不要只打开小窝）；不自动穿衣/接纳/改名单。窗口未加载时保留一次目标并在ready后送达，避免点击路由丢失；既有chat不因导航自动关闭。文本只由已保存故事节点/固定角色衣装名组成，限制长度并显示来源，渲染用textContent。
+
+首批GUI必需：1正常衣装实际可见350ms→单收据/pending清除→点击正确角色且未自动穿用；2相遇实际可见→单7日额度→点击正确故事、稍后后不再催促；3工作通知到达抢占、旧自动ACK/action不生效且工作项仍实际可见；4桌面隐藏/暂停至少一组不假ACK，恢复不立即补发。真实Electron/SQLite，复用已有活动Runner的主进程Date/Math.random控制机会、loopback模型、构造作者目录和临时data-dir；这些不是真实随机等待/物理锁屏。须直接观测DOM/窗口/SQLite与模型请求次数，不能通过调用新runtime私有方法伪造自动机会。保留截图和实际命令/失败，清理本轮进程与临时库。其余门禁/重启/完整错误路径继续按001～006聚合，不因首批通过直接关闭S06m。
