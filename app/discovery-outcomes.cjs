@@ -206,14 +206,23 @@ function createDiscoveryOutcomes({ db, storyProgress, now = () => new Date() }) 
     return source;
   }
 
+  /* 固定 SAVEPOINT 让发现结果也能嵌入自动告知 ACK 的外层事务，
+     任一步失败时只回滚本段；独立调用时 RELEASE 同样提交一笔完整事务。 */
+  const TRANSACTION_SAVEPOINT = "discovery_outcomes_tx";
+
   function transaction(fn) {
-    db.exec("BEGIN IMMEDIATE");
+    db.exec(`SAVEPOINT ${TRANSACTION_SAVEPOINT}`);
     try {
       const result = fn();
-      db.exec("COMMIT");
+      db.exec(`RELEASE ${TRANSACTION_SAVEPOINT}`);
       return result;
     } catch (error) {
-      db.exec("ROLLBACK");
+      try {
+        db.exec(`ROLLBACK TO ${TRANSACTION_SAVEPOINT}`);
+        db.exec(`RELEASE ${TRANSACTION_SAVEPOINT}`);
+      } catch {
+        // 保留原始业务错误；连接层问题由调用方处理。
+      }
       throw error;
     }
   }

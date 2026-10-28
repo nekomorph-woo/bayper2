@@ -507,3 +507,7 @@ master独立GUI11/11、领域与unit/story76/76，证据evidence/s06l/master-r17
 ## S06l r179 聚合接受
 
 POL-OUTFIT-001～007 v1在计划的真实SQLite/真实Electron+构造时间/loopback/候选作者目录边界内PASS，逐项证据和限制见s06l-master-review.md r179。新增master-r178-m9j9rnwe独立GUI3/3、领域16/16、三个播放器运行通过；正式衣装发布、缺失动作和全素材一致性不在此结论内。S06/S07/完整Goal继续，下一步S06解锁提示/自动邀请共享气泡预算。
+
+## S06m r182 自动告知内部能力
+
+master独立78/78、0skip、SHA稳定，证据evidence/master-a-final-2t6vg1aw；接受Part A，逐Case边界见s06m-master-review.md。真实气泡显示/抢占/用户跳转尚未覆盖，父级S06/S05及Goal未完成。

@@ -254,4 +254,6 @@ POL-OUTFIT-001～007 v1，master受托批准，完整Expected与分阶段聚合�
 
 ## S06m 自动告知
 
-POL-AUTONOTICE-001～006 v1，master受托批准，需求/Expected/Oracle/Boundary见[s06m计划](s06m-automatic-notices-plan.md)，父级S06/S05。尚未执行，不预填PASS。
+POL-AUTONOTICE-001～006 v1，master受托批准，需求/Expected/Oracle/Boundary见[s06m计划](s06m-automatic-notices-plan.md)，父级S06/S05。当前仅Part A已执行，完整Case状态见下方r182记录。
+
+S06m r182：001/002/003/005的Part A领域证据见[s06m审查](s06m-master-review.md)，Runner tests/acceptance/automatic-notices.spec.cjs；004/006真实GUI仍NOT_COVERED，不将子项绿色提升为整组PASS。
