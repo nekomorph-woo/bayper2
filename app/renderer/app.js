@@ -4,6 +4,7 @@ const api = window.bayper;
 const chatApi = window.bayperChat;
 const memoryApi = window.bayperMemory;
 const storyApi = window.bayperStories;
+const outfitApi = window.bayperOutfits;
 const sourceApi = window.bayperSources;
 const byId = (id) => document.getElementById(id);
 
@@ -86,6 +87,12 @@ const storyPanel = window.createStoryPanel({
     renderCharacterList();
     renderCompanionControls(snapshot?.companionship);
   },
+});
+
+const outfitPanel = window.createOutfitPanel({
+  api: outfitApi,
+  getSnapshot: () => state.snapshot,
+  isActive: () => navigation.currentPage() === "characters",
 });
 
 if (memoryApi && typeof memoryApi.onMemoryChanged === "function") {
@@ -570,6 +577,7 @@ function renderCharacterDetail(character) {
     button.disabled = !hasCharacter;
   }
   renderCharacterTabs();
+  outfitPanel.setCharacter(hasCharacter ? character.characterId : null);
 }
 
 function selectCharacter(characterId) {
@@ -744,6 +752,7 @@ function renderPage(page) {
   if (page !== "characters") {
     // 离开角色页后，迟到回执不再拥有当前故事详情身份。
     storyPanel.deactivate();
+    outfitPanel.deactivate();
   }
   if (page === "home") {
     sourcePanel.deactivate();
@@ -768,6 +777,7 @@ function renderAll() {
   renderCharacters();
   renderSettings();
   storyPanel.handleSnapshot();
+  outfitPanel.handleSnapshot(state.snapshot);
   updateSubtitle();
 }
 

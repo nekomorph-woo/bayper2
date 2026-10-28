@@ -491,3 +491,7 @@ master独立37/37、0跳过、exit0、SHA稳定；POL-OUTFITRUN-001/002/003A/B/C
 ## S06l 主动换装
 
 POL-OUTFIT-001/002/004/005/006领域与资产支撑已由master独立71/71执行，见[s06l-master-review.md](s06l-master-review.md) r167；完整Case仍未接受，003/005协调/007及其他GUI子项NOT_COVERED。A内部能力接受，继续B实际UI与桌面，不用局部测试数代表全流程。
+
+## S06l B r172 正常换装有限接受
+
+详[s06l master审查](s06l-master-review.md) r172，master独立3+72+27全部通过、0skip；证据evidence/s06l/master-r171-6nc_e_ue。接受001/002正常链路、004已穿失效恢复局部、005SQLite协调局部、007 idle/wave局部。003/005/006完整GUI与007 stretch/深浅背景尚未覆盖，完整S06l与Goal不结束。

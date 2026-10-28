@@ -25,6 +25,7 @@ const { createSourceAutomation } = require("./source-automation.cjs");
 const { createActivityRuntime } = require("./activity-runtime.cjs");
 const { createStoryRuntime } = require("./story-runtime.cjs");
 const { createStoryWindow } = require("./story-window.cjs");
+const { createOutfitRuntime } = require("./outfit-runtime.cjs");
 const { createAutomaticOpportunities } = require("./automatic-opportunities.cjs");
 const { buildDesktopPresentation, getActivitySupport } = require("./desktop-assets.cjs");
 const { createAppTray } = require("./app-tray.cjs");
@@ -91,6 +92,10 @@ let connectorRegistryDir = null;
 let lastConnectorSignature = null;
 let notificationTimer = null;
 let lastWorkReactionAt = 0;
+// S06l 换装协调：全局最多一个节点等待；新选择/恢复只触发一次协调。
+let outfitRevision = 0;
+let outfitRuntime = null;
+let outfitCoordinator = null;
 // 休息代次 token 只在进入休息或休息中换角色时递增；重复 desktopPresentation
 // 调用不得刷新，避免把尚未播完的过渡误当成已收束。
 let restEpisode = { token: 0, characterId: null, active: false };
@@ -362,7 +367,7 @@ function startApplication() {
       const status = desktopHost?.getStatus();
       return status?.state === "running" && status.assetState === "ready";
     },
-    activitySupport: (characterId, kind) => getActivitySupport(characterId, kind),
+    activitySupport: (characterId, kind) => activitySupportFor(characterId, kind),
     isBlocked: () => Boolean(activeChat) || systemPaused || quitting,
   });
 
@@ -422,6 +427,48 @@ function startApplication() {
     onResume: resumeFromSystem,
   });
 
+  outfitCoordinator = createOutfitRuntime({
+    outfits: store.outfits,
+    getCurrentCharacterId: () =>
+      companionship.getSnapshot().current?.characterId ?? null,
+    getPresentation: () => currentDesktopPresentation(),
+    canWaitForCurrent: () => {
+      const status = desktopHost?.getStatus();
+      return status?.state === "running" && status?.assetState === "ready";
+    },
+    isBlocked: () => Boolean(quitting || systemPaused || activeChat),
+    waitForBoundary: () => waitForPresentationBoundary(),
+    onStatus: (status) => {
+      if (quitting) {
+        return;
+      }
+      if (
+        status
+        && outfitRuntime?.characterId === status.characterId
+        && outfitRuntime?.phase === status.phase
+        && outfitRuntime?.message === status.message
+      ) {
+        return;
+      }
+      outfitRuntime = status;
+      if (status) {
+        outfitRevision += 1;
+        pushSnapshot();
+      }
+    },
+    onApplied: () => {
+      if (quitting) {
+        return;
+      }
+      outfitRevision += 1;
+      syncDesktop();
+      pushSnapshot();
+    },
+    onError: (error) => {
+      console.error("换装协调失败：", error?.message ?? error);
+    },
+  });
+
   registerIpcHandlers();
   connectorRuntime.start().catch((error) => {
     console.error("连接器运行管理启动失败：", error?.message ?? error);
@@ -432,6 +479,7 @@ function startApplication() {
   startNotificationTicker();
   rotationPending = companionship.getSnapshot().pendingRotation;
   ensurePendingRotationCompletion();
+  scheduleOutfitCommit();
   startHeartbeat();
 }
 
@@ -539,6 +587,31 @@ function persistDesktopPosition(x, y) {
   store.setAppState("desktop_position", JSON.stringify({ x, y }));
 }
 
+/* 衣装状态只用于主进程选择素材与快照；renderer 通过具名 IPC 读取脱敏视图。 */
+function readOutfitState(characterId) {
+  if (!store?.outfits || !characterId) {
+    return null;
+  }
+  try {
+    return store.outfits.list({ characterId });
+  } catch (error) {
+    console.error("读取衣装状态失败：", error?.message ?? error);
+    return null;
+  }
+}
+
+function unavailableOutfitPresentation(characterId, displayName, outfitId) {
+  return {
+    character: { id: characterId, displayName },
+    animations: null,
+    assetState: "pending",
+    assetNote: "当前衣装不可用；可在角色页选回原本的衣装。",
+    assetLabel: "衣装不可用",
+    reason: "OUTFIT_UNAVAILABLE",
+    outfitId: outfitId ?? null,
+  };
+}
+
 function desktopPresentation() {
   if (!onboardingService || !companionship) {
     return null;
@@ -551,10 +624,25 @@ function desktopPresentation() {
   if (!companion.current) {
     return null;
   }
-  const built = buildDesktopPresentation(
-    companion.current.characterId,
-    companion.current.displayName,
-  );
+  const outfitState = readOutfitState(companion.current.characterId);
+  // 已穿衣装失效时明确不可用，绝不偷偷换回基础衣装。
+  const built = !outfitState
+    ? unavailableOutfitPresentation(
+      companion.current.characterId,
+      companion.current.displayName,
+      null,
+    )
+    : outfitState.worn.outfitId !== "base" && outfitState.worn.available !== true
+      ? unavailableOutfitPresentation(
+        companion.current.characterId,
+        companion.current.displayName,
+        outfitState.worn.outfitId,
+      )
+      : buildDesktopPresentation(
+        companion.current.characterId,
+        companion.current.displayName,
+        outfitState.worn.outfitId,
+      );
   const activity = companion.current.activity ?? null;
   // 休息意图只属于稳定同屏角色：A 本人聊天时仍保持坐姿，临时聊天角色 B
   // 不继承 A 的姿势；current_mode 在互动期间仍是稳定角色的持久意图。
@@ -883,6 +971,11 @@ function snapshotForRenderer() {
     ...onboardingService.getSnapshot(),
     companionship: companionship.getSnapshot(),
     desktop: desktopHost?.getStatus() ?? { state: "stopped" },
+    // revision 只在用户选择/协调状态变化时递增；renderer 据此刷新衣装列表。
+    outfit: {
+      revision: outfitRevision,
+      runtime: outfitRuntime ? { ...outfitRuntime } : null,
+    },
     connectors: connectorStateForRenderer(),
     system: {
       paused: systemLifecycle?.isPaused() ?? systemPaused,
@@ -1072,7 +1165,10 @@ function handleDesktopStatusChange(status = desktopHost?.getStatus()) {
   } else if (!wasReady) {
     // 状态回调内直接 sync 会递归回 setStatus，推迟一拍再恢复展示。
     setImmediate(() => {
-      if (!quitting && desktopHost) syncDesktop();
+      if (!quitting && desktopHost) {
+        syncDesktop();
+        scheduleOutfitCommit();
+      }
     });
   }
   tray?.refresh();
@@ -1273,6 +1369,7 @@ function startHeartbeat() {
       runStoryRuntime();
       ensurePendingRotationCompletion();
       syncDesktop();
+      scheduleOutfitCommit();
       pushSnapshot();
       tray?.refresh();
       automaticOpportunities
@@ -1354,6 +1451,7 @@ function resumeFromSystem() {
       automaticOpportunities?.resume();
     }
     syncDesktop();
+    scheduleOutfitCommit();
     ensurePendingRotationCompletion();
     try {
       store?.notificationPresentation.resume();
@@ -1408,6 +1506,57 @@ async function waitForPresentationBoundary() {
   }
   const result = await desktopHost.waitForNodeBoundary(boundaryTimeoutFor(presentation));
   assertBoundaryCompleted(result);
+}
+
+/* renderer 只拿稳定 ID、穿着资格与状态；token 与文件路径不越过 IPC。 */
+function outfitStateForRenderer(characterId) {
+  const state = store.outfits.list({ characterId });
+  return {
+    characterId: state.characterId,
+    worn: { ...state.worn },
+    pending: state.pending
+      ? {
+          outfitId: state.pending.outfitId,
+          storyId: state.pending.storyId,
+          version: state.pending.version,
+          requestedAt: state.pending.requestedAt,
+          available: state.pending.available,
+          reason: state.pending.reason,
+        }
+      : null,
+    outfits: state.outfits.map((item) => ({ ...item })),
+  };
+}
+
+function outfitStateForActivity(characterId) {
+  const state = readOutfitState(characterId);
+  if (!state) {
+    return null;
+  }
+  if (state.worn.outfitId !== "base" && state.worn.available !== true) {
+    return null;
+  }
+  return state.worn.outfitId;
+}
+
+function activitySupportFor(characterId, kind) {
+  const outfitId = outfitStateForActivity(characterId);
+  if (!outfitId) {
+    return {
+      available: false,
+      reason: "OUTFIT_UNAVAILABLE",
+      note: "当前衣装不可用；不借用基础衣装动作。",
+    };
+  }
+  return getActivitySupport(characterId, kind, outfitId);
+}
+
+/* 只触发协调者；是否等待/提交/保留由 outfit-runtime 统一判断。 */
+function scheduleOutfitCommit() {
+  if (quitting || !outfitCoordinator) {
+    return;
+  }
+  outfitCoordinator.schedule();
 }
 
 function acceptedCompanions() {
@@ -1473,6 +1622,7 @@ function closeActiveChat({
   if (refresh && !quitting && !systemPaused && !degraded) {
     activityRuntime?.resumePausedActivities();
     syncDesktop();
+    scheduleOutfitCommit();
     pushSnapshot();
     ensurePendingRotationCompletion();
     automaticOpportunities?.resume();
@@ -1818,6 +1968,36 @@ function registerIpcHandlers() {
     storyInvitationAction("reopenInvitation"),
   );
 
+  ipcMain.handle("bayper:outfit:list", (event, characterId) => {
+    try {
+      assertTrustedSender(event);
+      return { ok: true, state: outfitStateForRenderer(characterId) };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
+  /* 选择只保存意图并返回“待穿”；换装由主进程在安全节点自行提交。 */
+  ipcMain.handle("bayper:outfit:request", (event, characterId, outfitId) => {
+    try {
+      assertTrustedSender(event);
+      store.outfits.request({ characterId, outfitId });
+      if (outfitRuntime?.characterId === characterId) {
+        outfitRuntime = null;
+      }
+      outfitRevision += 1;
+      scheduleOutfitCommit();
+      pushSnapshot();
+      return {
+        ok: true,
+        state: outfitStateForRenderer(characterId),
+        snapshot: snapshotForRenderer(),
+      };
+    } catch (error) {
+      return failureResult(error);
+    }
+  });
+
   ipcMain.handle("bayper:connector:set-enabled", async (event, instanceId, enabled) => {
     try {
       assertTrustedSender(event);
@@ -1885,6 +2065,7 @@ function registerIpcHandlers() {
         activityRuntime?.resumePausedActivities();
       }
       syncDesktop();
+      scheduleOutfitCommit();
       pushSnapshot();
       return { ok: true, ...result, snapshot: snapshotForRenderer() };
     } catch (error) {
@@ -2199,6 +2380,9 @@ async function cleanup() {
   storyRuntime = null;
   storyWindow = null;
   storyView = null;
+  outfitCoordinator?.dispose();
+  outfitCoordinator = null;
+  outfitRuntime = null;
   if (companionship) {
     try {
       companionship.markClosed();

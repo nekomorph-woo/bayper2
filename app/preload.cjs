@@ -79,6 +79,15 @@ contextBridge.exposeInMainWorld(
 );
 
 contextBridge.exposeInMainWorld(
+  "bayperOutfits",
+  Object.freeze({
+    list: (characterId) => ipcRenderer.invoke("bayper:outfit:list", characterId),
+    request: (characterId, outfitId) =>
+      ipcRenderer.invoke("bayper:outfit:request", characterId, outfitId),
+  }),
+);
+
+contextBridge.exposeInMainWorld(
   "bayperSources",
   Object.freeze({
     getState: () => ipcRenderer.invoke("bayper:source:state"),

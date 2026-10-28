@@ -41,3 +41,33 @@ master在实际diff中发现attemptOutfitCommit进入等待前后均以presentat
 修正要求：休息/睡眠复用waitForPresentationBoundary的rest-settled/rest-sleep-boundary，不把resting当禁换条件；当前素材不可用没有需完成的可见动作时允许校验新目标后恢复基础，不把ready前提设为恢复障碍；名单外/探索不强拉上桌，安全应用自身意图；暂停/聊天保留待穿、恢复推进。只允许一个节点等待，无立即do/while重试，外部既有心跳/结束事件驱动下一次。超时保留旧穿，旧token/换人回调不得提交。
 
 下一派发先修核心协调并验证这些必需路径，再完成角色概览与001/002/007正常GUI。完整003/005/006测试可按原计划分批，但不能将实现本身设计成不支持这些状态。Expected未改；当前未运行GUI，不把阅读发现虚称实际GUI失败。现行Polaris要求一致性审查已足以处理，此处为执行不遵循，无新skill修订。
+
+## r170 B实施中审查待返修项
+
+CLI51648仍运行，不能重启或启动并行GUI。master查看实际截图 `evidence/s06l-ui/attempt-20261028-190253-70246-all2/001-worn.png`：紧凑衣装区同屏可见，但“已穿温茶围裙”旁边角色大图仍是基础衣装，需使角色概览预览匹配实际已穿；待穿期间保持旧图，素材失效时明确不可用，不提前换图。这个反馈来自实际截图，不是推测。
+
+代码审查待验证：outfit-runtime.processOne优先选择current pending，若其unavailable直接return，可能持续阻塞其他角色合法待穿；应补独立多角色实际SQLite反例，不以反复触发相同坏目标吞掉其他选择。修复时不能新造通用队列/忙循环。
+
+Runner证据缺口：007使用被测buildDesktopPresentation计算预期plan/foot，需改为独立读取manifest/实际帧与窗口观测，复用已有desktop.spec的独立计算思路；tryWave失败时if(wave.triggered)跳过后续断言会让题为“招呼实际播放”的Case静默通过，应明确必须触发、采样到温茶wave并恢复温茶idle。未触发保留FAIL/ERROR，不改窄Expected。真实输入可复用已有项目输入工具/合法Driver，不能直接改sprite或伪造已触发。001/002初步开发证据不等于master接受，007 all2有未载入温茶帧失败，原件保留；需要等CLI终态再读取最终报告与diff。
+
+B细化与r168/r169已snap24ccf36，版本0.1.235、领先origin/main187，未推送。r170为进行中待核查事项，当前实现仍未接受。
+
+## r171 B终态审查与定向返修
+
+CLI51648已终态，/tmp/bayper-s06l-part-b-correction.json is_error=false；开发者GUI3/3报告不等于master接受。master重新核对实际runtime与Runner：不可用current待穿直接return，其他合法待穿会被阻挡；007 wave仍为可选断言；脚位Oracle仍直接用被测buildDesktopPresentation；001允许精力差0.2但缺少实际时间结算依据。这些须修后独立复验。截图中的已穿与大图不一致亦须修复，不接受把旧母版称为独立静态形象来绕过角色页反馈。
+
+本批只修以上范围和相关测试：固定白名单衣装预览，保持待穿旧图与不可用提示；跳过不可用意图但保留其状态，以真实SQLite多角色案例核查；007必须真实wave及回idle并使用独立manifest/帧Oracle；证据目录不可覆盖；精力校验采用可解释时间边界并保留其他业务完整快照。不得扩张主题/正式素材发布/全局队列。003/005/006完整GUI后续仍需补，不以本批代替。
+
+现行Polaris已明确独立Oracle与不弱化断言，此次问题属于实现/Runner不充分，无需为相同规则另修skill。版本仍0.1.235，代码尚未接受。
+
+## r172 B正常链路有限接受（2026-10-28）
+
+master独立执行：换装真实Electron GUI **3/3**；unit、outfit领域/真实SQLite协调、story五套件 **72/72**；已有desktop/rest/chat/companionship GUI **27/27**，均exit0、0skip。证据 `evidence/s06l/master-r171-6nc_e_ue/`，完整命令与退出码见result.json、regression-result.json。首两组运行前后app/tests摘要一致；后续回归未同时派发实现。
+
+Codex实际查看自己运行的001-worn、002-unavailable截图：温茶大图与已穿一致，失效时明确隐藏预览，基础恢复入口可用；固定页面无新增滚动。007实际记录8个不同wave帧并回温茶idle、idle循环帧推进，脚位以独立manifest计算与窗口bounds核对≤1pt；这是自动化操作与Codex截图审查，不是用户亲自体验，也非正式素材全动作通过。
+
+受托接受本批正常换装链路及已测恢复能力，可按snap保存自洽成果。001/002已执行当前计划必需正常链路；004仅增加失效已穿重启和显式基础恢复GUI，其他资格变化仍为领域证据；005新增真实SQLite多角色不可用请求不阻塞合法意图，每次只提交一个、当前合法优先，非完整GUI竞态；003/005/006完整GUI尚未覆盖；007 stretch与深浅背景完整视觉检查尚未覆盖。整组S06l/S06/S07不接受为完成，下一批继续这些路径。
+
+边界：loopback构造模型、真实Electron/SQLite/桌面子进程，衣装作者目录fixture开放候选，正式assetAvailable=false未改。记忆/昵称/关系/心情/名单/归属非空快照严格比较；精力按真实elapsed最高20/小时加舍入余量校验，不声称绝对不随时间变化。协调反例使用构造持久化待穿状态，不冒充完整UI操作。全部证据原件保留，本轮无真实模型/Herdr调用。
+
+规模审查：协调190行、界面约384行、GUI1077行（含多次重启/独立布局/帧采样/恢复）、SQL协调143行，职责均对应本批真实需求，无通用框架；允许高于原规模信号，不为凑行数压缩。最后只退回两处空白/不准确注释收口，不改变行为。Polaris的独立Oracle/禁止弱化断言在此次返修中得到实际执行；未发现需要新修订的skill矛盾。

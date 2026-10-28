@@ -32,6 +32,9 @@ let canvasEpoch = 0;
 let currentDisplayKey = "";
 let currentDisplaySignature = null;
 let currentDisplay = null;
+// 记录最近一次应用的显示布局计划；加载/失效间隙不更新，恢复同角色衣装时
+// 仍以最后应用脚位为基准，避免窗口位置被下一次心跳旧 position 覆盖。
+let lastAppliedDisplay = null;
 let currentFrames = new Set();
 let globalIgnoreMouse = false;
 let windowIgnoring = null;
@@ -96,7 +99,7 @@ function defaultPosition(width, height) {
 
 function applyPosition(position) {
   if (!window || window.isDestroyed()) {
-    return;
+    return null;
   }
   const bounds = window.getBounds();
   const width = bounds.width;
@@ -107,6 +110,7 @@ function applyPosition(position) {
   window.setPosition(target.x, target.y, false);
   layoutNotificationWindow();
   refreshHit();
+  return target;
 }
 
 function decodeFrameAlpha(frameUrl) {
@@ -440,8 +444,19 @@ function applyState(state) {
   ) {
     cancelDragState();
   }
-  const display = state.animations?.display;
+  const display = state.animations?.display ?? null;
   const size = displaySize(display);
+  const oldBounds = window.getBounds();
+  // 同角色换装时保持屏幕脚位：新左上角 = 旧左上角 + 旧脚锚 - 新脚锚。
+  const previousFoot = lastAppliedDisplay?.characterId === state.character?.id
+    ? lastAppliedDisplay.display?.footAnchor ?? null
+    : null;
+  const footReposition = Boolean(
+    !dragState
+    && display
+    && previousFoot
+    && (previousFoot.x !== display.footAnchor.x || previousFoot.y !== display.footAnchor.y),
+  );
   window.setContentSize(size.width, size.height);
 
   window.webContents.send("canvas:state", {
@@ -468,7 +483,23 @@ function applyState(state) {
   }
 
   if (!dragState) {
-    applyPosition(state.position);
+    const position = footReposition
+      ? {
+          x: oldBounds.x + previousFoot.x - display.footAnchor.x,
+          y: oldBounds.y + previousFoot.y - display.footAnchor.y,
+        }
+      : state.position;
+    const target = applyPosition(position);
+    if (footReposition && target) {
+      // 立即持久化调整后的位置，避免下一次心跳用旧 position 把窗口移回。
+      send({ type: "position-changed", x: target.x, y: target.y });
+    }
+  }
+  if (display) {
+    lastAppliedDisplay = {
+      characterId: state.character?.id ?? null,
+      display,
+    };
   }
   reportBounds();
   layoutNotificationWindow();

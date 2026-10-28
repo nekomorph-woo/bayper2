@@ -78,6 +78,9 @@ function createOutfits({
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
     `),
     clearState: db.prepare("DELETE FROM app_state WHERE key = ?"),
+    listPending: db.prepare(
+      "SELECT key FROM app_state WHERE key LIKE ? ORDER BY key",
+    ),
     relationship: db.prepare(
       "SELECT 1 AS present FROM relationships WHERE character_id = ?",
     ),
@@ -262,6 +265,25 @@ function createOutfits({
     };
   }
 
+  /* 协调者只处理真实存在的待穿意图；失效角色或损坏状态不阻塞其他角色。 */
+  function listPending() {
+    return statements.listPending
+      .all(`${PENDING_PREFIX}%`)
+      .map((row) => row.key.slice(PENDING_PREFIX.length))
+      .map((characterId) => {
+        try {
+          return state(characterId);
+        } catch {
+          return null;
+        }
+      })
+      .filter((item) => item?.pending)
+      .sort(
+        (left, right) =>
+          (left.pending.requestedAt ?? 0) - (right.pending.requestedAt ?? 0),
+      );
+  }
+
   function transaction(fn) {
     db.exec("BEGIN IMMEDIATE");
     try {
@@ -340,7 +362,7 @@ function createOutfits({
     return { ...state(key), ...outcome };
   }
 
-  return { list: state, getState: state, request, commitPending };
+  return { list: state, getState: state, listPending, request, commitPending };
 }
 
 module.exports = { createOutfits, BASE_OUTFIT_ID };

@@ -265,6 +265,9 @@
                     <div class="overview-layout">
                       <div class="detail-figure">
                         <img id="character-image" src="" alt="" />
+                        <p id="character-preview-unavailable" class="detail-figure-note" hidden>
+                          这套衣装当前不可用
+                        </p>
                         <span class="dev-flag dev-flag-small">开发候选素材</span>
                       </div>
                       <div class="detail-copy">
@@ -275,6 +278,19 @@
                           <div><dt>精力</dt><dd id="character-stat-energy"></dd></div>
                           <div><dt>心情</dt><dd id="character-stat-mood"></dd></div>
                         </dl>
+                        <div id="outfit-block" class="outfit-block" hidden>
+                          <div class="outfit-head">
+                            <span class="outfit-label">衣装</span>
+                            <span id="outfit-current" class="outfit-current"></span>
+                          </div>
+                          <div
+                            id="outfit-options"
+                            class="outfit-options"
+                            role="group"
+                            aria-label="衣装选择"
+                          ></div>
+                          <p id="outfit-status" class="status-text" role="status" aria-live="polite"></p>
+                        </div>
                         <p id="character-roster-state" class="side-meta"></p>
                       </div>
                     </div>
@@ -494,6 +510,7 @@
     <script src="connector-settings.js"></script>
     <script src="window-navigation.js"></script>
     <script src="story-panel.js"></script>
+    <script src="outfit-panel.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
