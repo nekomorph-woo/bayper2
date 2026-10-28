@@ -115,6 +115,20 @@ function countRows(dbPath, table) {
   }
 }
 
+/* M/C 短编号由服务端按本轮候选顺序生成；测试按候选正文/角色名定位。 */
+function requestCandidate(request, prefix, needle) {
+  const systemText = request.messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n");
+  const line = systemText
+    .split("\n")
+    .find((item) => new RegExp(`^\\[${prefix}\\d+\\]`, "u").test(item) && item.includes(needle));
+  const match = line?.match(new RegExp(`^\\[(${prefix}\\d+)\\]`, "u"));
+  assert.ok(match, `本轮请求候选未找到 ${needle}`);
+  return match[1];
+}
+
 async function setupChatTest(
   t,
   { timeoutMs = 1000, credentials = true, fixedClock = false, recoverInterrupted = false } = {},
@@ -411,6 +425,178 @@ test("POL-HISTORY-003 无记忆历史表达不被本地替换、裁剪或额外�
     .map((message) => message.content);
   assert.deepEqual(userTexts, cases.map((item) => item.text));
   assert.equal(stored.messages.length, cases.length * 2);
+});
+
+test("POL-PERSONA-001 角色虚构设定与用户事实分区且设定不充当共同经历证据", async (t) => {
+  const ctx = await setupChatTest(t);
+  const { store, server } = ctx;
+  store.memory.remember({
+    characterId: "rin",
+    factKey: "detail.home.door",
+    body: "用户家的门牌是307",
+    kind: "detail",
+    sourceId: "seed-persona-door",
+  });
+  const conversation = store.chat.openConversation({ characterId: "rin" }).conversation;
+  const question = "你还记得我家的门牌吗？";
+  server.enqueue(({ res }) =>
+    sendEnvelope(res, { reply: "记得，你家的门牌是307。", memoryCandidates: [] }),
+  );
+  const result = await store.chat.sendMessage({
+    characterId: "rin",
+    conversationId: conversation.id,
+    text: question,
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.reply, "记得，你家的门牌是307。");
+  assert.equal(server.requests.length, 1);
+
+  const request = server.requests[0];
+  const systems = request.messages.filter((message) => message.role === "system");
+  assert.equal(systems.length, 2);
+  const rules = systems[0].content;
+  const data = systems[1].content;
+  const personaBoundary = rules.indexOf("以下为角色虚构设定数据");
+  const persona = rules.indexOf("\n【角色虚构设定】");
+  assert.ok(personaBoundary >= 0 && personaBoundary < persona, "应先声明边界再给角色设定数据");
+  assert.match(rules, /不是用户事实，也不是用户与角色的共同经历/u);
+  const personaBlock = rules.slice(persona);
+  assert.ok(personaBlock.includes("窗边那张椅子留给你"));
+  assert.ok(personaBlock.includes("茶要放到温热才喝"));
+  assert.equal(personaBlock.includes("307"), false);
+
+  const factsBoundary = data.indexOf("本轮可用的记忆事实不是全部人生记录");
+  const facts = data.indexOf("\n【用户事实与记忆】");
+  assert.ok(factsBoundary >= 0 && factsBoundary < facts, "应先声明边界再给用户事实数据");
+  const factsBlock = data.slice(facts);
+  assert.ok(factsBlock.includes("用户家的门牌是307"));
+  assert.ok(factsBlock.includes("来源:用户明确告知"));
+  assert.equal(data.includes("窗边那张椅子"), false);
+  assert.equal(store.memory.listMemories("rin").length, 1);
+});
+
+test("POL-PERSONA-002 记住不授予披露权且既有授权转告仍生效", async (t) => {
+  const ctx = await setupChatTest(t);
+  const { store, server } = ctx;
+  const conversation = store.chat.openConversation({ characterId: "rin" }).conversation;
+  server.enqueue(({ res }) =>
+    sendEnvelope(res, {
+      reply: "嗯，我记住了。",
+      memoryCandidates: [{
+        factKey: "detail.home.door", body: "用户家的门牌是307", kind: "detail",
+        trust: "stated", evidence: "我家的门牌是307",
+      }],
+    }),
+  );
+  const remembered = await store.chat.sendMessage({
+    characterId: "rin",
+    conversationId: conversation.id,
+    text: "请记住，我家的门牌是307。",
+  });
+  assert.equal(remembered.status, "completed");
+  assert.equal(remembered.memoryApplied, 1);
+  const systemText = server.requests[0].messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n");
+  assert.match(systemText, /记住不等于授权披露/u);
+  assert.match(systemText, /不得承诺将来/u);
+  for (const characterId of ["hu", "cheng"]) {
+    assert.equal(store.memory.listMemories(characterId).length, 0);
+  }
+
+  server.enqueue(({ body, res }) =>
+    sendEnvelope(res, {
+      reply: "好的，我已经告诉她了。",
+      memoryCandidates: [],
+      memoryRelay: {
+        target: requestCandidate(body, "M", "我家的门牌是307"),
+        character: requestCandidate(body, "C", "琥珀"),
+      },
+    }),
+  );
+  const relayed = await store.chat.sendMessage({
+    characterId: "rin",
+    conversationId: conversation.id,
+    text: "把我家的门牌告诉琥珀。",
+  });
+  assert.equal(relayed.status, "completed");
+  assert.equal(relayed.reply, "好，我已经把这件事告诉琥珀了。");
+  assert.equal(server.requests.length, 2);
+  const huEntry = store.memory
+    .listMemories("hu")
+    .find((entry) => entry.body === "我家的门牌是307");
+  assert.ok(huEntry, "用户明确要求转告后，接收者应获得该事实");
+  assert.equal(huEntry.originCharacterId, "rin");
+});
+
+test("POL-PERSONA-003 普通闲聊、真实经历与虚构提议不改变回复或新增用户事实", async (t) => {
+  const ctx = await setupChatTest(t);
+  const { store, server } = ctx;
+  const conversation = store.chat.openConversation({ characterId: "rin" }).conversation;
+
+  const chatReply = "窗边那张椅子还留着，要不要先坐一会儿？";
+  server.enqueue(({ res }) => sendEnvelope(res, { reply: chatReply, memoryCandidates: [] }));
+  const chatted = await store.chat.sendMessage({
+    characterId: "rin",
+    conversationId: conversation.id,
+    text: "今天想做点什么？",
+  });
+  assert.equal(chatted.status, "completed");
+  assert.equal(chatted.reply, chatReply);
+  const chatRules = server.requests[0].messages
+    .filter((message) => message.role === "system")[0].content;
+  assert.ok(chatRules.includes("窗边那张椅子留给你"));
+  assert.equal(countRows(store.dbPath, "memory_entries"), 0);
+
+  server.enqueue(({ res }) =>
+    sendEnvelope(res, {
+      reply: "听起来风挺大的。",
+      memoryCandidates: [{
+        factKey: "experience.hike", body: "用户昨天去爬山", kind: "experience",
+        trust: "stated", evidence: "昨天去爬山了",
+      }],
+    }),
+  );
+  const experienced = await store.chat.sendMessage({
+    characterId: "rin",
+    conversationId: conversation.id,
+    text: "昨天去爬山了，山上风很大。",
+  });
+  assert.equal(experienced.status, "completed");
+  assert.equal(experienced.reply, "听起来风挺大的。");
+  assert.equal(experienced.memoryApplied, 1);
+  const saved = store.memory
+    .listMemories("rin")
+    .find((entry) => entry.factKey === "experience.hike");
+  assert.equal(saved.body, "昨天去爬山了");
+
+  const beforeRows = countRows(store.dbPath, "memory_entries");
+  const beforeRequests = server.requests.length;
+  const hypotheticalReply = "要是明天去散步，我就带上那把伞。";
+  server.enqueue(({ res }) =>
+    sendEnvelope(res, {
+      reply: hypotheticalReply,
+      memoryCandidates: [{
+        factKey: "experience.walk", body: "用户明天和凛一起去散步", kind: "experience",
+        trust: "stated", evidence: "窗边那张椅子还留着",
+      }],
+    }),
+  );
+  const hypothetical = await store.chat.sendMessage({
+    characterId: "rin",
+    conversationId: conversation.id,
+    text: "如果明天一起去散步，你会带什么？",
+  });
+  assert.equal(hypothetical.status, "completed");
+  assert.equal(hypothetical.reply, hypotheticalReply);
+  assert.equal(hypothetical.memoryApplied, 0);
+  assert.equal(server.requests.length, beforeRequests + 1);
+  assert.equal(countRows(store.dbPath, "memory_entries"), beforeRows);
+  const lastData = server.requests.at(-1).messages
+    .filter((message) => message.role === "system")[1].content;
+  assert.match(lastData, /未显示的内容不代表没有发生/u);
+  assert.match(lastData, /不能据此推断用户从未说过/u);
 });
 
 test("POL-CHAT-002 用户明确事实写一次，助手建议与模型授权不写入", async (t) => {
