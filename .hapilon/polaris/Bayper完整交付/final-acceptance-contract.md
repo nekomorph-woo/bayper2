@@ -1,6 +1,6 @@
 # 最终验收 Contract（GAP-14，v1，流程补齐已受托验收）
 
-2026-10-27。状态：**master 已受托验收本组 7 个最终 Contract v1 及 Part A/B，GAP-14 流程补齐通过。** 本批 snap 前暂不改产品；提交后接回原父级 S03 来源身份工作。产品尚未交付，Contract 执行结果未产生，不预填 PASS。基线 `fdf7144`（当时 VERSION `0.1.181`），本批拟 snap VERSION `0.1.182`，未产生新 hash。产品 5 文件仍按 [process-freeze.json](evidence/process-freeze.json) 冻结。
+2026-10-27批准的7个最终Contract v1继续有效，GAP-14流程补齐已受托验收；原冻结已随a68d03f解除。**当前产品尚未交付**，本文件定义终止验收要求，不用历史计划时态表示当前执行状态。逐项实际结果以[evaluation.md](evaluation.md)及[scope.md](scope.md)为准；CATALOG有限独立验收见[final-catalog-review.md](final-catalog-review.md)，不能扩写为整组通过。
 
 共同规则：每个 Contract 为稳定 ID/v1、P0 最终必需；Expected 同时列禁止副作用；Oracle 不调用被测实现生成答案；真实/Mock 边界随条目写明。6 至 8 组有限 Contract 复用既有 Case，不另建一套；全部归 **S08 最终验收入口**并跨链 S02/S03/S04/S05/S06/S07，不新增 S09 父级或产品概念。`animation-plan.md` 的 24 基础＋12 特色语义由 master 按完整交付授权采用，不作为 36 张图、36 fps 或全部四方向要求。未取得的外部硬件证据保持 NOT_COVERED，不因此降低 Goal，也不要求用户重新批准。
 
@@ -115,4 +115,4 @@
 - 未执行前，本组在 [cases.md](cases.md) 只登记引用，在 [evaluation.md](evaluation.md) 记 NOT_COVERED；历史日志、开发报告和工具通过不升级为本 Contract 的 PASS。
 - 外部硬件（Retina、物理锁屏/睡眠、Spaces/全屏）缺失时保持 NOT_COVERED；不把缺失当 PASS，也不因此缩小完整 Goal。产品恢复由 master 在流程验收后决定。
 
-本批 snap 后恢复 S03 来源身份工作。下一最小切片只记录、不实施：来源身份 v2 的 6 处旧同文 fixture 适配及独立回归；随后立即处理存量错误身份组迁移，并接回 S03 语义纠正/删除/共享闭环。
+历史批准时安排的来源身份及迁移批次已推进，当前接续入口为state.md与scope.md；本Contract全部Expected保持不变，未完成项继续计入完整Goal。

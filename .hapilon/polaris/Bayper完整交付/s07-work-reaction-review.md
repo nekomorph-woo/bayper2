@@ -36,3 +36,18 @@ Claude只读诊断54338执行两次既有渲染Runner，未改代码；master已
 - run-20261028084542494-f293f8/case-POL-WORKREACTION-002.json确实观察happy00～07后回idle03；前后窗口89×128、图像104.34375×156.53125、pixelated，master已看恢复截图。只接受这段观察，剩余时长/反应期间几何/节点未测，002整体仍NOT_COVERED。
 
 001/003真实链路尚未恢复，005/006/007/009未完整独立验收。此审查文档可以独立保存，但生产和Runner仍不得随之提交。
+
+## r156 返修后master独立复核
+
+18535终态exit0/is_error=false，但开发者如实报告三组各两次均未全过，不能按CLI成功接受。新Runner1073行，虽删同形server，完整门禁增长；未提交生产/测试。
+
+master独立运行002/008现行渲染组：master-r155-render-9whedlnl/stdout.log，exit0、1/1、0skip、前后源码SHA一致。该组实际通过帧恢复/几何与点击、聊天、隐藏、暂停、休息、日常、换人的已有断言；自然节点等待尚无实际waiter测试，idle advancing只要求至少一帧不能证明持续推进，整002/008仍保留这些边界。
+
+master代码审查定位：
+- 门禁组用第二次restCompanion()尝试唤醒，正式app.js的继续陪伴实际调用switchCompanion(current.characterId)，已有desktop-rest.spec.cjs提供真实按钮路径。修Runner而不是修改休息业务语义。
+- 001在ACK后重复ack、delay250才sample，happy首帧250ms可能已过去；004也在等多个事件ACK后才采样。应在触发前开始持续帧观察，避免边执行边错过证据，不删除8帧/一次性断言。
+- assertIdleAdvancing当前350ms且仅idle.length>=1不能排除idle静止；完整待机周期内至少两个不同帧，并确认不含任意happy帧，非仅不含frame00。
+- 005/006测试仅标注构造DB不能证明内部门禁状态已生效：隐藏和交接不能混成一个反例；必须观察快照/窗口状态，探索断言是不召回/不破坏活动，不能把当前仍为凛当产品预期（用户要求探索离桌并接替）。
+- 同事件无新finished计数不足以完整替代无额外事件，保留来自Herdr的idle等合法事件，并核其来源/事件类型，不能删除禁止副作用要求。
+
+master另独立执行资产/边界单测及notification-presentation全9项：master-r155-core-4vfeldms，11/11、0skip、exit0、前后SHA一致。证明受影响通知账本回执/重建等既有领域行为未在该批退化，不证明反应与真实通知UI的全部集成。
