@@ -18,6 +18,8 @@ const { createSessionSourceReader } = require("./session-sources.cjs");
 const { createSourceAnalysis } = require("./source-analysis.cjs");
 const { createStoryProgress } = require("./story-progress.cjs");
 const { createDiscoveryOutcomes } = require("./discovery-outcomes.cjs");
+const { createOutfits } = require("./outfits.cjs");
+const { isOutfitAssetAvailable } = require("./desktop-assets.cjs");
 const { INITIAL_STATS } = require("./initial-stats.cjs");
 const authoredStories = require("./content/maid-stories.json");
 
@@ -90,6 +92,14 @@ function createStore(dataDir, options = {}) {
     now,
   });
   const discoveryOutcomes = createDiscoveryOutcomes({ db, storyProgress, now });
+  // S06l 衣装穿用意图与 desktop-assets 的显式衣装映射共用同一连接和稳定 ID。
+  const outfits = createOutfits({
+    db,
+    storyProgress,
+    discoveryOutcomes,
+    isAssetAvailable: isOutfitAssetAvailable,
+    now,
+  });
   // S03 记忆与聊天共用同一连接；不另建生产数据库。
   const memory = createMemoryService({ db, now });
   // S03j 主题活动分享复用同一连接与记忆服务，只在故事结果事务内写入。
@@ -264,6 +274,7 @@ function createStore(dataDir, options = {}) {
     ...companion,
     storyProgress,
     discoveryOutcomes,
+    outfits,
     memory,
     themeMemorySharing,
     chat,

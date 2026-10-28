@@ -490,4 +490,4 @@ master独立37/37、0跳过、exit0、SHA稳定；POL-OUTFITRUN-001/002/003A/B/C
 
 ## S06l 主动换装
 
-POL-OUTFIT-001～007 NOT_COVERED，计划已受托批准，尚未实施。待执行分领域与真实GUI记录，不预填PASS。
+POL-OUTFIT-001/002/004/005/006领域与资产支撑已由master独立71/71执行，见[s06l-master-review.md](s06l-master-review.md) r167；完整Case仍未接受，003/005协调/007及其他GUI子项NOT_COVERED。A内部能力接受，继续B实际UI与桌面，不用局部测试数代表全流程。
