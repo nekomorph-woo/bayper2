@@ -261,3 +261,5 @@ S06m r182：001/002/003/005的Part A领域证据见[s06m审查](s06m-master-revi
 S06m r190：B Runner为tests/acceptance/automatic-notices-ui.spec.cjs（UI-001～007）与automatic-notices-runtime.spec.cjs。master独立40/40，见s06m-master-review.md；冷启动迟到快照缺陷已复现并修复。001正常衣装、002邀请稍后、004隐藏/暂停/休息/进程恢复、005旧请求/旧结果、006主动跳转/工作抢占的已执行子项通过。完整Case仍不聚合PASS：实际应用重启后不重播、GUI六秒/十秒完整周期及邀请拒绝/接纳从自动告知入口的联动仍待收口，领域/受控runtime结果单独保留。
 
 S06m r196：UI-008/009补001实际整应用重启不重播、006真实GUI六秒/十秒完整周期，master2/2通过。以s06m-master-review.md r196及evaluation后续记录覆盖r190对应待补状态；其它未闭环义务保持。
+
+S06m r198：自动邀请拒绝→手动重开→接纳UI-010 master独立1/1通过，非空记忆/名单/角色状态隔离与公开IPC幂等证据见s06m-master-review.md r198。002交互联动缺口已补；额度与拒绝因果边界按GUI+领域证据分别记录。004探索/切换门禁仍待专门验证。

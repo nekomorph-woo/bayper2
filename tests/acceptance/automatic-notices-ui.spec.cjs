@@ -657,6 +657,228 @@ test("POL-AUTONOTICE-UI-002 相遇卡点击正确故事，稍后不再催促", {
   }
 });
 
+test("POL-AUTONOTICE-UI-010 邀请自动显示→不接纳→下一机会不催促→重开同一邀请→接纳隔离", {
+  timeout: 180000,
+}, async (t) => {
+  const record = { facts: {}, screenshots: [], cleanupErrors: [] };
+  const resources = await setupCaseAndApp(t, "invite");
+  const { context, launched } = resources;
+  try {
+    execDb(context.dataDir, `
+      INSERT INTO memory_entries
+        (id, character_id, fact_key, origin_character_id, derived_from_entry_id,
+         kind, body, trust, importance, expires_at, source_id, source_version,
+         version, created_at, updated_at)
+      VALUES ('ui-notice-rin-memory', 'rin', 'ui-notice-private', 'rin', NULL,
+              'detail', '凛独属的窗边记忆', 'stated', 20, NULL, 'fixture', 1, 1, ?, ?)
+    `, [Date.now(), Date.now()]);
+    const stableOf = () => ({
+      memories: queryDb(context.dataDir, "SELECT * FROM memory_entries ORDER BY id"),
+      relationships: queryDb(context.dataDir,
+        "SELECT * FROM relationships WHERE character_id = 'rin'"),
+      stats: queryDb(context.dataDir,
+        "SELECT * FROM character_stats WHERE character_id = 'rin'"),
+      // last_settled_at 由正式 heartbeat 自然推进，不属于角色切换或接纳副作用。
+      runtime: queryDb(context.dataDir, `
+        SELECT character_id, mode, exploring, last_participated_at, last_auto_exit_at
+        FROM character_runtime WHERE character_id = 'rin'
+      `),
+      roster: queryDb(context.dataDir, "SELECT * FROM roster ORDER BY day, slot"),
+      interactions: queryDb(context.dataDir, "SELECT * FROM interactions"),
+      state: queryDb(context.dataDir, `
+        SELECT * FROM app_state
+        WHERE key IN ('current_character_id', 'fixed_character_id', 'current_mode')
+        ORDER BY key
+      `),
+      allRelationships: queryDb(context.dataDir,
+        "SELECT * FROM relationships ORDER BY character_id"),
+    });
+    const stableBefore = stableOf();
+    assert.ok(stableBefore.memories.length > 0, "原角色记忆必须非空");
+    const charactersBefore = (await snapshotOf(launched.page)).companionship.characters;
+    assert.equal(charactersBefore.some((item) => item.characterId === INVITE_TARGET), false);
+    const modelRequestsBefore = context.server.allRequests.length;
+
+    await forceOpportunity(launched.app, context.dataDir);
+    const notice = await waitCompanion(launched.page);
+    assert.equal(notice.kind, "invitation");
+    assert.equal(notice.storyId, INVITE_STORY);
+    resources.cdp = await connectNotificationPage(context.dataDir);
+    watchNotificationPage(resources);
+    await waitFor(() => receipts(context.dataDir).length === 1, 10000, "邀请自动真实ACK");
+    const invitationBefore = queryDb(context.dataDir,
+      "SELECT * FROM discovery_invitations WHERE story_id = ?", [INVITE_STORY])[0];
+    assert.equal(invitationBefore.status, "pending");
+    assert.ok(invitationBefore.quota_at > 0);
+    const invitationId = invitationBefore.invitation_id;
+
+    const actionButton = resources.cdp.page.locator(".companion-card .companion-action");
+    await actionButton.waitFor({ state: "visible", timeout: 5000 });
+    const box = await actionButton.boundingBox();
+    await resources.cdp.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await waitFor(
+      async () => (await launched.page.locator("#story-title").innerText()).includes("琥珀"),
+      12000,
+      "点击进入正确故事",
+    );
+    assert.equal(
+      await launched.page.locator(`[data-story-id="${INVITE_STORY}"]`).getAttribute("aria-current"),
+      "true",
+    );
+    await launched.page.locator("#story-reject").click();
+    await waitFor(() => queryDb(context.dataDir,
+      "SELECT status FROM discovery_invitations WHERE invitation_id = ?", [invitationId])[0]
+      ?.status === "rejected", 10000, "不接纳落定");
+    assert.equal(receipts(context.dataDir).length, 1);
+
+    await forceOpportunity(launched.app, context.dataDir);
+    await delay(2000);
+    assert.equal(
+      (await snapshotOf(launched.page)).desktop?.notifications?.companionNotice ?? null,
+      null,
+      "不接纳后下一正式机会不催促",
+    );
+    const noRushReceipts = receipts(context.dataDir).length;
+    const noRushStatus = queryDb(context.dataDir,
+      "SELECT status FROM discovery_invitations WHERE invitation_id = ?", [invitationId])[0]
+      ?.status;
+    assert.equal(noRushReceipts, 1);
+    assert.equal(noRushStatus, "rejected");
+
+    await launched.page.locator("#story-reopen").click();
+    await waitFor(() => queryDb(context.dataDir,
+      "SELECT status FROM discovery_invitations WHERE invitation_id = ?", [invitationId])[0]
+      ?.status === "pending", 10000, "手动重新开启");
+    const reopened = queryDb(context.dataDir,
+      "SELECT * FROM discovery_invitations WHERE invitation_id = ?", [invitationId])[0];
+    assert.equal(reopened.invitation_id, invitationId, "重开必须复用原邀请ID");
+    assert.equal(reopened.quota_at, invitationBefore.quota_at, "重开不得重记7日额度");
+    assert.equal(reopened.displayed_at, invitationBefore.displayed_at, "重开不得重记自动显示");
+    assert.equal(receipts(context.dataDir).length, 1);
+    assert.equal(queryDb(context.dataDir,
+      "SELECT COUNT(*) AS count FROM discovery_invitations WHERE story_id = ?", [INVITE_STORY])[0]
+      .count, 1, "重开不得另造邀请");
+
+    await launched.page.locator("#story-accept").click();
+    await waitFor(async () => {
+      const snapshot = await snapshotOf(launched.page);
+      return snapshot.companionship?.characters
+        ?.some((item) => item.characterId === INVITE_TARGET) ? snapshot : null;
+    }, 12000, "明确接纳后已结识列表新增目标");
+    const stateAfter = await snapshotOf(launched.page);
+    assert.equal(stateAfter.companionship.current.characterId, "rin", "接纳不得切换当前在屏角色");
+    assert.equal(queryDb(context.dataDir,
+      "SELECT COUNT(*) AS count FROM relationships WHERE character_id = ?", [INVITE_TARGET])[0]
+      .count, 1);
+    assert.equal(queryDb(context.dataDir,
+      "SELECT COUNT(*) AS count FROM roster WHERE character_id = ?", [INVITE_TARGET])[0]
+      .count, 0);
+    assert.deepEqual(
+      queryDb(context.dataDir, "SELECT * FROM relationships WHERE character_id = 'rin'"),
+      stableBefore.relationships,
+    );
+    assert.deepEqual(
+      queryDb(context.dataDir, "SELECT * FROM character_stats WHERE character_id = 'rin'"),
+      stableBefore.stats,
+    );
+    assert.deepEqual(
+      queryDb(context.dataDir, `
+        SELECT character_id, mode, exploring, last_participated_at, last_auto_exit_at
+        FROM character_runtime WHERE character_id = 'rin'
+      `),
+      stableBefore.runtime,
+    );
+    assert.deepEqual(
+      queryDb(context.dataDir, "SELECT * FROM memory_entries ORDER BY id"),
+      stableBefore.memories,
+      "原角色独属记忆必须保持不变",
+    );
+    assert.deepEqual(
+      queryDb(context.dataDir, "SELECT * FROM roster ORDER BY day, slot"),
+      stableBefore.roster,
+    );
+    assert.deepEqual(
+      queryDb(context.dataDir, `
+        SELECT * FROM app_state
+        WHERE key IN ('current_character_id', 'fixed_character_id', 'current_mode')
+        ORDER BY key
+      `),
+      stableBefore.state,
+      "当前在屏、固定位与模式不得改变",
+    );
+    assert.deepEqual(
+      queryDb(context.dataDir,
+        "SELECT * FROM relationships WHERE character_id != ? ORDER BY character_id",
+        [INVITE_TARGET]),
+      stableBefore.allRelationships,
+      "除目标外不得新增关系",
+    );
+    assert.deepEqual(
+      queryDb(context.dataDir, "SELECT * FROM interactions"),
+      stableBefore.interactions,
+      "接纳不得自动开始聊天",
+    );
+    assert.equal(queryDb(context.dataDir,
+      "SELECT COUNT(*) AS count FROM chat_conversations")[0].count, 0,
+    "接纳不得新建聊天会话");
+    assert.equal(context.server.allRequests.length, modelRequestsBefore, "接纳不得调用模型");
+    assert.deepEqual(
+      { ...queryDb(context.dataDir,
+        "SELECT intimacy, energy, mood FROM character_stats WHERE character_id = ?", [INVITE_TARGET])[0] },
+      { intimacy: 10, energy: 100, mood: 0 },
+    );
+    assert.equal(queryDb(context.dataDir,
+      "SELECT mode FROM character_runtime WHERE character_id = ?", [INVITE_TARGET])[0].mode,
+    "waiting");
+
+    const repeat = await launched.page.evaluate(
+      (id) => window.bayperStories.acceptInvitation(id),
+      invitationId,
+    );
+    assert.equal(repeat.ok, true, JSON.stringify(repeat));
+    assert.equal(repeat.duplicate, true);
+    assert.equal(queryDb(context.dataDir,
+      "SELECT COUNT(*) AS count FROM relationships WHERE character_id = ?", [INVITE_TARGET])[0]
+      .count, 1, "再次接纳不得重复关系");
+    assert.equal(
+      (await snapshotOf(launched.page)).companionship.characters
+        .filter((item) => item.characterId === INVITE_TARGET).length,
+      1,
+    );
+    assert.deepEqual(resources.pageErrors, [], "管理窗与通知窗不得有 pageerror");
+    record.facts = {
+      invitationBefore,
+      reopened,
+      invitationId,
+      noRushAfterReject: {
+        companionNotice: null,
+        receipts: noRushReceipts,
+        status: noRushStatus,
+      },
+      invitationRows: queryDb(context.dataDir,
+        "SELECT COUNT(*) AS count FROM discovery_invitations WHERE story_id = ?",
+        [INVITE_STORY])[0].count,
+      receiptsFinal: receipts(context.dataDir).length,
+      acceptedCharacter: INVITE_TARGET,
+      currentAfterAccept: stateAfter.companionship.current.characterId,
+      stableBefore,
+      repeatAccepted: repeat.duplicate === true,
+      modelRequests: context.server.allRequests.length,
+      pageErrors: resources.pageErrors,
+    };
+    const storyEvidencePath = path.join(EVIDENCE_DIR, "010-accepted-story.png");
+    await launched.page.screenshot({ path: storyEvidencePath });
+    record.screenshots.push(storyEvidencePath);
+  } catch (error) {
+    record.facts.pageErrors = resources.pageErrors;
+    record.failure = error;
+    throw error;
+  } finally {
+    await teardown(resources, record.cleanupErrors);
+    writeCase("010", record);
+  }
+});
+
 test("POL-AUTONOTICE-UI-005 门禁失效旧消息无副作用，同源新token拒绝旧消息，真实收起", {
   timeout: 180000,
 }, async (t) => {

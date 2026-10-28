@@ -530,3 +530,5 @@ master独立40/40、0skip、SHA稳定，evidence/master-b-r189-h39bm342；逐条
 S06m r192：旧通知/短反应批次14PASS1FAIL原件保留；UI-010供给Oracle窄修后master单项PASS，SHA稳定、清理正常、实际截图已审查。接受已测B窗口阶段，完整Case剩余项不变；证据见s06m-master-review.md r192。
 
 S06m r196：master生命周期008/009独立2/2、0skip、SHA稳定，evidence/master-lifecycle-r195-glug8uk1；已补实际整应用退出重启不重播、真实6秒持有/晚到重复ACK不续命、未完整显示约10秒撤下且内容可恢复。覆盖矩阵001与006对应遗留项现已通过，物理锁屏/崩溃恢复不在本批范围。002拒绝/接纳自动入口联动与004探索/切换专门变体继续。
+
+S06m r198：自动邀请拒绝→手动重开→接纳UI-010 master独立1/1通过，非空记忆/名单/角色状态隔离与公开IPC幂等证据见s06m-master-review.md r198。002交互联动缺口已补；额度与拒绝因果边界按GUI+领域证据分别记录。004探索/切换门禁仍待专门验证。

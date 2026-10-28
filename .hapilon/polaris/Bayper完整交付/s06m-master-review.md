@@ -105,3 +105,9 @@ master原通知回归UI-010失败：等待“滚动后三个普通位”超时�
 10674与master14586均终态。master独立008/009共2/2、0skip、app/tests SHA稳定，证据evidence/master-lifecycle-r195-glug8uk1。008 duplicate结果为首次收据+3067ms，+4502ms仍显示，+6045ms撤下，明显早于duplicate+6秒；收据仅1。管理进程10948正常exit0且PID不存在后启动10979，桌面child10953→10984；同data-dir正式机会不重播，pending0/模型0/名单与衣装状态未变。009测试CSSOM移出视口top1206/height170，未确认9988ms撤下、收据0/pending1；恢复下一机会一次收据/pending0。pageErrors/cleanupErrors均空。
 
 Codex查看008持有期截图，文案/来源/按钮可读，非空白。受控机会与CSSOM几何并非真实30分钟等待或物理遮挡；正常退出重启不是崩溃恢复。接受001重启/006真实时限子项，新增301行测试无生产改动；不再为同一通过路径重复跑。完整002拒绝/接纳自动入口联动与004探索/切换门禁变体继续，父级S06/S05/正式资源/Goal未完成。原失败和r194过弱Oracle记录保留。
+
+## r198 邀请处理联动独立接受
+
+89847/57767/master81605均终态。master独立UI-010 1/1、0skip、app/tests SHA稳定，evidence/master-invitation-r197-avm0qqdh。真实鼠标卡点击、拒绝/重开/接纳按钮；invite:ui.notice.invite重开前后ID/displayed_at/quota_at相同、单邀请/单收据；接纳仅新增hu关系与初始状态，当前rin、固定位/roster、非空原角色记忆/数值/语义runtime不变，模型0、聊天0。重复接纳经公开preload IPC验证duplicate（接纳后按钮已隐藏，非第二次人类点击）。Codex查看010-accepted-story截图，两角色已结识、凛在场固定、琥珀名单外，文案对应数据库。pageErrors/cleanupErrors空。
+
+拒绝后短时机会仍受1小时额度影响，GUI不单独证明拒绝阻止再准备；结合既有002A真实SQLite跨小时拒绝/稍后与额度证据，不冒充真实7天等待。初版heartbeat last_settled_at非业务不变量造成的失败保留；仅比较语义状态合理。截图Buffer改路径防证据膨胀，最终独立输出为路径。本轮只加测试，无生产变更。接受002交互子项，004探索/切换门禁专门变体仍待补，父级/正式资源不提前结束。
