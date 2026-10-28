@@ -251,3 +251,7 @@ POL-OUTFITRUN-001～004 v1（003含A/B/C）见 [计划](s06k-outfit-runtime-plan
 ## S06l 主动换装
 
 POL-OUTFIT-001～007 v1，master受托批准，完整Expected与分阶段聚合条件见[s06l-outfit-wear-plan.md](s06l-outfit-wear-plan.md)。Runner：tests/acceptance/outfits.spec.cjs、outfits-runtime.spec.cjs、outfits-ui.spec.cjs；007深浅播放复用tools/sprite-pipeline/verify-player.cjs。r179聚合结论与执行边界见[s06l-master-review.md](s06l-master-review.md)，正式素材与父级S06/S07未完成。
+
+## S06m 自动告知
+
+POL-AUTONOTICE-001～006 v1，master受托批准，需求/Expected/Oracle/Boundary见[s06m计划](s06m-automatic-notices-plan.md)，父级S06/S05。尚未执行，不预填PASS。

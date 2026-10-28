@@ -143,3 +143,7 @@ Part A/B见[s03s-live-remember-plan.md](s03s-live-remember-plan.md)，先工具d
 ## S06l 主动换装
 
 实施/验收联合计划见[s06l-outfit-wear-plan.md](s06l-outfit-wear-plan.md)。A领域与资产、B实际IPC/UI/自然节点同属完整切片；A不替代B接受。
+
+## S06m 自动告知
+
+按[s06m计划](s06m-automatic-notices-plan.md)先A真实SQLite领域与原子收据，再B真实窗口/优先级/主动操作。代码和测试由单Claude CLI实现，master独立验收；A不代替整体。
