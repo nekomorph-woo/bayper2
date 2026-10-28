@@ -447,7 +447,7 @@ test("POL-STORYRUN-003 正式目录不发布、测试内发布与资源下架恢
   assert.equal(h.one("SELECT COUNT(*) AS n FROM relationships WHERE character_id = 'hu'").n, 0);
   assert.equal(h.one("SELECT COUNT(*) AS n FROM discovery_outfit_ownership").n, 0);
 
-  // 服装目录单独构造，确认成熟后归属不被角色故事饿死。
+  // 服装目录单独构造，确认成熟后在当次运行自动归属，不会被角色故事饿死。
   const outfitOnly = fixtureCatalog([
     fixtureStory("outfit-run", "outfit", "outfit-1", ["fact-of-1"], {
       ownerCharacterId: "a",
@@ -458,9 +458,17 @@ test("POL-STORYRUN-003 正式目录不发布、测试内发布与资源下架恢
   assert.equal(o.evaluate()[0].storyId, "outfit-run");
   assert.equal(o.store.storyProgress.getProgress("outfit-run").progressStatus, "mature");
   const stateBefore = o.snapshot();
-  const ownership = o.store.discoveryOutcomes.unlockNextOutfit();
-  assert.equal(ownership.unlocked, true);
-  assert.equal(ownership.outfit.notificationPending, true);
+  const ownership = o.store.discoveryOutcomes.getOutfitOwnership({
+    storyId: "outfit-run",
+  });
+  assert.equal(ownership.outfitId, "outfit-1");
+  assert.equal(ownership.notificationPending, true);
+  // 已自动解锁，手动再调用不重复占额，也不改状态。
+  assert.deepEqual(o.store.discoveryOutcomes.unlockNextOutfit(), {
+    unlocked: false,
+    reason: "OUTFIT_QUOTA",
+    outfit: null,
+  });
   assert.deepEqual(o.snapshot(), stateBefore);
 });
 
@@ -660,11 +668,18 @@ test("POL-STORYRUN-005 成熟后准备邀请/解锁归属不等于展示、接�
   assert.equal(h.one("SELECT COUNT(*) AS n FROM relationships WHERE character_id = 'u1'").n, 0);
   assert.equal(h.one("SELECT COUNT(*) AS n FROM character_stats WHERE character_id = 'u1'").n, 0);
 
+  // 成熟当次运行已自动归属；手动再调用不重复占额。
+  const ownership = h.store.discoveryOutcomes.getOutfitOwnership({
+    storyId: "outfit-meet",
+  });
+  assert.equal(ownership.outfitId, "outfit-1");
+  assert.equal(ownership.notificationPending, true);
   const beforeUnlock = h.snapshot();
-  const ownership = h.store.discoveryOutcomes.unlockNextOutfit();
-  assert.equal(ownership.unlocked, true);
-  assert.equal(ownership.outfit.storyId, "outfit-meet");
-  assert.equal(ownership.outfit.notificationPending, true);
+  assert.deepEqual(h.store.discoveryOutcomes.unlockNextOutfit(), {
+    unlocked: false,
+    reason: "OUTFIT_QUOTA",
+    outfit: null,
+  });
   // 解锁不写当前服装、不改名单或陪伴安排。
   assert.deepEqual(h.snapshot(), beforeUnlock);
   assert.equal(h.one("SELECT COUNT(*) AS n FROM app_state WHERE key LIKE '%outfit%'").n, 0);
@@ -684,4 +699,273 @@ test("POL-STORYRUN-005 成熟后准备邀请/解锁归属不等于展示、接�
     true,
   );
   assert.equal(h.one("SELECT COUNT(*) AS n FROM story_facts").n, 4);
+});
+
+test("POL-OUTFITRUN-001 服装成熟当次运行自动归属一次，不改关系/名单/数值", (t) => {
+  const h = makeHarness(t, {
+    catalog: fixtureCatalog([
+      fixtureStory("outfit-auto", "outfit", "outfit-auto-1", ["fact-auto-1", "fact-auto-2"], {
+        ownerCharacterId: "a",
+      }),
+    ]),
+  });
+
+  // 未成熟的故事不产生归属。
+  h.completeDaily("auto-a1");
+  assert.equal(h.evaluate()[0].outcome, "applied");
+  assert.equal(h.store.storyProgress.getProgress("outfit-auto").progressStatus, "active");
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM discovery_outfit_ownership").n, 0);
+
+  h.nextDay();
+  h.completeDaily("auto-a2");
+  // 用正式记忆入口种入一条既有内容，确认自动归属不会静默改写已有记忆。
+  const seeded = h.store.memory.remember({
+    characterId: "a",
+    factKey: "fixture.outfit-keepsake",
+    body: "用户喜欢在雨后整理衣橱。",
+    kind: "preference",
+    sourceId: "chat:s06k-001",
+  });
+  assert.equal(seeded.created, true);
+  assert.equal(h.store.memory.listMemories("a")[0].body, "用户喜欢在雨后整理衣橱。");
+  const beforeEvaluate = h.snapshot();
+  // 既有 snapshot 只覆盖陪伴状态；对全部 memory 表比较完整行内容，而非只比条数。
+  const memorySnapshot = () =>
+    Object.fromEntries(
+      h
+        .all(`
+          SELECT name FROM sqlite_master
+          WHERE type = 'table' AND name LIKE 'memory%' ORDER BY name
+        `)
+        .map(({ name }) => {
+          // WITHOUT ROWID 的 FTS 影子表没有 rowid，统一按全部列排序保证稳定。
+          const columns = h
+            .all(`PRAGMA table_info("${name}")`)
+            .map((column) => `"${column.name}"`);
+          const order = columns.length ? ` ORDER BY ${columns.join(", ")}` : "";
+          return [
+            name,
+            h.all(`SELECT * FROM "${name}"${order}`).map((row) => ({ ...row })),
+          ];
+        }),
+    );
+  const memoryBefore = memorySnapshot();
+  const matured = h.evaluate();
+  assert.equal(matured.length, 1);
+  assert.equal(matured[0].outcome, "applied");
+  assert.equal(h.store.storyProgress.getProgress("outfit-auto").progressStatus, "mature");
+
+  // 同一次运行自动写入唯一归属，来源活动与所属角色正确；没有手动 unlock 调用。
+  const ownership = h.store.discoveryOutcomes.getOutfitOwnership({ storyId: "outfit-auto" });
+  assert.equal(ownership.outfitId, "outfit-auto-1");
+  assert.equal(ownership.ownerCharacterId, "a");
+  assert.equal(ownership.sourceActivityId, "auto-a2");
+  assert.equal(ownership.notificationPending, true);
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM discovery_outfit_ownership").n, 1);
+  // 自动归属不改关系、数值、运行态、名单、互动、当前角色或任何记忆表。
+  assert.deepEqual(h.snapshot(), beforeEvaluate);
+  assert.deepEqual(memorySnapshot(), memoryBefore);
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM relationships WHERE character_id = 'a'").n, 1);
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM discovery_invitations").n, 0);
+
+  // 重复评估与重开不重复归属，也不改解锁时间或既有记忆内容。
+  assert.deepEqual(h.evaluate(), []);
+  h.reopen();
+  assert.deepEqual(memorySnapshot(), memoryBefore);
+  assert.deepEqual(h.evaluate(), []);
+  assert.deepEqual(memorySnapshot(), memoryBefore);
+  assert.deepEqual(
+    h.store.discoveryOutcomes.getOutfitOwnership({ storyId: "outfit-auto" }),
+    ownership,
+  );
+});
+
+test("POL-OUTFITRUN-002 72 小时额度边界前不重复解锁，边界后无新活动也解锁一次", (t) => {
+  const catalog = fixtureCatalog([
+    fixtureStory("outfit-wheel-1", "outfit", "outfit-wheel-1-i", ["fact-wheel-1"], {
+      ownerCharacterId: "a",
+    }),
+    fixtureStory("outfit-wheel-2", "outfit", "outfit-wheel-2-i", ["fact-wheel-2"], {
+      ownerCharacterId: "a",
+    }),
+  ]);
+  const h = makeHarness(t, { catalog });
+
+  h.completeDaily("wheel-a1");
+  assert.equal(h.evaluate()[0].storyId, "outfit-wheel-1");
+  const firstOwned = h.store.discoveryOutcomes.getOutfitOwnership({
+    storyId: "outfit-wheel-1",
+  });
+  assert.equal(firstOwned.notificationPending, true);
+
+  // 第二个故事成熟时滚动窗口内已有一次归属，不能连续解锁。
+  h.nextDay();
+  h.completeDaily("wheel-a2");
+  assert.equal(h.evaluate()[0].storyId, "outfit-wheel-2");
+  assert.equal(h.store.storyProgress.getProgress("outfit-wheel-2").progressStatus, "mature");
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM discovery_outfit_ownership").n, 1);
+
+  const activitiesBefore = h.one("SELECT COUNT(*) AS n FROM character_activities").n;
+  const factsBefore = h.one("SELECT COUNT(*) AS n FROM story_facts").n;
+
+  // 边界前 1ms 仍受额度限制；没有新增活动。
+  h.setClock(firstOwned.unlockedAt + 72 * HOUR - 1);
+  assert.deepEqual(h.evaluate(), []);
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM discovery_outfit_ownership").n, 1);
+
+  // 恰好到 72 小时边界后，无新增活动也会补解锁一次。
+  h.setClock(firstOwned.unlockedAt + 72 * HOUR);
+  assert.deepEqual(h.evaluate(), []);
+  const secondOwned = h.store.discoveryOutcomes.getOutfitOwnership({
+    storyId: "outfit-wheel-2",
+  });
+  assert.equal(secondOwned.unlockedAt, firstOwned.unlockedAt + 72 * HOUR);
+  assert.equal(secondOwned.notificationPending, true);
+
+  // 重复、重开与再次评估不重复解锁、不改时间、不补活动或线索。
+  assert.deepEqual(h.evaluate(), []);
+  h.reopen();
+  assert.deepEqual(h.evaluate(), []);
+  assert.deepEqual(
+    h.store.discoveryOutcomes.getOutfitOwnership({ storyId: "outfit-wheel-2" }),
+    secondOwned,
+  );
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM discovery_outfit_ownership").n, 2);
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM character_activities").n, activitiesBefore);
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM story_facts").n, factsBefore);
+});
+
+test("POL-OUTFITRUN-003A 素材下架时成熟进度保留且不解锁，恢复后下一心跳解锁", (t) => {
+  const base = fixtureStory("outfit-gate", "outfit", "outfit-gate-i", ["fact-gate-1"], {
+    ownerCharacterId: "b",
+  });
+  const h = makeHarness(t, {
+    catalog: fixtureCatalog([base]),
+    runtime: false,
+    withPartner: true,
+  });
+  // 先按正式进度入口形成成熟故事；归属角色 b 已有完整关系状态。
+  const activity = h.completeDaily("gate-a1");
+  h.store.storyProgress.recordNode({
+    activityId: activity.activity_id,
+    narratorId: "a",
+    storyId: "outfit-gate",
+    nodeId: "outfit-gate-node-1",
+  });
+  assert.equal(h.store.storyProgress.getProgress("outfit-gate").progressStatus, "mature");
+
+  // 素材下架：成熟故事保留，但下一心跳不解锁。
+  h.useCatalog(fixtureCatalog([{ ...base, assetAvailable: false }]));
+  h.reopen();
+  h.startRuntime();
+  assert.deepEqual(h.evaluate(), []);
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM discovery_outfit_ownership").n, 0);
+  assert.equal(h.store.storyProgress.getProgress("outfit-gate").progressStatus, "mature");
+  assert.equal(h.store.storyProgress.getProgress("outfit-gate").available, false);
+
+  // 素材恢复后的下一次正常运行解锁，无需新增活动。
+  h.useCatalog(fixtureCatalog([base]));
+  h.reopen();
+  assert.equal(h.store.storyProgress.getProgress("outfit-gate").available, true);
+  assert.deepEqual(h.evaluate(), []);
+  const owned = h.store.discoveryOutcomes.getOutfitOwnership({ storyId: "outfit-gate" });
+  assert.equal(owned.ownerCharacterId, "b");
+  assert.equal(owned.sourceActivityId, "gate-a1");
+  assert.equal(owned.notificationPending, true);
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM character_activities").n, 1);
+});
+
+test("POL-OUTFITRUN-003B 归属写入失败不丢成熟进度，下次心跳只重试一次", (t) => {
+  const h = makeHarness(t, {
+    catalog: fixtureCatalog([
+      fixtureStory("outfit-fault", "outfit", "outfit-fault-i", ["fact-ofault-1"], {
+        ownerCharacterId: "a",
+      }),
+    ]),
+  });
+  h.exec(`
+    CREATE TEMP TRIGGER fail_ownership
+    BEFORE INSERT ON discovery_outfit_ownership
+    BEGIN SELECT RAISE(ABORT, 'forced ownership failure'); END
+  `);
+  h.completeDaily("ofault-a1");
+  assert.throws(() => h.evaluate(), /forced ownership failure/);
+
+  // 活动评估与成熟进度照常落库，归属没有半记录。
+  assert.equal(h.store.storyProgress.getProgress("outfit-fault").progressStatus, "mature");
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM story_facts").n, 1);
+  assert.equal(
+    h.one(
+      "SELECT outcome FROM story_runtime_activity_results WHERE activity_id = 'ofault-a1'",
+    ).outcome,
+    "applied",
+  );
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM discovery_outfit_ownership").n, 0);
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM discovery_invitations").n, 0);
+
+  // 故障消失后，不消耗新活动，下一次心跳补做一次归属。
+  h.exec("DROP TRIGGER fail_ownership");
+  assert.deepEqual(h.evaluate(), []);
+  const owned = h.store.discoveryOutcomes.getOutfitOwnership({ storyId: "outfit-fault" });
+  assert.equal(owned.notificationPending, true);
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM discovery_outfit_ownership").n, 1);
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM story_facts").n, 1);
+  assert.deepEqual(h.evaluate(), []);
+  h.reopen();
+  assert.deepEqual(h.evaluate(), []);
+  assert.deepEqual(
+    h.store.discoveryOutcomes.getOutfitOwnership({ storyId: "outfit-fault" }),
+    owned,
+  );
+});
+
+test("POL-OUTFITRUN-003C 归属角色未结识时不解锁，恢复资格后无新活动下一心跳解锁", (t) => {
+  const base = fixtureStory("outfit-unmet", "outfit", "outfit-unmet-i", ["fact-unmet-1"], {
+    ownerCharacterId: "b",
+  });
+  const h = makeHarness(t, { catalog: fixtureCatalog([base]), runtime: false });
+
+  // 合法构造：活动先由已接纳的 a 完成，再临时补上 owner b 的关系行让故事
+  // 按正式入口成熟，随后移除该关系行，模拟“故事已成熟但归属角色当前未结识”。
+  // b 没有数值、运行态、名单或记忆等子行，所以删除关系行不触发外键约束。
+  const activity = h.completeDaily("unmet-a1");
+  h.exec(
+    "INSERT INTO relationships (character_id, accepted_at) VALUES ('b', '2026-10-26T12:00:00.000Z')",
+  );
+  h.store.storyProgress.recordNode({
+    activityId: activity.activity_id,
+    narratorId: "a",
+    storyId: "outfit-unmet",
+    nodeId: "outfit-unmet-node-1",
+  });
+  assert.equal(h.store.storyProgress.getProgress("outfit-unmet").progressStatus, "mature");
+  h.exec("DELETE FROM relationships WHERE character_id = 'b'");
+  h.startRuntime();
+
+  // 没有新活动：成熟进度保留，但归属角色未结识时不解锁。
+  assert.deepEqual(h.evaluate(), []);
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM discovery_outfit_ownership").n, 0);
+  const progress = h.store.storyProgress.getProgress("outfit-unmet");
+  assert.equal(progress.progressStatus, "mature");
+  assert.equal(progress.available, true);
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM story_facts").n, 1);
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM character_activities").n, 1);
+
+  // 资格恢复后，下一次正常运行即解锁，不需要新活动或手动 unlock。
+  h.exec(
+    "INSERT INTO relationships (character_id, accepted_at) VALUES ('b', '2026-10-28T12:00:00.000Z')",
+  );
+  assert.deepEqual(h.evaluate(), []);
+  const owned = h.store.discoveryOutcomes.getOutfitOwnership({ storyId: "outfit-unmet" });
+  assert.equal(owned.ownerCharacterId, "b");
+  assert.equal(owned.sourceActivityId, "unmet-a1");
+  assert.equal(owned.notificationPending, true);
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM character_activities").n, 1);
+
+  // 重复评估不重复解锁、不改变归属时间。
+  assert.deepEqual(h.evaluate(), []);
+  assert.deepEqual(
+    h.store.discoveryOutcomes.getOutfitOwnership({ storyId: "outfit-unmet" }),
+    owned,
+  );
 });

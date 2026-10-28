@@ -1,7 +1,8 @@
 /* S06i 已完成活动到作者故事的最小运行入口。
    只在既有心跳/自然节点落定活动事实后消费已完成活动，不抽新活动、不调用模型、
    不改变名单、数值、当前角色或互动。首次接入把此前已完成活动标为历史跳过，
-   避免升级后替用户补发“刚刚发现”的线索；每个活动最多留下一次评估事实。 */
+   避免升级后替用户补发“刚刚发现”的线索；每个活动最多留下一次评估事实。
+   S06k 在活动评估后固定检查一次成熟服装归属，使 72 小时到期无需新活动或点击领取。 */
 const { AppError } = require("./errors.cjs");
 
 const BASELINE_KEY = "story_runtime_baseline_at";
@@ -45,7 +46,8 @@ function createStoryRuntime({
   }
   if (
     !discoveryOutcomes ||
-    typeof discoveryOutcomes.getStorySelectionFilters !== "function"
+    typeof discoveryOutcomes.getStorySelectionFilters !== "function" ||
+    typeof discoveryOutcomes.unlockNextOutfit !== "function"
   ) {
     throw new AppError("DISCOVERY_REQUIRED", "故事运行需要发现结果入口。");
   }
@@ -209,7 +211,10 @@ function createStoryRuntime({
     }
   }
 
-  /* 同步评估所有尚未消费的已完成活动；活动本身仍由既有生命周期管理。 */
+  /* 同步评估所有尚未消费的已完成活动；活动本身仍由既有生命周期管理。
+     活动评估完成后固定检查一次成熟服装归属，即使本次没有新活动也执行，
+     使 72 小时额度到期后由正常心跳补解锁。解锁是独立事务：失败时已提交的
+     活动评估保留，下一次心跳只重试解锁；返回值仍是活动结果数组，不混入归属。 */
   function evaluate() {
     const at = nowMs();
     const evaluated = new Set(
@@ -222,6 +227,7 @@ function createStoryRuntime({
       }
       results.push(evaluateActivity(activity, at));
     }
+    discoveryOutcomes.unlockNextOutfit();
     return results;
   }
 

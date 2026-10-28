@@ -1,5 +1,6 @@
 /* S06j 故事回看只读展示。只读取已经记录的故事进度、事实、讲述者与来源，
-   再从作者目录补全对应节点正文；不生成事实、不准备邀请、不改变邀请状态或额度。 */
+   再从作者目录补全对应节点正文；不生成事实、不准备邀请、不改变邀请状态或额度。
+   S06k 为服装故事附带当前归属事实，读取本身不解锁、不确认通知。 */
 const { AppError } = require("./errors.cjs");
 
 function createStoryWindow({
@@ -15,7 +16,11 @@ function createStoryWindow({
   if (!storyProgress || typeof storyProgress.listProgress !== "function") {
     throw new AppError("STORY_PROGRESS_REQUIRED", "故事回看需要故事进度入口。");
   }
-  if (!discoveryOutcomes || typeof discoveryOutcomes.getInvitationByStory !== "function") {
+  if (
+    !discoveryOutcomes ||
+    typeof discoveryOutcomes.getInvitationByStory !== "function" ||
+    typeof discoveryOutcomes.getOutfitOwnership !== "function"
+  ) {
     throw new AppError("DISCOVERY_REQUIRED", "故事回看需要发现结果入口。");
   }
 
@@ -77,6 +82,11 @@ function createStoryWindow({
       invitation: discoveryOutcomes.getInvitationByStory({
         storyId: progress.storyId,
       }),
+      // 服装故事只附带当前归属事实；角色故事没有衣装归属。
+      outfitOwnership:
+        progress.type === "outfit"
+          ? discoveryOutcomes.getOutfitOwnership({ storyId: progress.storyId })
+          : null,
     };
   }
 

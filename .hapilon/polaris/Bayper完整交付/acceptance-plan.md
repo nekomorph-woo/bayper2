@@ -135,3 +135,7 @@ S03r正式执行入口：`node --test tests/acceptance/memory-explicit-remember.
 ## S03s 真实模型明确记忆
 
 Part A/B见[s03s-live-remember-plan.md](s03s-live-remember-plan.md)，先工具dry-run审查、再由master使用授权.env执行live。仅构造事实，9chat＋1models计划，不修改生产代码。
+
+## S06k 执行入口
+
+复用[s06k-outfit-runtime-plan.md](s06k-outfit-runtime-plan.md)的增量Case与五套件执行入口；[独立验收](s06k-master-review.md)记录SHA、37/37结果与真实SQLite/构造目录边界。不以领域验收替代正式服装GUI/素材。

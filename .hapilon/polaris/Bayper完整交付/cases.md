@@ -243,3 +243,7 @@ POL-HAPPY-ASSET-001～003 v1契约见s07-happy-asset-plan.md，独立执行与�
 ## S07/S05 工作事件短反应
 
 POL-WORKREACTION-001～009 v1契约与实现/自动验收计划由master受托批准，见s07-work-reaction-plan.md；现阶段仅凛E03 finished垂直切片，其他角色及反应继续属于完整Goal。Runner拟为tests/acceptance/desktop-work-reaction.spec.cjs；未执行不预填PASS。
+
+## S06k 自动服装归属
+
+POL-OUTFITRUN-001～004 v1（003含A/B/C）见 [计划](s06k-outfit-runtime-plan.md)，master受托批准；Runner为story-runtime.spec.cjs及story-window.spec.cjs。独立结果见[s06k-master-review.md](s06k-master-review.md)，父级S06/S07未完成。

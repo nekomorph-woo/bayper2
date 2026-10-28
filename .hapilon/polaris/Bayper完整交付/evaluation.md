@@ -483,3 +483,7 @@ master独立5文件202/202、0skip、exit0，证据 `evidence/s03s-persona/maste
 ## S03s Part G对照
 
 独立dry及一次真实三角色U/K基线已完成，见[s03s-master-review.md](s03s-master-review.md) Part G。六样本语义通过，不覆盖Part F既有失败；诊断工具受托接受，父级未完成。
+
+## S06k 自动归属
+
+master独立37/37、0跳过、exit0、SHA稳定；POL-OUTFITRUN-001/002/003A/B/C/004通过，详[s06k-master-review.md](s06k-master-review.md)。本轮内部增量接受；服装提示、穿用及正式素材仍未完成。

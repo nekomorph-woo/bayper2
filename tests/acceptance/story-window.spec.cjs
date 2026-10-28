@@ -430,3 +430,57 @@ test("POL-STORYUI-005 接纳写失败回滚、重复操作只有一个关系与�
   assert.equal(h.currentId(), currentBefore, "接纳不得偷偷切换当前角色");
   assert.deepEqual(h.roster(), rosterBefore, "接纳不得改固定位或今日名单");
 });
+
+test("POL-OUTFITRUN-004 列表/详情只读展示服装归属，读取不解锁不确认", (t) => {
+  const h = makeHarness(t, {
+    stories: [
+      story("char-read", "u1"),
+      story("outfit-read", "outfit-read-1", 1, { type: "outfit", ownerCharacterId: "a" }),
+    ],
+  });
+  h.record("char-read", "char-read-node-1");
+  h.advance(DAY);
+  h.record("outfit-read", "outfit-read-node-1");
+
+  // 未解锁时服装故事返回 null；读取不会触发解锁。
+  const before = h.counts();
+  const unowned = h.window.listStories().find((item) => item.storyId === "outfit-read");
+  assert.equal(unowned.outfitOwnership, null);
+  assert.equal(h.window.getStory("outfit-read").outfitOwnership, null);
+  assert.equal(
+    h.window.listStories().find((item) => item.storyId === "char-read").outfitOwnership,
+    null,
+  );
+  assert.equal(h.one("SELECT COUNT(*) AS n FROM discovery_outfit_ownership").n, 0);
+  assert.deepEqual(h.counts(), before);
+
+  const unlocked = h.discovery.unlockNextOutfit();
+  assert.equal(unlocked.unlocked, true);
+  const ownershipRow = h.one(
+    "SELECT * FROM discovery_outfit_ownership WHERE story_id = 'outfit-read'",
+  );
+  const afterUnlock = h.counts();
+
+  // 已解锁后无需重启即可查询；角色故事仍为 null。
+  const listed = h.window.listStories().find((item) => item.storyId === "outfit-read");
+  assert.deepEqual(listed.outfitOwnership, {
+    storyId: "outfit-read",
+    outfitId: "outfit-read-1",
+    ownerCharacterId: "a",
+    sourceActivityId: "act-2",
+    unlockedAt: unlocked.outfit.unlockedAt,
+    notificationPending: true,
+    notificationShownAt: null,
+  });
+  assert.deepEqual(h.window.getStory("outfit-read").outfitOwnership, listed.outfitOwnership);
+  assert.equal(
+    h.window.listStories().find((item) => item.storyId === "char-read").outfitOwnership,
+    null,
+  );
+  // 读取不 ACK、不改展示时间或额度，也不产生新事实/活动/邀请。
+  assert.deepEqual(h.counts(), afterUnlock);
+  assert.deepEqual(
+    h.one("SELECT * FROM discovery_outfit_ownership WHERE story_id = 'outfit-read'"),
+    ownershipRow,
+  );
+});
