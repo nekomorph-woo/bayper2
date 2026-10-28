@@ -628,6 +628,13 @@ function screenFoot(bounds, plan) {
   };
 }
 
+function frameResourceDirectory(frame) {
+  const match = String(frame ?? "").match(
+    /\/characters\/([^/]+)\/(?:outfits\/([^/]+)\/)?animations\/([^/]+)\//,
+  );
+  return match ? `${match[1]}|${match[2] ?? "base"}|${match[3]}` : null;
+}
+
 /* 独立 Oracle：直接读真实 manifest 的 paste/scaled_size/frame_size/脚锚，
    不调用被测 buildDesktopPresentation，避免用实现自证布局。 */
 function animationPlan(characterId, animationNames, outfit = null) {
@@ -1337,6 +1344,80 @@ test("POL-OUTFIT-005 系统暂停中选择待穿不应用，恢复后完成", {
   }
 });
 
+test("POL-OUTFIT-005 等待节点中锁屏保持待穿，解锁后恢复提交", {
+  timeout: 180000,
+}, async (t) => {
+  const context = await makeCase(t, "005-pause-wait");
+  const facts = {};
+  try {
+    await setupAccepted(context);
+    const app = await openApp(context);
+    const page = app.page;
+    await openCharacters(page);
+    await waitForBaseDesktop(page);
+    await waitForSnapshot(
+      page,
+      (snapshot) => snapshot.desktop?.lastNode === "idle-loop",
+      10000,
+      "没有等到可用的 idle 节点",
+    );
+    await clickOutfit(page, OUTFIT_ID);
+    const waiting = await waitForSnapshot(
+      page,
+      (snapshot) => snapshot.outfit?.runtime?.phase === "waiting",
+      5000,
+      "换装没有进入节点等待",
+    );
+    facts.waiting = waiting.outfit.runtime;
+
+    // 构造锁屏只用于系统暂停语义；不是物理锁屏。
+    await app.app.evaluate(({ powerMonitor }) => powerMonitor.emit("lock-screen"));
+    await waitForSnapshot(
+      page,
+      (snapshot) => snapshot.system?.paused === true,
+      10000,
+      "构造系统暂停没有生效",
+    );
+    const pendingBefore = await readOutfitDbAndWait(
+      context.dataDir,
+      (value) => value.pending?.outfitId === OUTFIT_ID && value.worn === null,
+    );
+    await delay(2200);
+    const duringPause = readOutfitDb(context.dataDir);
+    assert.equal(duringPause.worn, null, "暂停期间等待回调不得提交");
+    assert.equal(duringPause.pending.token, pendingBefore.pending.token);
+    facts.paused = duringPause.pending;
+    await capture(page, "005-pause-during-wait");
+
+    await app.app.evaluate(({ powerMonitor }) => powerMonitor.emit("unlock-screen"));
+    await waitForSnapshot(
+      page,
+      (snapshot) => snapshot.system?.paused === false,
+      10000,
+      "构造系统恢复没有生效",
+    );
+    const worn = await waitForOutfitDesktop(page, 30000);
+    await waitForWorn(page, OUTFIT_ID);
+    const final = await readOutfitDbAndWait(
+      context.dataDir,
+      (value) => value.worn?.outfitId === OUTFIT_ID && value.pending === null,
+    );
+    assert.equal(final.worn.outfitId, OUTFIT_ID);
+    assert.match(
+      worn.desktop.displayedFrame,
+      /\/characters\/rin\/outfits\/warm-tea\/animations\/idle-pixel-v2\/frame-/,
+    );
+    facts.final = final;
+    writeEvidence("case-005-pause-wait.json", facts);
+  } catch (error) {
+    writeEvidence("case-005-pause-wait-failure.json", {
+      error: error?.stack ?? String(error),
+      facts,
+    });
+    throw error;
+  }
+});
+
 test("POL-OUTFIT-005 待穿退出后重启恢复选择，不丢失意图", {
   timeout: 180000,
 }, async (t) => {
@@ -1522,11 +1603,15 @@ test("POL-OUTFIT-006 名单外凛选择温茶不入场，正式切换后穿温�
     const afterSelect = await snapshotOf(page);
     assert.equal(afterSelect.companionship.current.characterId, "hu");
     assert.deepEqual(afterSelect.companionship.roster, before.companionship.roster);
+    assert.deepEqual(afterSelect.desktop.bounds, before.desktop.bounds, "名单外选择不得移动琥珀");
+    assert.equal(afterSelect.desktop.characterId, before.desktop.characterId);
+    assert.equal(afterSelect.desktop.assetState, before.desktop.assetState);
     assert.equal(
-      afterSelect.desktop.displayedFrame,
-      before.desktop.displayedFrame,
-      "名单外选择不得让当前琥珀跳动",
+      frameResourceDirectory(afterSelect.desktop.displayedFrame),
+      frameResourceDirectory(before.desktop.displayedFrame),
+      "名单外选择不得改变当前琥珀资源目录",
     );
+    assert.equal(frameResourceDirectory(afterSelect.desktop.displayedFrame), "hu|base|idle-pixel-v2-canvas320");
     assert.equal(
       afterSelect.companionship.characters.find((item) => item.characterId === "rin")
         .exploring,
@@ -1625,7 +1710,22 @@ test("POL-OUTFIT-006 探索中的凛选择温茶不结束探索，探索结束�
       "选择衣装不得提前结束探索",
     );
     assert.deepEqual(duringExplore.companionship.roster, beforeSelect.companionship.roster);
-    assert.equal(duringExplore.desktop.displayedFrame, beforeSelect.desktop.displayedFrame);
+    assert.deepEqual(
+      duringExplore.desktop.bounds,
+      beforeSelect.desktop.bounds,
+      "探索中选择不得移动当前琥珀",
+    );
+    assert.equal(duringExplore.desktop.characterId, beforeSelect.desktop.characterId);
+    assert.equal(duringExplore.desktop.assetState, beforeSelect.desktop.assetState);
+    assert.equal(
+      frameResourceDirectory(duringExplore.desktop.displayedFrame),
+      frameResourceDirectory(beforeSelect.desktop.displayedFrame),
+      "探索中选择不得改变当前琥珀资源目录",
+    );
+    assert.equal(
+      frameResourceDirectory(duringExplore.desktop.displayedFrame),
+      "hu|base|idle-pixel-v2-canvas320",
+    );
     await capture(page, "006-exploring-selected");
 
     await patchClockAt(

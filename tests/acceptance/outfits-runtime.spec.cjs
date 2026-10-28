@@ -428,3 +428,73 @@ test("POL-OUTFIT-005 getPresentation 抛错保留待穿，同一协调器下次�
   assert.deepEqual(applied, ["rin"], "恢复后只提交一次");
   assert.equal(waits, 0);
 });
+
+test("POL-OUTFIT-005 等待中 current 改为其他角色，旧节点不提交，后续调度只推进旧角色", async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bayper-outfit-runtime-switch-"));
+  const store = createStore(dir, {
+    storyCatalog: { schemaVersion: 1, theme: { id: "t", name: "t" }, stories: [] },
+  });
+  t.after(() => {
+    try {
+      store.close();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  store.acceptCharacter({
+    characterId: "rin",
+    day: localDay(Date.now()),
+    acceptedAt: new Date().toISOString(),
+  });
+  seedPeer(store, "hu", Date.now());
+  store.setAppState("outfit_pending:rin", pending("switch-old", "base", 1));
+
+  let currentId = "rin";
+  let waitCalls = 0;
+  let waitStarted = false;
+  let resolveWait = null;
+  const applied = [];
+  const runtime = createOutfitRuntime({
+    outfits: store.outfits,
+    getCurrentCharacterId: () => currentId,
+    getPresentation: () => ({
+      assetState: "ready",
+      visible: true,
+      resting: false,
+      restToken: 0,
+      activity: null,
+    }),
+    canWaitForCurrent: () => true,
+    isBlocked: () => false,
+    waitForBoundary: async () => {
+      waitCalls += 1;
+      waitStarted = true;
+      await new Promise((resolve) => {
+        resolveWait = resolve;
+      });
+    },
+    onApplied: ({ characterId }) => applied.push(characterId),
+    onError: (error) => {
+      throw error;
+    },
+  });
+
+  runtime.schedule();
+  await waitFor(() => waitStarted, 2000, "没有进入旧角色节点等待");
+  currentId = "hu";
+  resolveWait();
+  await delay(50);
+  assert.deepEqual(applied, [], "旧节点回调不得提交");
+  assert.equal(store.outfits.list({ characterId: "rin" }).pending.token, "switch-old");
+
+  runtime.schedule();
+  await waitFor(
+    () => store.outfits.list({ characterId: "rin" }).pending === null,
+    2000,
+    "后续调度没有推进旧角色意图",
+  );
+  assert.deepEqual(applied, ["rin"]);
+  assert.equal(waitCalls, 1, "非当前角色不应再等待节点");
+  assert.equal(store.getAppState("outfit_worn:hu"), null, "不得写新角色已穿");
+  assert.equal(store.getAppState("outfit_pending:hu"), null, "不得写新角色待穿");
+});
