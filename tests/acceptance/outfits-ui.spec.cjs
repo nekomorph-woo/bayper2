@@ -225,6 +225,80 @@ function openDb(dataDir) {
   return db;
 }
 
+/* 仅用于复用既有 activity-runtime Runner 的自动机会时钟注入；
+   不新增生产入口，正式 reason/活动仍由 heartbeat/activity-runtime 执行。 */
+function setAppState(dataDir, key, value) {
+  const db = new DatabaseSync(path.join(dataDir, DB_FILE));
+  try {
+    db.exec("PRAGMA busy_timeout = 2000");
+    db.prepare(`
+      INSERT INTO app_state (key, value) VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run(key, String(value));
+  } finally {
+    db.close();
+  }
+}
+
+async function patchClock(app, offsetMs, randomValue = 0.1) {
+  await app.evaluate(
+    (_electron, input) => {
+      if (!globalThis.__outfitTestClock) {
+        const RealDate = Date;
+        const realNow = RealDate.now.bind(RealDate);
+        globalThis.__outfitTestClock = { base: realNow(), now: realNow() };
+        globalThis.Date = class extends RealDate {
+          constructor(...args) {
+            if (args.length === 0) super(globalThis.__outfitTestClock.now);
+            else super(...args);
+          }
+          static now() {
+            return globalThis.__outfitTestClock.now;
+          }
+        };
+      }
+      globalThis.__outfitTestClock.now = globalThis.__outfitTestClock.base + input.offset;
+      Math.random = () => input.random;
+    },
+    { offset: offsetMs, random: randomValue },
+  );
+}
+
+async function patchClockAt(app, epochMs, randomValue = 0.1) {
+  await app.evaluate(
+    (_electron, input) => {
+      if (!globalThis.__outfitTestClock) {
+        const RealDate = Date;
+        const realNow = RealDate.now.bind(RealDate);
+        globalThis.__outfitTestClock = { base: realNow(), now: realNow() };
+        globalThis.Date = class extends RealDate {
+          constructor(...args) {
+            if (args.length === 0) super(globalThis.__outfitTestClock.now);
+            else super(...args);
+          }
+          static now() {
+            return globalThis.__outfitTestClock.now;
+          }
+        };
+      }
+      globalThis.__outfitTestClock.now = input.at;
+      Math.random = () => input.random;
+    },
+    { at: epochMs, random: randomValue },
+  );
+}
+
+function readActivities(dataDir) {
+  const db = openDb(dataDir);
+  try {
+    return db
+      .prepare("SELECT * FROM character_activities ORDER BY created_at, activity_id")
+      .all();
+  } finally {
+    db.close();
+  }
+}
+
 function readBusinessState(dataDir) {
   const db = openDb(dataDir);
   try {
@@ -977,6 +1051,176 @@ test("POL-OUTFIT-002 重复选择幂等、选回基础、重启保持最后选�
   }
 });
 
+test("POL-OUTFIT-003 聊天中选择、取消、再选，结束前不提交且旧意图失效", {
+  timeout: 180000,
+}, async (t) => {
+  const context = await makeCase(t, "003-chat");
+  const facts = {};
+  try {
+    await setupAccepted(context);
+    const app = await openApp(context);
+    const page = app.page;
+    await openCharacters(page);
+    await waitForBaseDesktop(page);
+
+    const opened = await page.evaluate(() => window.bayperChat.openChat("rin"));
+    assert.equal(opened.ok, true, JSON.stringify(opened));
+    await waitForSnapshot(
+      page,
+      (snapshot) => snapshot.companionship?.current?.mode === "interacting",
+      10000,
+      "聊天互动没有开始",
+    );
+
+    await clickOutfit(page, OUTFIT_ID);
+    await waitForPending(page, OUTFIT_ID);
+    const first = await readOutfitDbAndWait(
+      context.dataDir,
+      (value) => value.pending?.outfitId === OUTFIT_ID && value.worn === null,
+    );
+    facts.firstPending = first.pending;
+
+    // 选回当前已穿衣装（基础）取消待穿。
+    await clickOutfit(page, "base");
+    const cancelled = await readOutfitDbAndWait(
+      context.dataDir,
+      (value) => value.pending === null && value.worn === null,
+    );
+    assert.equal(cancelled.pending, null);
+    assert.match(await currentOutfitText(page), /原本的衣装/);
+    assert.equal((await page.locator("#outfit-status").textContent()).includes("待穿"), false);
+
+    await clickOutfit(page, OUTFIT_ID);
+    await waitForPending(page, OUTFIT_ID);
+    const second = await readOutfitDbAndWait(
+      context.dataDir,
+      (value) => value.pending?.outfitId === OUTFIT_ID && value.worn === null,
+    );
+    assert.notEqual(second.pending.token, first.pending.token, "再选必须产生新 token");
+    facts.secondPending = second.pending;
+
+    // 聊天结束前不得提交；旧待穿已取消，新意图保持待穿。
+    await delay(2200);
+    const duringChat = readOutfitDb(context.dataDir);
+    assert.equal(duringChat.worn, null, "聊天期间不得写已穿");
+    assert.equal(duringChat.pending.token, second.pending.token);
+    const chatSnapshot = await snapshotOf(page);
+    assert.match(
+      chatSnapshot.desktop.displayedFrame,
+      /\/characters\/rin\/animations\/idle-pixel-v2\/frame-/,
+    );
+    assert.match(
+      await page.locator("#character-image").getAttribute("src"),
+      /\/rin\/source\/master-pixel-v2\.png$/,
+    );
+    await capture(page, "003-chat-pending");
+
+    const closed = await page.evaluate(() => window.bayperChat.closeChat());
+    assert.equal(closed.ok, true, JSON.stringify(closed));
+    const worn = await waitForOutfitDesktop(page, 30000);
+    await waitForWorn(page, OUTFIT_ID);
+    const final = await readOutfitDbAndWait(
+      context.dataDir,
+      (value) => value.worn?.outfitId === OUTFIT_ID && value.pending === null,
+    );
+    assert.equal(final.worn.outfitId, OUTFIT_ID);
+    assert.match(
+      worn.desktop.displayedFrame,
+      /\/characters\/rin\/outfits\/warm-tea\/animations\/idle-pixel-v2\/frame-/,
+    );
+    await capture(page, "003-chat-worn");
+    facts.final = final;
+    writeEvidence("case-003-chat.json", facts);
+  } catch (error) {
+    writeEvidence("case-003-chat-failure.json", {
+      error: error?.stack ?? String(error),
+      facts,
+    });
+    throw error;
+  }
+});
+
+test("POL-OUTFIT-003 基础休息坐下过渡中选择温茶，安全节点后应用且保持休息意图", {
+  timeout: 180000,
+}, async (t) => {
+  const context = await makeCase(t, "003-rest");
+  const facts = {};
+  try {
+    await setupAccepted(context);
+    const app = await openApp(context);
+    const page = app.page;
+    await openCharacters(page);
+    await waitForBaseDesktop(page);
+
+    const resting = await page.evaluate(() => window.bayper.restCompanion());
+    assert.equal(resting.ok, true, JSON.stringify(resting));
+    const duringSit = await waitForSnapshot(
+      page,
+      (snapshot) =>
+        snapshot.companionship?.current?.mode === "resting"
+        && /\/sit-pixel-v2-canvas256\/frame-0[0-3]\.png$/.test(
+          snapshot.desktop?.displayedFrame ?? "",
+        ),
+      10000,
+      "基础休息没有进入坐下过渡",
+    );
+    assert.ok(
+      duringSit.desktop.restToken > 0
+      && duringSit.desktop.restSettledToken !== duringSit.desktop.restToken,
+      "选择时不得已有旧 rest-settled 节点",
+    );
+    facts.selectionNode = {
+      restToken: duringSit.desktop.restToken,
+      restSettledToken: duringSit.desktop.restSettledToken,
+      displayedFrame: duringSit.desktop.displayedFrame,
+    };
+    await capture(page, "003-rest-sit");
+
+    await clickOutfit(page, OUTFIT_ID);
+    await waitForPending(page, OUTFIT_ID);
+    const pending = await readOutfitDbAndWait(
+      context.dataDir,
+      (value) => value.pending?.outfitId === OUTFIT_ID && value.worn === null,
+    );
+    facts.pending = pending.pending;
+
+    // 坐下尚未收束前不得提前写已穿，也不得提前结束休息。
+    await delay(400);
+    assert.equal(readOutfitDb(context.dataDir).worn, null, "坐下安全节点前不得提交");
+    const beforeSettle = await snapshotOf(page);
+    assert.equal(beforeSettle.companionship.current.mode, "resting");
+
+    const worn = await waitForOutfitDesktop(page, 30000);
+    await waitForWorn(page, OUTFIT_ID);
+    const after = await readOutfitDbAndWait(
+      context.dataDir,
+      (value) => value.worn?.outfitId === OUTFIT_ID && value.pending === null,
+    );
+    const afterSnapshot = await snapshotOf(page);
+    assert.equal(afterSnapshot.companionship.current.mode, "resting", "换装不得结束休息");
+    assert.ok(afterSnapshot.desktop.restToken > 0, "休息代次应保持");
+    assert.equal(after.worn.outfitId, OUTFIT_ID);
+    assert.match(
+      worn.desktop.displayedFrame,
+      /\/characters\/rin\/outfits\/warm-tea\/animations\/idle-pixel-v2\/frame-/,
+    );
+    await capture(page, "003-rest-worn");
+    facts.after = {
+      worn: after.worn,
+      mode: afterSnapshot.companionship.current.mode,
+      restToken: afterSnapshot.desktop.restToken,
+      displayedFrame: worn.desktop.displayedFrame,
+    };
+    writeEvidence("case-003-rest.json", facts);
+  } catch (error) {
+    writeEvidence("case-003-rest-failure.json", {
+      error: error?.stack ?? String(error),
+      facts,
+    });
+    throw error;
+  }
+});
+
 test("POL-OUTFIT-007 温茶 idle 连续帧与招呼wave实际播放，脚位/尺度保持", {
   timeout: 240000,
 }, async (t) => {
@@ -1058,6 +1302,127 @@ test("POL-OUTFIT-007 温茶 idle 连续帧与招呼wave实际播放，脚位/尺
       /\/characters\/rin\/outfits\/warm-tea\/animations\/idle-pixel-v2\/frame-/,
       "wave 后没有回到温茶 idle",
     );
+
+    // 复用既有 activity-runtime Runner 的自动机会时钟注入，走正式
+    // heartbeat → automaticOpportunities → activityRuntime → 日常 stretch 入口。
+    setAppState(context.dataDir, "automatic_purpose_cursor", "daily");
+    await patchClock(app.app, 31 * 60 * 1000, 0.1);
+    await waitFor(
+      () =>
+        readActivities(context.dataDir).some(
+          (activity) =>
+            activity.kind === "daily"
+            && ["scheduled", "running"].includes(activity.status),
+        ),
+      10000,
+      "自动机会没有建立日常活动",
+    );
+    await waitFor(
+      () =>
+        readActivities(context.dataDir).some(
+          (activity) => activity.kind === "daily" && activity.status === "running",
+        ),
+      10000,
+      "日常活动没有在自然节点开始",
+    );
+
+    const stretchFrames = [];
+    let stretchShot = false;
+    let peakShot = false;
+    const stretchDeadline = Date.now() + 6000;
+    while (Date.now() < stretchDeadline) {
+      const frame = await spriteFrame(desktop.page);
+      if (
+        frame.includes(
+          "/characters/rin/outfits/warm-tea/animations/stretch-pixel-v2-canvas320/frame-",
+        )
+      ) {
+        if (!stretchFrames.includes(frame)) stretchFrames.push(frame);
+        if (!stretchShot) {
+          stretchShot = true;
+          await desktop.page.screenshot({
+            path: path.join(EVIDENCE_DIR, "007-outfit-stretch.png"),
+            omitBackground: true,
+          });
+        }
+        if (!peakShot && /frame-0[4-7]\.png$/.test(frame)) {
+          peakShot = true;
+          await desktop.page.screenshot({
+            path: path.join(EVIDENCE_DIR, "007-outfit-stretch-peak.png"),
+            omitBackground: true,
+          });
+        }
+      }
+      const state = await snapshotOf(page);
+      if (
+        stretchFrames.length >= 4
+        && state.desktop?.lastNode === "daily-action-complete"
+      ) {
+        break;
+      }
+      await delay(60);
+    }
+    assert.ok(
+      stretchFrames.length >= 4,
+      `实际只观察到 ${stretchFrames.length} 个温茶伸展帧`,
+    );
+    assert.ok(
+      stretchFrames.every((frame) =>
+        frame.includes(
+          "/characters/rin/outfits/warm-tea/animations/stretch-pixel-v2-canvas320/",
+        ),
+      ),
+      "日常伸展不得混入基础衣装或其他动作帧",
+    );
+    const stretchActivity = readActivities(context.dataDir).find(
+      (activity) => activity.kind === "daily" && activity.status === "running",
+    );
+    assert.ok(stretchActivity, "缺少正在运行的日常活动事实");
+    await patchClockAt(app.app, stretchActivity.started_at + 11000, 0.1);
+    await waitFor(
+      () => {
+        const activity = readActivities(context.dataDir).find(
+          (item) => item.activity_id === stretchActivity.activity_id,
+        );
+        return activity?.status === "completed";
+      },
+      10000,
+      "日常活动没有在完整动作与时长后收束",
+    );
+    const postActivitySnapshot = await snapshotOf(page);
+    const postActivityFrame = await spriteFrame(desktop.page);
+    facts.stretch = {
+      activity: stretchActivity.activity_id,
+      frames: stretchFrames,
+      shot: stretchShot,
+      peakShot,
+      postActivityFrame,
+      postActivityMode: postActivitySnapshot.companionship?.current?.mode ?? null,
+      postActivityCurrent: postActivitySnapshot.companionship?.current?.activity ?? null,
+      postActivityDb: readActivities(context.dataDir).map((activity) => ({
+        activity_id: activity.activity_id,
+        status: activity.status,
+        action_frame: activity.action_frame,
+        active_elapsed_ms: activity.active_elapsed_ms,
+      })),
+    };
+    writeEvidence("007-stretch-phase.json", facts.stretch);
+    await waitFor(
+      async () => {
+        const frame = await spriteFrame(desktop.page);
+        const state = await snapshotOf(page);
+        return (
+          frame.includes(
+            "/characters/rin/outfits/warm-tea/animations/idle-pixel-v2/frame-",
+          )
+          && state.companionship?.current?.mode === "companion"
+          && !state.companionship?.current?.activity
+        );
+      },
+      10000,
+      "日常伸展后没有回到同衣装 idle",
+    );
+    facts.stretch.after = await spriteFrame(desktop.page);
     facts.idleFrames = idleFrames;
     facts.ready = {
       bounds: ready.desktop.bounds,

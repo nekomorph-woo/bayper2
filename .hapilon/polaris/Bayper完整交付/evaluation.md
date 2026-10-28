@@ -495,3 +495,7 @@ POL-OUTFIT-001/002/004/005/006领域与资产支撑已由master独立71/71执行
 ## S06l B r172 正常换装有限接受
 
 详[s06l master审查](s06l-master-review.md) r172，master独立3+72+27全部通过、0skip；证据evidence/s06l/master-r171-6nc_e_ue。接受001/002正常链路、004已穿失效恢复局部、005SQLite协调局部、007 idle/wave局部。003/005/006完整GUI与007 stretch/深浅背景尚未覆盖，完整S06l与Goal不结束。
+
+## S06l r174 自然节点补验
+
+master独立GUI5/5、领域协调12/12、SHA一致，证据evidence/s06l/master-r173-4x_6045u，详s06l-master-review.md r174。003聊天取消再选/基础休息、007温茶stretch子项获有限接受；时钟与随机数构造边界已记录。日常动作中换装、005恢复、006探索及007深浅背景继续，完整Case聚合不提前PASS。
