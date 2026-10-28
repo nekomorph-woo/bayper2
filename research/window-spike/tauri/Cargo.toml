@@ -1,6 +1,6 @@
 [package]
 name = "bayper-window-probe"
-version = "0.1.243"
+version = "0.1.244"
 edition = "2021"
 
 [build-dependencies]

@@ -3,7 +3,7 @@
 # 不启动/关闭 Bayper、不读取会话正文、不发模型、不控制 pane。版本由 Codex 提交前同步。
 id = "bayper.herdr"
 name = "Bayper Herdr Registration"
-version = "0.1.243"
+version = "0.1.244"
 min_herdr_version = "0.9.5"
 platforms = ["macos"]
 

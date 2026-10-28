@@ -1001,6 +1001,307 @@ test("POL-AUTONOTICE-UI-007 管理窗冷启动延迟初始快照仍应用告知�
   }
 });
 
+test("POL-AUTONOTICE-UI-008 ACK后真实保持6秒、重复ACK不续命、重启不重播", {
+  timeout: 180000,
+}, async (t) => {
+  const record = { facts: {}, screenshots: [], cleanupErrors: [] };
+  const resources = await setupCaseAndApp(t, "outfit");
+  const { context, launched } = resources;
+  try {
+    await forceOpportunity(launched.app, context.dataDir);
+    const notice = await waitCompanion(launched.page);
+    assert.equal(notice.kind, "outfit");
+    resources.cdp = await connectNotificationPage(context.dataDir);
+    watchNotificationPage(resources);
+    const card = resources.cdp.page.locator(".companion-card");
+    await card.waitFor({ state: "visible", timeout: 10000 });
+    const identity = await card.evaluate((node) => ({
+      noticeId: node.dataset.noticeId,
+      noticeToken: node.dataset.noticeToken,
+    }));
+    await waitFor(() => receipts(context.dataDir).length === 1, 10000, "首次真实ACK");
+    const receipt = receipts(context.dataDir)[0];
+    const windowFact = (await snapshotOf(launched.page)).desktop.notifications.window;
+    const desktopBefore = (await snapshotOf(launched.page)).desktop;
+    const appProcessBefore = resources.launched.app.process();
+    const appPidBefore = appProcessBefore.pid;
+    const rosterBefore = queryDb(context.dataDir, "SELECT * FROM roster ORDER BY day, slot");
+    const outfitStateBefore = queryDb(context.dataDir,
+      "SELECT * FROM app_state WHERE key LIKE 'outfit_%' ORDER BY key");
+    const modelRequestsBefore = context.server.allRequests.length;
+    const waitUntil = (target) => delay(Math.max(0, target - Date.now()));
+
+    await resources.cdp.page.evaluate(({ noticeId, noticeToken }) => {
+      window.__s06mDuplicate = null;
+      window.notifications.onCompanionResult((result) => {
+        if (result.noticeId === noticeId
+          && result.noticeToken === noticeToken
+          && result.duplicate === true) {
+          window.__s06mDuplicate = result;
+        }
+      });
+    }, identity);
+    // 首次收据后绝对 3 秒再发真实重复 ACK，确保落在 6 秒持有期内。
+    await waitUntil(receipt.presented_at + 3000);
+    await resources.cdp.page.evaluate(({ noticeId, noticeToken }) => {
+      window.notifications.companionAck(noticeId, noticeToken);
+    }, identity);
+    const duplicateSentAt = Date.now();
+    const duplicate = await waitFor(
+      () => resources.cdp.page.evaluate(() => window.__s06mDuplicate),
+      3000,
+      "重复ACK结果",
+    );
+    assert.equal(duplicate.accepted, true);
+    assert.equal(duplicate.duplicate, true);
+    const duplicateAt = Date.now();
+    assert.ok(duplicateAt >= receipt.presented_at + 2800, `重复ACK过早：${duplicateAt - receipt.presented_at}ms`);
+    assert.ok(duplicateAt <= receipt.presented_at + 3800, `重复ACK过晚：${duplicateAt - receipt.presented_at}ms`);
+    assert.equal(receipts(context.dataDir).length, 1, "重复ACK不得新增收据");
+
+    // 绝对 4.5 秒时卡必须仍在；截图作为持有期证据。
+    await waitUntil(receipt.presented_at + 4500);
+    const observedHoldAt = Date.now();
+    const stillThere = (await snapshotOf(launched.page)).desktop.notifications.companionNotice;
+    assert.ok(stillThere, "ACK后约4.5秒仍应保留展示副本");
+    assert.equal(
+      await resources.cdp.page.locator(".companion-card").count(),
+      1,
+      "ACK后约4.5秒 DOM 卡仍应存在",
+    );
+    record.screenshots.push(await screenshotNotification(resources.cdp.page, "008-hold"));
+    await waitFor(
+      () => resources.cdp.page.locator(".companion-card").count().then((count) => count === 0),
+      6000,
+      "ACK后6秒撤下展示副本",
+    );
+    const removedAt = Date.now();
+    const holdMs = removedAt - receipt.presented_at;
+    assert.ok(holdMs >= 5500, `ACK后保持不足6秒：${holdMs}ms`);
+    assert.ok(holdMs <= 7500, `ACK后超过预期持有：${holdMs}ms`);
+    assert.ok(
+      removedAt + 1000 < duplicateAt + 6000,
+      `撤下必须明显早于重复ACK+6秒：removed=${removedAt} duplicate=${duplicateAt}`,
+    );
+    assert.equal(receipts(context.dataDir).length, 1);
+    assert.equal(ownership(context.dataDir, OUTFIT_STORY).notification_pending, 0);
+
+    await resources.cdp.browser.close().catch(() => {});
+    resources.cdp = null;
+    await closeApp(resources.launched);
+    await waitFor(
+      () => {
+        try {
+          process.kill(appPidBefore, 0);
+          return false;
+        } catch (error) {
+          return error.code === "ESRCH";
+        }
+      },
+      8000,
+      "管理应用主进程未真实退出",
+    );
+    assert.ok(
+      appProcessBefore.exitCode !== null || appProcessBefore.signalCode !== null,
+      "closeApp 未产生真实退出状态",
+    );
+    resources.launched = await launchApp(context);
+    const appPidAfter = resources.launched.app.process().pid;
+    assert.notEqual(appPidAfter, appPidBefore, "重启应产生新的管理应用主进程 PID");
+    collectPageErrors(resources.launched.page, resources.pageErrors);
+    await waitDesktop(resources.launched.page);
+    const restartedDesktop = (await snapshotOf(resources.launched.page)).desktop;
+    assert.notEqual(restartedDesktop.pid, desktopBefore.pid, "重启应产生新桌面子进程");
+    await forceOpportunity(resources.launched.app, context.dataDir);
+    await delay(2000);
+    assert.equal(
+      (await snapshotOf(resources.launched.page)).desktop?.notifications?.companionNotice ?? null,
+      null,
+      "已确认来源重启后不得重播",
+    );
+    assert.equal(receipts(context.dataDir).length, 1, "重启不得新增收据");
+    assert.equal(ownership(context.dataDir, OUTFIT_STORY).notification_pending, 0);
+    assert.equal(context.server.allRequests.length, modelRequestsBefore, "重启机会不得新增模型请求");
+    assert.deepEqual(queryDb(context.dataDir, "SELECT * FROM roster ORDER BY day, slot"), rosterBefore);
+    assert.deepEqual(
+      queryDb(context.dataDir, "SELECT * FROM app_state WHERE key LIKE 'outfit_%' ORDER BY key"),
+      outfitStateBefore,
+      "重启不得改变换装意图或穿着",
+    );
+    const worn = queryDb(context.dataDir,
+      "SELECT value FROM app_state WHERE key = 'outfit_worn:rin'")[0];
+    assert.equal(worn, undefined, "告知与重启不得自动穿用");
+    assert.deepEqual(resources.pageErrors, [], "管理窗与通知窗不得有 pageerror");
+    record.facts = {
+      identity,
+      receipt,
+      duplicate,
+      holdMs,
+      duplicateSentAt,
+      duplicateAt,
+      observedHoldAt,
+      removedAt,
+      shownAt: windowFact.shownAt,
+      windowFocusable: windowFact.focusable,
+      appPidBefore,
+      appPidAfter,
+      appExitCode: appProcessBefore.exitCode,
+      appExitSignal: appProcessBefore.signalCode,
+      desktopPidBefore: desktopBefore.pid,
+      desktopPidAfter: restartedDesktop.pid,
+      modelRequests: context.server.allRequests.length,
+      pageErrors: resources.pageErrors,
+    };
+  } catch (error) {
+    record.facts.pageErrors = resources.pageErrors;
+    record.failure = error;
+    throw error;
+  } finally {
+    await teardown(resources, record.cleanupErrors);
+    writeCase("008", record);
+  }
+});
+
+test("POL-AUTONOTICE-UI-009 不完整可见时10秒撤下、无收据、下一机会恢复", {
+  timeout: 180000,
+}, async (t) => {
+  const record = { facts: {}, screenshots: [], cleanupErrors: [] };
+  const resources = await setupCaseAndApp(t, "outfit");
+  const { context, launched } = resources;
+  try {
+    // 先用受控工作事件预建真实通知页；它不使用自动告知通道，也不占用气泡额度。
+    execDb(context.dataDir, `
+      INSERT INTO connector_events
+        (app_run_id, instance_id, run_id, kind, state, priority,
+         notification_status, received_at)
+      VALUES ('s06m-ui-work', 's06m-ui-work', 's06m-ui-work', 'online', 'idle', 2,
+              'pending', ?)
+    `, [Date.now()]);
+    resources.cdp = await connectNotificationPage(context.dataDir);
+    watchNotificationPage(resources);
+    await waitFor(async () =>
+      (await snapshotOf(launched.page)).desktop?.notifications?.panels.length > 0,
+    10000, "工作通知呈现");
+    await waitFor(async () =>
+      (await snapshotOf(launched.page)).desktop?.notifications?.panels.length === 0,
+    12000, "工作通知自然消散");
+    assert.equal(receipts(context.dataDir).length, 0, "工作通知不得产生自动告知收据");
+    assert.equal(
+      (await snapshotOf(launched.page)).desktop?.notifications?.companionNotice ?? null,
+      null,
+    );
+    // 受控几何：用 CSSOM 构造样式把后续自动卡移出真实视口；不触发 CSP inline，
+    // 也不调用 runtime 私有方法或伪造 ACK。
+    await resources.cdp.page.evaluate(() => {
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(".companion-card{transform:translateY(1200px)!important}");
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+      window.__s06mNoticeSheet = sheet;
+    });
+    await forceOpportunity(launched.app, context.dataDir);
+    const notice = await waitCompanion(launched.page);
+    assert.equal(notice.kind, "outfit");
+    await resources.cdp.page.locator(".companion-card").waitFor({ state: "attached", timeout: 10000 });
+    const geometry = await resources.cdp.page.locator(".companion-card").evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        rect: rect.toJSON(),
+        innerHeight: window.innerHeight,
+        fullyVisible: rect.top >= -0.5 && rect.bottom <= window.innerHeight + 0.5,
+      };
+    });
+    assert.equal(geometry.fullyVisible, false, "受控几何下卡不得完整可见");
+    record.screenshots.push(await screenshotNotification(resources.cdp.page, "009-offscreen"));
+    const observedAt = Date.now();
+    await delay(5000);
+    assert.equal(receipts(context.dataDir).length, 0, "不可见卡不得写收据");
+    assert.equal(ownership(context.dataDir, OUTFIT_STORY).notification_pending, 1);
+    await waitCompanion(launched.page, { expect: false });
+    await waitFor(
+      () => resources.cdp.page.locator(".companion-card").count().then((count) => count === 0),
+      8000,
+      "不可见卡10秒撤下",
+    );
+    const removedAt = Date.now();
+    const waitMs = removedAt - observedAt;
+    assert.ok(waitMs >= 8000, `不可见卡撤下过早：${waitMs}ms`);
+    assert.ok(waitMs <= 11000, `不可见卡超过10秒未撤下：${waitMs}ms`);
+    const receiptsAfterCancel = receipts(context.dataDir).length;
+    const pendingAfterCancel = ownership(context.dataDir, OUTFIT_STORY).notification_pending;
+    assert.equal(receiptsAfterCancel, 0, "10秒撤下后仍不得有收据");
+    assert.equal(pendingAfterCancel, 1, "未确认内容必须保留");
+    assert.equal(
+      (await snapshotOf(launched.page)).desktop?.notifications?.companionNotice ?? null,
+      null,
+    );
+
+    await resources.cdp.page.evaluate(() => {
+      document.adoptedStyleSheets = document.adoptedStyleSheets
+        .filter((sheet) => sheet !== window.__s06mNoticeSheet);
+      delete window.__s06mNoticeSheet;
+    });
+    await forceOpportunity(launched.app, context.dataDir);
+    const recovered = await waitCompanion(launched.page);
+    assert.equal(recovered.kind, "outfit", "下一合法机会重试保留内容");
+    await waitFor(() => receipts(context.dataDir).length === 1, 10000, "恢复后真实ACK");
+    assert.equal(ownership(context.dataDir, OUTFIT_STORY).notification_pending, 0);
+    assert.equal(receipts(context.dataDir).length, 1, "恢复后只确认一次");
+    record.screenshots.push(await screenshotNotification(resources.cdp.page, "009-recovered"));
+    assert.deepEqual(resources.pageErrors, [], "管理窗与通知窗不得有 pageerror");
+    const rosterAfter = queryDb(context.dataDir, "SELECT * FROM roster ORDER BY day, slot");
+    assert.ok(rosterAfter.length > 0);
+    const worn = queryDb(context.dataDir,
+      "SELECT value FROM app_state WHERE key = 'outfit_worn:rin'")[0];
+    assert.equal(worn, undefined, "不可见撤卡与恢复不得自动穿用");
+    record.facts = {
+      notice,
+      geometry,
+      observedAt,
+      removedAt,
+      waitMs,
+      receiptsAfterCancel,
+      pendingAfterCancel,
+      workFixture: "constructed connector_events row; no automatic-notice receipt",
+      receiptsFinal: receipts(context.dataDir).length,
+      pendingFinal: ownership(context.dataDir, OUTFIT_STORY).notification_pending,
+      recovered,
+      rosterRows: rosterAfter.length,
+      wornAutoApplied: Boolean(worn),
+      window: (await snapshotOf(launched.page)).desktop.notifications.window,
+      pageErrors: resources.pageErrors,
+    };
+  } catch (error) {
+    try {
+      const snapshot = await snapshotOf(launched.page);
+      record.facts.debug = {
+        appState: queryDb(context.dataDir,
+          "SELECT key, value FROM app_state WHERE key LIKE 'automatic_%' OR key LIKE 'outfit_%' OR key = 'current_mode' ORDER BY key"),
+        ownership: queryDb(context.dataDir, "SELECT * FROM discovery_outfit_ownership"),
+        receipts: receipts(context.dataDir),
+        current: snapshot.companionship?.current ?? null,
+        notifications: snapshot.desktop?.notifications ?? null,
+        cardGeometry: await resources.cdp?.page.locator(".companion-card").evaluate((node) => {
+          const rect = node.getBoundingClientRect();
+          return {
+            transform: getComputedStyle(node).transform,
+            rect: rect.toJSON(),
+            innerHeight: window.innerHeight,
+          };
+        }).catch(() => null),
+      };
+    } catch (debugError) {
+      record.facts.debugError = debugError.message;
+    }
+    record.facts.pageErrors = resources.pageErrors;
+    record.failure = error;
+    throw error;
+  } finally {
+    await teardown(resources, record.cleanupErrors);
+    writeCase("009", record);
+  }
+});
+
+
 test("POL-AUTONOTICE-UI-003 工作通知抢占自动卡，旧ACK/action不生效", {
   timeout: 180000,
 }, async (t) => {

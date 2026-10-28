@@ -93,3 +93,15 @@ master原通知回归UI-010失败：等待“滚动后三个普通位”超时�
 32453终态exit0、1/1、0skip、app/tests SHA稳定，evidence/master-ui010-r191-m32qqqbr。实际批次s05j-desktop-notifications/run-20261028135234014-54a6e3：采样1793195621990，三个普通项最小剩余374ms，加急仍在场，cleanupErrors=[]；Codex查看010-manual-after-scroll截图确认3普通+加急。接受Fixture修正，原失败保留并解释，不视为生产行为修复。
 
 受托接受S06m B已测窗口阶段：独立40项新链路及相关领域/活动检查、旧通知与工作反应14项原通过加UI-010修后独立通过。不同批次明确聚合，不声称同一次15/15。Case剩余实际重启、真实GUI完整时限与接纳/拒绝联动按evaluation继续；正式内容发布/素材与父级S06/S05/Goal未完成。按snap保存自洽阶段，下一批只补这些已列Case义务。
+
+## r194 生命周期Runner在途审查
+
+单Claude60689仍实际运行，tests/acceptance/automatic-notices-ui.spec.cjs新增008/009（约256行），生产未改。009最初几何Fixture未实际移出视口，失败保留，后改CSSOM且明确观察fullyVisible=false；先用工作卡预建窗口，不消耗自动额度。
+
+008开发者run-20261028140229404-9703-68d07f50：hold6039ms，duplicateAt比receipt晚114ms；上界7500ms无法区分错误地按重复ACK续命，故不续命GUI子项INCONCLUSIVE，不能依据PASS接受。终态后退回只补该Oracle：在首次ACK约3秒时发重复，确认真实duplicate响应；原6秒截止附近仍撤下，明显早于重复+6秒。实际应用关闭/重启还需核对主进程真实终态与新PID，不只子进程PID；生产不变。008/009已显示局部PASS均只是开发者结果。
+
+## r196 生命周期独立接受
+
+10674与master14586均终态。master独立008/009共2/2、0skip、app/tests SHA稳定，证据evidence/master-lifecycle-r195-glug8uk1。008 duplicate结果为首次收据+3067ms，+4502ms仍显示，+6045ms撤下，明显早于duplicate+6秒；收据仅1。管理进程10948正常exit0且PID不存在后启动10979，桌面child10953→10984；同data-dir正式机会不重播，pending0/模型0/名单与衣装状态未变。009测试CSSOM移出视口top1206/height170，未确认9988ms撤下、收据0/pending1；恢复下一机会一次收据/pending0。pageErrors/cleanupErrors均空。
+
+Codex查看008持有期截图，文案/来源/按钮可读，非空白。受控机会与CSSOM几何并非真实30分钟等待或物理遮挡；正常退出重启不是崩溃恢复。接受001重启/006真实时限子项，新增301行测试无生产改动；不再为同一通过路径重复跑。完整002拒绝/接纳自动入口联动与004探索/切换门禁变体继续，父级S06/S05/正式资源/Goal未完成。原失败和r194过弱Oracle记录保留。
