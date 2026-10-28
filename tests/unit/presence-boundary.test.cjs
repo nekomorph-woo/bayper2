@@ -24,6 +24,18 @@ test("POL-DESKTOP-005 手动切换等待时长来自 manifest，超时明确失�
   };
   assert.equal(boundaryTimeoutFor(resting), 1950 + NODE_TIMEOUT_MARGIN_MS);
 
+  // 短反应暂停 idle：上限必须是串行 happy + idle，而不是 max(happy, idle)。
+  const withReaction = {
+    animations: {
+      ...presentation.animations,
+      happy: { durations: [250, 120, 180, 250, 350, 180, 160, 300] },
+    },
+  };
+  assert.equal(
+    boundaryTimeoutFor(withReaction),
+    1880 + 1790 + NODE_TIMEOUT_MARGIN_MS,
+  );
+
   assert.doesNotThrow(() => assertBoundaryCompleted({ ok: true, node: "idle-loop" }));
   assert.doesNotThrow(() => assertBoundaryCompleted({ ok: false, reason: "asset-error" }));
   assert.doesNotThrow(() => assertBoundaryCompleted({ ok: false, reason: "child-exit" }));

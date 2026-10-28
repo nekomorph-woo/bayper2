@@ -416,7 +416,7 @@ function createNotificationPresentation({
     if (unacked.length === 0) {
       return {
         accepted: true, presentationId: pid, newlyPresented: 0, alreadyPresented,
-        acknowledgedAt: null, holdUntil: null,
+        newlyPresentedEventIds: [], acknowledgedAt: null, holdUntil: null,
       };
     }
     const events = ledger.listEventsByIds(unacked.map((item) => item.eventId));
@@ -452,6 +452,7 @@ function createNotificationPresentation({
     }
     return {
       accepted: true, presentationId: pid, newlyPresented: unacked.length,
+      newlyPresentedEventIds: unacked.map((item) => item.eventId),
       alreadyPresented, acknowledgedAt: time, holdUntil,
     };
   }

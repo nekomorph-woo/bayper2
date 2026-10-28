@@ -96,6 +96,8 @@ const ANIMATION_SETS = Object.freeze({
     sit: "sit-pixel-v2-canvas256",
     drowsy: "drowsy-pixel-v2-canvas256",
     sleep: "sleep-pixel-v2-canvas256",
+    // 工作结束短反应候选；只属于凛，不借给其他角色。
+    happy: "happy-pixel-v4",
     candidate: false,
   },
   hu: {
@@ -130,6 +132,7 @@ function getAnimations(characterId) {
     const sit = names.sit ? loadAnimation(characterId, names.sit) : null;
     const drowsy = names.drowsy ? loadAnimation(characterId, names.drowsy) : null;
     const sleep = names.sleep ? loadAnimation(characterId, names.sleep) : null;
+    const happy = names.happy ? loadAnimation(characterId, names.happy) : null;
     animationCache.set(characterId, {
       idle: publicAnimation(idle, names.candidate),
       wave: publicAnimation(wave, names.candidate),
@@ -138,10 +141,12 @@ function getAnimations(characterId) {
       // 睡眠运行候选仍待 master 视觉验收，不因接入运行就标为已发布。
       drowsy: drowsy ? publicAnimation(drowsy, true) : null,
       sleep: sleep ? publicAnimation(sleep, true) : null,
-      // 六动作共用包围和尺度，避免坐下/困倦/睡眠时逐动作 fit 造成呼吸式缩放。
+      // 欣喜短反应候选同理：运行接入不等于发布。
+      happy: happy ? publicAnimation(happy, true) : null,
+      // 七动作共用包围和尺度，避免坐下/困倦/睡眠/欣喜时逐动作 fit 造成呼吸式缩放。
       display: buildDisplayPlan(
         [idle, wave, stretch, ...(sit ? [sit] : []), ...(drowsy ? [drowsy] : []),
-          ...(sleep ? [sleep] : [])],
+          ...(sleep ? [sleep] : []), ...(happy ? [happy] : [])],
         idle.public.frameSize,
       ),
     });
@@ -190,7 +195,7 @@ function buildDesktopPresentation(characterId, displayName) {
       assetState: "ready",
       assetNote:
         characterId === "rin"
-          ? "凛 idle-pixel-v2；wave/stretch/sit 已通过播放验收；drowsy/sleep 睡眠运行候选待视觉验收"
+          ? "凛 idle-pixel-v2；wave/stretch/sit 已通过播放验收；drowsy/sleep 睡眠运行候选待视觉验收；happy 工作结束反应候选待业务验收"
           : `${displayName} idle/wave/stretch 基础动作候选已接入，尚未完成视觉发布`,
       assetLabel:
         characterId === "rin"

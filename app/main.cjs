@@ -54,6 +54,8 @@ const REST_SLEEP_QUIET_MS = 20000;
 const NOTIFICATION_TICK_MS = Math.max(50, Number(process.env.BAYPER_NOTIFICATION_TICK_MS) || 100);
 const FALLBACK_NODE_MS = 2500;
 const CONNECTOR_REGISTRY_DIR_NAME = "herdr-registry";
+// 短反应只是装饰表演；10 秒冷却只影响下一次表演，不排队、不影响文字。
+const WORK_REACTION_COOLDOWN_MS = 10000;
 
 let mainWindow = null;
 let store = null;
@@ -88,6 +90,7 @@ let connectorRuntime = null;
 let connectorRegistryDir = null;
 let lastConnectorSignature = null;
 let notificationTimer = null;
+let lastWorkReactionAt = 0;
 // 休息代次 token 只在进入休息或休息中换角色时递增；重复 desktopPresentation
 // 调用不得刷新，避免把尚未播完的过渡误当成已收束。
 let restEpisode = { token: 0, characterId: null, active: false };
@@ -668,12 +671,118 @@ function handleNotificationAck({ presentationId, eventIds } = {}) {
     return false;
   }
   try {
-    store.notificationPresentation.acknowledge({ presentationId, eventIds });
+    const result = store.notificationPresentation.acknowledge({ presentationId, eventIds });
+    try {
+      maybeSendWorkReaction(result.newlyPresentedEventIds);
+    } catch (error) {
+      // 装饰表演失败不能影响文字回执或通知事实。
+      console.error("工作短反应发送失败：", error?.message ?? error);
+    }
     return true;
   } catch (error) {
     console.error("通知回执未被接受：", error?.message ?? error);
     return false;
   }
+}
+function hasVisibleNeedsAttention() {
+  try {
+    return store.notificationPresentation.getView().presentations.some(
+      (presentation) => presentation.items.some(
+        (item) => item.priority === 0
+          && item.state === "needs_attention"
+          && item.historical !== true,
+      ),
+    );
+  } catch {
+    return true;
+  }
+}
+
+/* 只读核对主进程这一层的真实状态：聊天、休息、活动、交接、隐藏/暂停、
+   边界等待和非凛都不能靠模式字符串代替。 */
+function workReactionAllowed() {
+  if (
+    quitting
+    || systemPaused
+    || !desktopVisible
+    || !desktopReady
+    || activeChat
+  ) {
+    return false;
+  }
+  const presentation = desktopPresentation();
+  if (
+    !presentation
+    || presentation.assetState !== "ready"
+    || !presentation.animations?.happy
+    || presentation.character?.id !== "rin"
+    || presentation.resting
+  ) {
+    return false;
+  }
+  const current = companionship?.getSnapshot().current;
+  if (
+    !current
+    || current.characterId !== "rin"
+    || current.exploring
+    || current.mode === "resting"
+    || current.mode === "interacting"
+  ) {
+    return false;
+  }
+  const activity = current.activity;
+  if (activity && ["running", "paused", "scheduled"].includes(activity.status)) {
+    return false;
+  }
+  if (rotationPending) {
+    return false;
+  }
+  const status = desktopHost?.getStatus();
+  if (
+    !status
+    || status.state !== "running"
+    || status.assetState !== "ready"
+    || status.characterId !== "rin"
+    || desktopHost.hasBoundaryWaiters()
+  ) {
+    return false;
+  }
+  return !hasVisibleNeedsAttention();
+}
+
+/* 一次性发送：只使用本次事务新回执的事件；不排队、不缓存、不重连补发。
+   同一回执多条 finished 只选一次表演，事件本身与文字全部保留。 */
+function maybeSendWorkReaction(eventIds) {
+  if (!Array.isArray(eventIds) || eventIds.length === 0) {
+    return false;
+  }
+  if (Date.now() - lastWorkReactionAt < WORK_REACTION_COOLDOWN_MS) {
+    return false;
+  }
+  if (!workReactionAllowed()) {
+    return false;
+  }
+  let events;
+  try {
+    events = store.connectorLedger.listEventsByIds(eventIds);
+  } catch (error) {
+    console.error("读取工作反应事件失败：", error?.message ?? error);
+    return false;
+  }
+  const finished = events.filter(
+    (event) => event.state === "finished" && event.historical !== true,
+  );
+  if (finished.length === 0) {
+    return false;
+  }
+  const sent = desktopHost.sendWorkReaction({
+    eventIds: finished.map((event) => event.id),
+    characterId: "rin",
+  });
+  if (sent) {
+    lastWorkReactionAt = Date.now();
+  }
+  return sent;
 }
 
 /* 子进程重建/隐藏期间冻结阅读时间；窗口重新可见后顺延剩余 hold 再推进。 */

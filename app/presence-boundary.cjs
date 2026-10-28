@@ -14,13 +14,19 @@ function animationDuration(animation) {
 
 function boundaryTimeoutFor(presentation) {
   const animations = presentation?.animations;
+  const idleDuration = animationDuration(animations?.idle);
+  const happyDuration = animationDuration(animations?.happy);
+  // 短反应会先暂停 idle；最坏情况是一次完整 happy 加一整轮 idle 后才有
+  // idle-loop，因此上限不能只取两者较大的一个。
+  const serialReaction = happyDuration > 0 ? happyDuration + idleDuration : 0;
   const longest = Math.max(
-    animationDuration(animations?.idle),
+    idleDuration,
     animationDuration(animations?.wave),
     animationDuration(animations?.sit),
     // 困倦/睡眠阶段用同一个有限上限等待 sleep 循环末，不永久等下一次自然节点。
     animationDuration(animations?.drowsy),
     animationDuration(animations?.sleep),
+    serialReaction,
   );
   return Math.max(MIN_NODE_TIMEOUT_MS, longest + NODE_TIMEOUT_MARGIN_MS);
 }

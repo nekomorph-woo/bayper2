@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld(
     onCancelDrag: (callback) => {
       ipcRenderer.on("canvas:cancel-drag", () => callback());
     },
+    onWorkReaction: (callback) => {
+      ipcRenderer.on("canvas:work-reaction", (_event, payload) => callback(payload));
+    },
     nodeComplete: (node, displayKey, generation, activityId, characterId, restToken, boundaryKind) =>
       ipcRenderer.send("canvas:node-complete", {
         node,

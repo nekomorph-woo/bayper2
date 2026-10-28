@@ -18,12 +18,22 @@ let stretch = null;
 let sit = null;
 let drowsy = null;
 let sleep = null;
+let happy = null;
 let animationTimer = null;
 let frameIndex = 0;
+let frameStartedAt = 0;
 let playingWave = false;
 let playingDaily = false;
 let playingDrowsy = false;
 let playingSleep = false;
+let playingWorkReaction = false;
+let activeWorkReaction = null;
+let workReactionResume = null;
+let lastWorkReactionIds = [];
+let characterId = "";
+let currentMode = "";
+let systemPaused = false;
+let windowVisible = true;
 let restActive = false;
 let restSitting = false;
 let restPhase = "seated";
@@ -53,8 +63,32 @@ function stopAnimation() {
   playingDaily = false;
   playingDrowsy = false;
   playingSleep = false;
+  playingWorkReaction = false;
+  activeWorkReaction = null;
+  workReactionResume = null;
   restSitting = false;
   activeDailyRun = null;
+}
+
+/* 取消短反应时，若同一身份/代次仍是画布所有者，必须交回现有 idle 规则，
+   不能只停计时器而把 sprite 留在 happy 帧；换人/素材失效则由加载流程接管。 */
+function cancelWorkReaction(restoreIdle = true) {
+  if (!playingWorkReaction) {
+    return false;
+  }
+  const generation = displayGeneration;
+  const carry = workReactionResume;
+  stopAnimation();
+  if (
+    restoreIdle
+    && generation === displayGeneration
+    && assetReady
+    && !sprite.hidden
+    && idle
+  ) {
+    startIdle(generation, carry);
+  }
+  return true;
 }
 
 function showStatus(name, note) {
@@ -205,7 +239,7 @@ function sendDailyComplete(run) {
   return true;
 }
 
-function startIdle(generation) {
+function startIdle(generation, resume = null) {
   if (generation !== displayGeneration) {
     return;
   }
@@ -216,8 +250,15 @@ function startIdle(generation) {
   assetReady = true;
   sprite.hidden = false;
   statusCard.hidden = true;
-  frameIndex = 0;
-  playFrames(idle, true, "idle-loop", () => startIdle(generation), generation);
+  frameIndex = Number.isInteger(resume?.index)
+    ? Math.min(Math.max(0, resume.index), idle.frames.length - 1)
+    : 0;
+  const firstDelayMs = Number.isFinite(resume?.remainingMs)
+    ? Math.max(16, Math.round(resume.remainingMs))
+    : null;
+  playFrames(
+    idle, true, "idle-loop", () => startIdle(generation), generation, null, false, firstDelayMs,
+  );
   // 动作结束回到待机时也要上报，避免主进程保留上一动作的最后一帧。
   if (desktopApi) {
     desktopApi.displayState("character", displayKey, generation, sprite.src);
@@ -228,6 +269,7 @@ function startWave() {
   if (!assetReady || !wave || playingWave || playingDaily || restActive) {
     return;
   }
+  // 用户主动点击优先：stopAnimation 会取消短反应，再进入既有 wave 流程。
   const generation = displayGeneration;
   stopAnimation();
   playingWave = true;
@@ -607,7 +649,107 @@ function syncActivity(state) {
   }
 }
 
-function playFrames(animation, loop, nodeName, onEnd, generation, dailyRun = null, trace = false) {
+/* 画布侧只用自己的真实播放状态与父进程下发的模式/可见性核对；新聊天、
+   隐藏、暂停等状态优先，取消短反应后不恢复已失效的 idle 进度。 */
+function syncWorkReactionContext(state) {
+  characterId = state?.character?.id ?? "";
+  currentMode = state?.mode ?? "";
+  systemPaused = state?.systemPaused === true;
+  windowVisible = state?.visible !== false;
+  if (
+    playingWorkReaction
+    && (systemPaused || !windowVisible || currentMode === "interacting")
+  ) {
+    // 同一身份/代次的聊天、隐藏、暂停只取消表演；若素材仍有效，交回 idle 规则。
+    cancelWorkReaction(Boolean(state?.character && state?.assetState === "ready"));
+  }
+}
+
+function sameEventIds(left, right) {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
+}
+
+/* 一次性工作反应：只接受当前身份、显示代次且未重复的事件；不排队、
+   不缓存，忙时直接跳过，由主进程的冷却与一次性事实负责不补播。 */
+function applyWorkReaction(payload) {
+  const eventIds = Array.isArray(payload?.eventIds) ? payload.eventIds : [];
+  if (
+    eventIds.length === 0
+    || !eventIds.every((id) => Number.isInteger(id) && id > 0)
+    || new Set(eventIds).size !== eventIds.length
+  ) {
+    return;
+  }
+  if (
+    payload.characterId !== characterId
+    || payload.displayKey !== displayKey
+    || payload.generation !== displayGeneration
+    || sameEventIds(lastWorkReactionIds, eventIds)
+  ) {
+    return;
+  }
+  lastWorkReactionIds = eventIds.slice();
+  if (
+    !assetReady
+    || sprite.hidden
+    || !happy
+    || playingWave
+    || playingDaily
+    || playingDrowsy
+    || playingSleep
+    || playingWorkReaction
+    || restActive
+    || systemPaused
+    || !windowVisible
+    || currentMode === "interacting"
+  ) {
+    return;
+  }
+
+  const generation = displayGeneration;
+  let resume = null;
+  if (idle && idle.frames.includes(sprite.src)) {
+    const duration = idle.durations[frameIndex] ?? 180;
+    const elapsed = Math.max(0, Date.now() - frameStartedAt);
+    resume = { index: frameIndex, remainingMs: Math.max(16, duration - elapsed) };
+  }
+  stopAnimation();
+  const run = { eventIds: eventIds.slice(), generation };
+  playingWorkReaction = true;
+  activeWorkReaction = run;
+  workReactionResume = resume;
+  frameIndex = 0;
+  playFrames(happy, false, "", () => {
+    if (activeWorkReaction !== run || generation !== displayGeneration) {
+      return;
+    }
+    if (
+      systemPaused
+      || !windowVisible
+      || currentMode === "interacting"
+    ) {
+      cancelWorkReaction(true);
+      return;
+    }
+    if (restActive || playingDaily) {
+      // 其他动画已经接管画布时只丢弃短反应状态，不停止该动画。
+      playingWorkReaction = false;
+      activeWorkReaction = null;
+      workReactionResume = null;
+      return;
+    }
+    playingWorkReaction = false;
+    activeWorkReaction = null;
+    const carry = workReactionResume;
+    workReactionResume = null;
+    startIdle(generation, carry);
+  }, generation, null, true);
+}
+
+function playFrames(
+  animation, loop, nodeName, onEnd, generation, dailyRun = null, trace = false,
+  firstDelayMs = null,
+) {
   if (generation !== displayGeneration) {
     return;
   }
@@ -618,6 +760,7 @@ function playFrames(animation, loop, nodeName, onEnd, generation, dailyRun = nul
   }
 
   sprite.src = frames[frameIndex];
+  frameStartedAt = Date.now();
   // 主进程按这帧的实际 alpha 决定接收还是穿透，换帧后指针静止也要重判。
   reportHitFrame(sprite.src);
   // 日常动作和休息逐帧上报实际文件与闭包身份；待机仍按圈上报。
@@ -654,7 +797,7 @@ function playFrames(animation, loop, nodeName, onEnd, generation, dailyRun = nul
       return;
     }
     playFrames(animation, loop, nodeName, onEnd, generation, dailyRun, trace);
-  }, Math.max(16, durations[frameIndex] ?? 180));
+  }, Math.max(16, firstDelayMs ?? durations[frameIndex] ?? 180));
 }
 
 function invalidateDisplay(nextKey) {
@@ -683,6 +826,7 @@ async function applyState(state) {
   if (state && Number.isInteger(state.epoch)) {
     canvasEpoch = state.epoch;
   }
+  syncWorkReactionContext(state);
   if (state?.visible === false) {
     cancelDrag();
   }
@@ -705,7 +849,7 @@ async function applyState(state) {
     return;
   }
 
-  const key = `${state.character.id}:${state.animations.idle.frames.join("|")}:${state.animations.wave?.frames.join("|") ?? ""}:${state.animations.stretch?.frames.join("|") ?? ""}:${state.animations.sit?.frames.join("|") ?? ""}:${state.animations.drowsy?.frames.join("|") ?? ""}:${state.animations.sleep?.frames.join("|") ?? ""}`;
+  const key = `${state.character.id}:${state.animations.idle.frames.join("|")}:${state.animations.wave?.frames.join("|") ?? ""}:${state.animations.stretch?.frames.join("|") ?? ""}:${state.animations.sit?.frames.join("|") ?? ""}:${state.animations.drowsy?.frames.join("|") ?? ""}:${state.animations.sleep?.frames.join("|") ?? ""}:${state.animations.happy?.frames.join("|") ?? ""}`;
   if (key === currentKey) {
     const nextDisplayKey = state.displayKey || displayKey;
     if (assetReady && !sprite.hidden && nextDisplayKey === displayKey) {
@@ -724,6 +868,7 @@ async function applyState(state) {
     sit = state.animations.sit ?? null;
     drowsy = state.animations.drowsy ?? null;
     sleep = state.animations.sleep ?? null;
+    happy = state.animations.happy ?? null;
     applyDisplayPlan(state.animations.display);
     sprite.alt = `${characterName}（桌面角色）`;
     startIdle(generation);
@@ -751,6 +896,7 @@ async function applyState(state) {
     ...(state.animations.sit?.frames ?? []),
     ...(state.animations.drowsy?.frames ?? []),
     ...(state.animations.sleep?.frames ?? []),
+    ...(state.animations.happy?.frames ?? []),
   ];
   const loaded = await preloadFrames(allFrames);
   if (token !== loadToken || generation !== displayGeneration) {
@@ -775,6 +921,7 @@ async function applyState(state) {
   sit = state.animations.sit ?? null;
   drowsy = state.animations.drowsy ?? null;
   sleep = state.animations.sleep ?? null;
+  happy = state.animations.happy ?? null;
   applyDisplayPlan(state.animations.display);
   sprite.alt = `${characterName}（桌面角色）`;
   startIdle(generation);
@@ -882,4 +1029,5 @@ window.addEventListener("mousemove", reportPointerMove, { passive: true });
 if (desktopApi) {
   desktopApi.onState(applyState);
   desktopApi.onCancelDrag(() => cancelDrag(false));
+  desktopApi.onWorkReaction(applyWorkReaction);
 }

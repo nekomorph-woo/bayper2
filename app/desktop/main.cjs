@@ -170,6 +170,7 @@ function syncHitFrame(state) {
         ...(animations.sit?.frames ?? []),
         ...(animations.drowsy?.frames ?? []),
         ...(animations.sleep?.frames ?? []),
+        ...(animations.happy?.frames ?? []),
       ]
     : [];
   const display = animations?.display ?? null;
@@ -454,6 +455,7 @@ function applyState(state) {
     sleepEligible: state.sleepEligible === true,
     restSuspended: state.restSuspended === true,
     systemPaused: state.systemPaused === true,
+    visible: state.visible !== false,
     activity: state.activity ?? null,
     displayKey: state.displayKey,
     epoch: canvasEpoch,
@@ -546,6 +548,36 @@ function handleParentLine(line) {
   }
   if (message.type === "notifications") {
     applyNotifications(message);
+    return;
+  }
+  if (message.type === "work-reaction") {
+    // 一次性短反应只在当前状态身份/显示代次仍匹配时转发；不保存、不重放。
+    const eventIds = Array.isArray(message.eventIds)
+      ? message.eventIds.filter((id) => Number.isInteger(id) && id > 0)
+      : [];
+    const characterId = typeof message.characterId === "string" ? message.characterId : "";
+    const displayKey = typeof message.displayKey === "string" ? message.displayKey : "";
+    if (
+      !window
+      || window.isDestroyed()
+      || !characterWindowReady
+      || !latestState
+      || latestState.visible === false
+      || latestState.character?.id !== characterId
+      || latestState.displayKey !== displayKey
+      || !Number.isInteger(message.generation)
+      || message.generation < 0
+      || eventIds.length === 0
+      || new Set(eventIds).size !== eventIds.length
+    ) {
+      return;
+    }
+    window.webContents.send("canvas:work-reaction", {
+      eventIds,
+      characterId,
+      displayKey,
+      generation: message.generation,
+    });
     return;
   }
   if (message.type === "role-hidden") {

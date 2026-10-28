@@ -776,6 +776,47 @@ function createDesktopHost({
     }
   }
 
+  /* 一次性工作反应只交给当前已就绪且身份/代次匹配的子进程；不保存、
+     不因重连补发，也不占用 latestState。 */
+  function sendWorkReaction({ eventIds, characterId } = {}) {
+    if (
+      !child
+      || !channelReady
+      || !ready
+      || status.state !== "running"
+      || status.assetState !== "ready"
+      || !lastPresentation
+      || lastPresentation.assetState !== "ready"
+    ) {
+      return false;
+    }
+    if (
+      !Array.isArray(eventIds)
+      || eventIds.length === 0
+      || !eventIds.every((id) => Number.isInteger(id) && id > 0)
+      || new Set(eventIds).size !== eventIds.length
+    ) {
+      return false;
+    }
+    const displayKey = presentationAssetKey(lastPresentation);
+    if (
+      !displayKey
+      || lastPresentation.character?.id !== characterId
+      || status.displayedKey !== displayKey
+      || status.displayedKind !== "character"
+      || !Number.isInteger(lastDisplayGeneration)
+    ) {
+      return false;
+    }
+    return send({
+      type: "work-reaction",
+      eventIds,
+      characterId,
+      displayKey,
+      generation: lastDisplayGeneration,
+    });
+  }
+
   function waitForNodeBoundary(timeoutMs = 3000, options = {}) {
     if (
       rendererAssetError ||
@@ -962,6 +1003,7 @@ function createDesktopHost({
     setNotificationsVisible,
     waitForNodeBoundary,
     hasBoundaryWaiters,
+    sendWorkReaction,
   };
 }
 

@@ -38,7 +38,14 @@ test("POL-DESKTOP-007 三角色各自基础动作同尺度裁剪，Hu/Cheng 保�
   assert.equal(rin.sleep.loop, true);
   assert.equal(rin.sleep.candidate, true);
   assert.deepEqual(rin.sleep.frameSize, { width: 256, height: 384 });
-  // 六动作共同并集 216×314；sleep 最左 x31 使窗口宽 89、scale 仍 128/314。
+  // 工作结束短反应候选：与六动作共用 256×384 画布和脚锚，仍标记候选。
+  assert.equal(rin.happy.frames.length, 8);
+  assert.match(rin.happy.frames[0], /happy-pixel-v4\/frame-00\.png$/);
+  assert.deepEqual(rin.happy.durations, [250, 120, 180, 250, 350, 180, 160, 300]);
+  assert.equal(rin.happy.loop, false);
+  assert.equal(rin.happy.candidate, true);
+  assert.deepEqual(rin.happy.frameSize, { width: 256, height: 384 });
+  // 七动作共同并集仍为 216×314；happy 不改变 scale/窗口/脚锚。
   assert.deepEqual(rin.display.visibleBox, { x: 31, y: 68, width: 216, height: 314 });
   assert.ok(Math.abs(rin.display.scale - 128 / 314) < 1e-12);
   assert.equal(rin.display.windowWidth, 89);
@@ -91,6 +98,7 @@ test("POL-DESKTOP-007 三角色各自基础动作同尺度裁剪，Hu/Cheng 保�
     // 睡眠素材只属于凛，其他角色不临时借图或换服装。
     assert.equal(presentation.animations.drowsy ?? null, null);
     assert.equal(presentation.animations.sleep ?? null, null);
+    assert.equal(presentation.animations.happy ?? null, null);
   }
 
   // 三项基础候选可各自触发日常伸展，但不是完整动作库或正式发布。

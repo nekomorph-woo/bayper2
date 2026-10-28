@@ -51,3 +51,37 @@ master代码审查定位：
 - 同事件无新finished计数不足以完整替代无额外事件，保留来自Herdr的idle等合法事件，并核其来源/事件类型，不能删除禁止副作用要求。
 
 master另独立执行资产/边界单测及notification-presentation全9项：master-r155-core-4vfeldms，11/11、0skip、exit0、前后SHA一致。证明受影响通知账本回执/重建等既有领域行为未在该批退化，不证明反应与真实通知UI的全部集成。
+
+## r157 真实链路独立复验与剩余门禁
+
+23005终态exit0/is_error=false。master独立两组001/003/004/007/009与002/008：master-r156-chain-m6gv9y4h，2/2、0skip、exit0、前后源码SHA一致，约96秒。真实Herdr非焦点done、8帧、重复/重启、冷却/P0及恢复的现有断言通过；开发者把有来源标签/逐条批量文案缺口的001/004称PASS不予沿用，按完整Oracle仍待补。
+
+实际查看独立批次run-20261028091548480-8daa86恢复截图及happy光底图集；人物脚底没有明显跃迁。进一步独立RGBA测量master-workreaction-foot-ilt1zlj5：16帧alpha>=128实体底行为374～375，底48px脚带中心126.5～128。按实际128/314比例，垂直差不超过0.408pt、水平差不超过0.612pt；结合DOM前中后几何一致，符合像素轮廓变化下稳定落脚。不是对manifest锚点自证，也不冒充人类连续体验。
+
+r156-gates-r1实际是非凛切换尚未更新画布的rin!=hu断言，非报告所称helper类型错误；r2交接前快照pending=true，随后happy出现，但没有ACK时pending证据，当前只判INCONCLUSIVE，不能断言产品门禁坏。现有main在每次idle-loop可清除pending，此构造可自然结束。睡眠/隐藏恢复/未就绪及实际交接仍未完成。
+
+## r158 末段测试驱动审查
+
+45326终态exit0/is_error=false；渲染r157-render-r1 1/1通过，真实组与门禁组各两次未全过。原始failure.log显示真实组r1为来源/t0/不匹配（当前展示真实terminal id），r2为批量来源实际t1但断言terminal id；console又被清理后仍运行的帧采集Target closed异常遮盖。真实来源有label时展示label、无label回退agent id，验收应核本轮身份的允许显示形式，不能每次遇到一种就把断言切到另一种。
+
+交接r157-gates-r2明确ACK时pending=false，实验前提失效，不判产品门禁FAIL。修改后的Debugger.pause尚未执行；其采集在恢复并等pending消失后才开始，会遗漏恢复时错误庆祝，因此要在暂停前建立追踪、在恢复后到交接完成期间持续观察。先冻结canvas，再设置pending并等待主进程心跳读入，避免已在途idle-loop清除先前的pending；通知ACK必须继续真实发生。
+
+009历史反应还需排除007残留P0：当前在007后立刻插入historical，P0可能仍展示，单纯无happy不足以证明historical过滤。等待可见P0自然消散、冷却已过且当前合资格，再触发历史输入与新事件对照。原Expected不变，属于因果隔离的Oracle补齐。
+
+## r159 隐藏语义澄清与收口Oracle
+
+master核对既有s05j计划和main.onToggleVisible：role visible与notification window visible分开管理；原006“通知按既有规则继续”仍正确，r156/r157补验说明误将角色隐藏等同通知不可见，已修正该说明，不改PRD/生产行为。r158-gates-r2实际exit0，case005-006记录handoffAtAck=true、hiddenWindowVisible=true、hiddenAck非空、hiddenText含已结束、recoveredStarts=0。应把这组确定语义写成断言，不能“ACK有无两种都算过”。
+
+同组sleepFrame实际是drowsy frame07，尚非sleep循环；已有r157/r158对sleep/drowsy任一都放行，不能把它当005睡眠完成。补等真实sleep帧后再送finished、再核未被唤醒。
+
+帧trace当前捕获failure但stop返回frames不报告；正常测试路径采样失败必须导致ERROR，不允许空/不完整trace使“没有反应”假通过；finally清理可抑制二次异常但应记录，不覆盖原始业务assert。
+
+## r160 工作结束短反应受托接受（2026-10-28）
+
+Codex master 独立最终回归 `master-workreaction-final-iw5eg66x`：exit 0，13/13、0 skip，13个被测文件前后 SHA 一致；实际原始 Case 证据位于 `evidence/s07-work-reaction/run-20261028094232057-63ab14/`。结合先前独立领域/单测11/11，受托接受本轮凛 E03 工作结束短反应实现，不代表 S05/S07 或完整 Goal 完成。
+
+001/003/004/007/009 使用真实隔离 Herdr 0.9.5 非焦点 working→idle→done：来源/已结束文案与回执、8帧、去重/重建、批量一次与冷却、P0优先、历史不补播及新事件对照均有实际证据。002/008 正式画布验证原 idle frame07 的剩余时长恢复（预期195ms、采样153ms，按计划采样容差）、前中后几何相同、3690ms后真实 idle-loop 边界，以及打断后持续推进。005/006 确认真实 sleep 帧、探索离桌接替、交接 ACK 时 pending、隐藏角色仍有通知及稳定 ACK；部分状态使用构造数据库/系统事件，未就绪只覆盖 host 传输边界，不外推为全链真实系统体验。
+
+相邻回归涵盖自然轮换、素材异步失效、共同几何、休息聊天、睡眠切换和通知暂停/重建。Runner finally 清理断言通过；证据保留本地。检查发现一条与隐藏断言矛盾的旧注释，另交 Claude Code 仅改该注释，执行逻辑保持不变，不为注释修改重复整轮GUI测试。
+
+本轮范围为凛已有服装的候选 E03 业务接线，其他角色/服装及其余动作、最终原生体验仍未完成；S03s真实模型场景混入用户历史的失败继续保留。Polaris 本轮问题为执行与Oracle缺口，已按既有流程返修、独立复验，没有需修改skill的新矛盾。
