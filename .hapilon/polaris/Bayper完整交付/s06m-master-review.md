@@ -111,3 +111,34 @@ Codex查看008持有期截图，文案/来源/按钮可读，非空白。受控�
 89847/57767/master81605均终态。master独立UI-010 1/1、0skip、app/tests SHA稳定，evidence/master-invitation-r197-avm0qqdh。真实鼠标卡点击、拒绝/重开/接纳按钮；invite:ui.notice.invite重开前后ID/displayed_at/quota_at相同、单邀请/单收据；接纳仅新增hu关系与初始状态，当前rin、固定位/roster、非空原角色记忆/数值/语义runtime不变，模型0、聊天0。重复接纳经公开preload IPC验证duplicate（接纳后按钮已隐藏，非第二次人类点击）。Codex查看010-accepted-story截图，两角色已结识、凛在场固定、琥珀名单外，文案对应数据库。pageErrors/cleanupErrors空。
 
 拒绝后短时机会仍受1小时额度影响，GUI不单独证明拒绝阻止再准备；结合既有002A真实SQLite跨小时拒绝/稍后与额度证据，不冒充真实7天等待。初版heartbeat last_settled_at非业务不变量造成的失败保留；仅比较语义状态合理。截图Buffer改路径防证据膨胀，最终独立输出为路径。本轮只加测试，无生产变更。接受002交互子项，004探索/切换门禁专门变体仍待补，父级/正式资源不提前结束。
+
+## r200 门禁补验边界审查
+
+37689终态exit0/is_error=false，开发者011/012两项PASS，新增299行。实际经隔离业务表构造daily/exploration running、exploring、pending_rotation；通知撤卡/回执链真实，但并非正式探索启动或自然节点waiter。禁止把标题“真实活动/探索”“natural-note”当证据。接受保留构造状态门禁作为计划允许的系统状态Fixture，整体活动启动/接替已有活动与outfits-ui正式路径证据，不重复整链。
+
+剩余实际hasBoundaryWaiters分支尚未观察，定向要求公开换人入口建立真正动画边界等待→撤卡/旧消息无副作用→节点后切换→下一机会恢复。仅当前GUI测试新增约100～180行，命名如实，生产问题先报；这补原计划门禁而非新增需求。单Claude72543，输出/tmp/bayper-s06m-r199-boundary.json。master尚未独立接受011/012，不提前标整组PASS。
+
+## r201 正式节点等待Runner审查
+
+72543终态，011/012名称已限定持久状态Fixture；013经公开switchCompanion请求与本轮角色renderer CDP暂停/恢复建立实际waitForPresentationBoundary等待，不注入私有waiter。开发者三项PASS尚非master结果。审查发现delay(1000)后仍断言等待前switchedSnapshot，修正为等待后重新读取并确认0收据；41437终态后另收口postSwitchReceipts取值时刻（不能恢复确认后记录为1而标等待期值）。此为Oracle/证据时间一致性问题，Expected不改。之后master独立011～013再聚合。
+
+## r202 门禁独立验收与S06m聚合
+
+72543/41437/12978/master45453均终态。master独立011～013共3/3、0skip、app/tests SHA稳定，evidence/master-gates-r201-3rgd874b；pageErrors/cleanupErrors均空。011/012如实为构造持久状态，经正式心跳/通知IPC验证撤卡、无收据/导航和恢复一次；背景探索不冻结就绪前台。013公开switch在59ms仍pending且撤卡，CDP恢复后真实节点完成hu切换；等待后新快照notice=null、收据0，下一机会收据1、模型0。角色渲染器暂停仅本轮隔离fixture，非自然人类操作时长。
+
+### POL-AUTONOTICE v1覆盖聚合（受托决定）
+
+| Case | 结果 | 独立证据与必需行为 |
+|---|---|---|
+| 001 | PASS | A 001A真实SQLite prepare/ACK/不变量；B UI001点击与425ms可见、UI008整应用正常重启不重播；同源收据一次、不穿用 |
+| 002 | PASS | A 002A实际显示7日额度、只读/准备/手动既有邀请；UI002稍后、UI010拒绝/重开/接纳、非空独属记忆与名单隔离 |
+| 003 | PASS | A 003A固定时间跨角色/类型1h/8h/回拨/重建精确边界，独立A最终78项证据；实际GUI不是8小时等待 |
+| 004 | PASS | UI004隐藏/暂停恢复、005聊天、006休息/child重建、008正常退出/整应用重启、011/012持久探索/换人状态、013正式节点等待；不追发 |
+| 005 | PASS | A 005A资格/旧token/DB触发器原子回滚与重试；UI005旧请求/旧结果、隐藏/门禁失效拒绝；UI009未可见不计数可恢复 |
+| 006 | PASS | UI001/002/007/010真实卡点击与正确角色/故事、冷启动异步目标；005收起；003工作抢占；008/009真实6秒/10秒；既有通知回归保持3+1 |
+
+证据组：master-a-final-2t6vg1aw；master-b-r189-h39bm342（40项）；master-b-regression-7_wc_kjm（14PASS/1FAIL）+master-ui010-r191-m32qqqbr（修后单项PASS）；master-lifecycle-r195-glug8uk1（2项）；master-invitation-r197-avm0qqdh（1项）；master-gates-r201-3rgd874b（3项）。旧FAIL/INCONCLUSIVE与修复依据均保留，不伪称同一次全绿。
+
+Codex受托接受S06m在v1计划边界内的自动告知功能路径。内容采用构造发布目录/候选素材、loopback模型、受控机会和系统状态；不声明正式主题内容/全部资源发布、真实30分钟/7天等待、物理锁屏、真实模型或全产品完成。体验为Codex实际截图/自动输入审查，不是用户亲自体验。S06仍需正式主题/角色内容与全资源接线，S03记忆及S07正式24+12动画和最终原生体验等完整Goal缺口保留。下一步回到父级正式素材与内容，避免继续无依据重复已验通知路径。
+
+流程复查：本轮发现的是Runner Oracle/时序/表述过界，现行Polaris规则已能要求保留失败、修正后独立复验；没有新skill矛盾，故不机械归档改skill。

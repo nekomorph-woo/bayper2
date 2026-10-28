@@ -412,7 +412,144 @@ function watchNotificationPage(resources) {
   collectPageErrors(resources.cdp.page, resources.pageErrors);
 }
 
+/* 用隔离业务表构造阻塞状态；不触碰自动告知 runtime 私有字段。 */
+function insertRunningActivity(dataDir, activityId, kind) {
+  const now = Date.now();
+  const duration = kind === "exploration" ? 20 * 60 * 1000 : 10000;
+  execDb(dataDir, `
+    INSERT INTO character_activities
+      (activity_id, character_id, kind, status, duration_ms, active_elapsed_ms,
+       started_at, last_progress_at, completed_at, action_completed_at,
+       action_frame, created_at, updated_at)
+    VALUES (?, 'rin', ?, 'running', ?, 0, ?, ?, NULL, NULL, 0, ?, ?)
+  `, [activityId, kind, duration, now, now, now, now]);
+  execDb(dataDir,
+    "UPDATE character_runtime SET mode = ?, exploring = ? WHERE character_id = 'rin'",
+    [kind === "exploration" ? "exploring" : "daily", kind === "exploration" ? 1 : 0]);
+}
+
+function clearRunningActivity(dataDir, activityId) {
+  const now = Date.now();
+  execDb(dataDir, `
+    UPDATE character_activities
+    SET status = 'completed', completed_at = ?, updated_at = ?
+    WHERE activity_id = ?
+  `, [now, now, activityId]);
+  execDb(dataDir,
+    "UPDATE character_runtime SET mode = 'companion', exploring = 0 WHERE character_id = 'rin'");
+}
+
+function seedBackgroundExploration(dataDir, characterId) {
+  const now = Date.now();
+  execDb(dataDir,
+    "INSERT OR IGNORE INTO relationships (character_id, accepted_at) VALUES (?, ?)",
+    [characterId, new Date(now).toISOString()]);
+  execDb(dataDir,
+    "INSERT OR IGNORE INTO character_stats (character_id, intimacy, energy, mood) VALUES (?, 10, 100, 0)",
+    [characterId]);
+  execDb(dataDir, `
+    INSERT OR REPLACE INTO character_runtime
+      (character_id, mode, last_settled_at, exploring)
+    VALUES (?, 'exploring', ?, 1)
+  `, [characterId, now]);
+  execDb(dataDir,
+    "INSERT OR IGNORE INTO roster (day, slot, character_id) VALUES (?, 'random_1', ?)",
+    [localDay(new Date()), characterId]);
+  const now2 = Date.now();
+  execDb(dataDir, `
+    INSERT INTO character_activities
+      (activity_id, character_id, kind, status, duration_ms, active_elapsed_ms,
+       started_at, last_progress_at, completed_at, action_completed_at,
+       action_frame, created_at, updated_at)
+    VALUES (?, ?, 'exploration', 'running', ?, 0, ?, ?, NULL, NULL, 0, ?, ?)
+  `, [`ui-notice-bg-${characterId}`, characterId, 20 * 60 * 1000,
+    now2, now2, now2, now2]);
+}
+
+async function connectCharacterPage(dataDir) {
+  return waitFor(async () => {
+    const portFile = path.join(dataDir, "desktop-profile", "DevToolsActivePort");
+    if (!fs.existsSync(portFile)) return null;
+    const port = fs.readFileSync(portFile, "utf8").split("\n")[0].trim();
+    if (!port) return null;
+    const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+    const pages = browser.contexts().flatMap((context) => context.pages());
+    const page = pages.find((item) => item.url().includes("/renderer/index.html"));
+    if (!page) {
+      await browser.close();
+      return null;
+    }
+    return { browser, page };
+  }, 15000, "角色画布 CDP 页面");
+}
+
+function seedReadyCompanion(dataDir, characterId) {
+  const now = Date.now();
+  execDb(dataDir,
+    "INSERT OR IGNORE INTO relationships (character_id, accepted_at) VALUES (?, ?)",
+    [characterId, new Date(now).toISOString()]);
+  execDb(dataDir,
+    "INSERT OR IGNORE INTO character_stats (character_id, intimacy, energy, mood) VALUES (?, 10, 100, 0)",
+    [characterId]);
+  execDb(dataDir, `
+    INSERT OR REPLACE INTO character_runtime
+      (character_id, mode, last_settled_at, exploring)
+    VALUES (?, 'waiting', ?, 0)
+  `, [characterId, now]);
+  execDb(dataDir,
+    "INSERT OR IGNORE INTO roster (day, slot, character_id) VALUES (?, 'random_1', ?)",
+    [localDay(new Date()), characterId]);
+}
+
+async function prepareOffscreenNotificationPage(resources, launched, context) {
+  execDb(context.dataDir, `
+    INSERT INTO connector_events
+      (app_run_id, instance_id, run_id, kind, state, priority,
+       notification_status, received_at)
+    VALUES ('s06m-ui-work', 's06m-ui-work', 's06m-ui-work', 'online', 'idle', 2,
+            'pending', ?)
+  `, [Date.now()]);
+  resources.cdp = await connectNotificationPage(context.dataDir);
+  watchNotificationPage(resources);
+  await waitFor(async () =>
+    (await snapshotOf(launched.page)).desktop?.notifications?.panels.length > 0,
+  10000, "工作通知预建呈现");
+  await waitFor(async () =>
+    (await snapshotOf(launched.page)).desktop?.notifications?.panels.length === 0,
+  12000, "工作通知自然消散");
+  await resources.cdp.page.evaluate(() => {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(".companion-card{transform:translateY(1200px)!important}");
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    window.__s06mNoticeSheet = sheet;
+  });
+}
+
+async function clearOffscreenNotificationPage(resources) {
+  await resources.cdp.page.evaluate(() => {
+    document.adoptedStyleSheets = document.adoptedStyleSheets
+      .filter((sheet) => sheet !== window.__s06mNoticeSheet);
+    delete window.__s06mNoticeSheet;
+  });
+}
+
 async function teardown(resources, cleanupErrors) {
+  try {
+    if (resources.characterPaused && resources.characterSession) {
+      await resources.characterSession.send("Debugger.resume").catch(() => {});
+      resources.characterPaused = false;
+    }
+    if (resources.characterSession) {
+      await resources.characterSession.detach().catch(() => {});
+      resources.characterSession = null;
+    }
+    if (resources.characterBrowser) {
+      await resources.characterBrowser.close().catch(() => {});
+      resources.characterBrowser = null;
+    }
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
   try {
     if (resources.cdp) await resources.cdp.browser.close();
   } catch (error) {
@@ -876,6 +1013,356 @@ test("POL-AUTONOTICE-UI-010 邀请自动显示→不接纳→下一机会不催�
   } finally {
     await teardown(resources, record.cleanupErrors);
     writeCase("010", record);
+  }
+});
+
+test("POL-AUTONOTICE-UI-011 持久状态门禁：当前活动/探索阻塞撤卡，旧消息无效，解除后只显示一次", {
+  timeout: 180000,
+}, async (t) => {
+  const record = { facts: {}, screenshots: [], cleanupErrors: [] };
+  const resources = await setupCaseAndApp(t, "outfit");
+  const { context, launched } = resources;
+  try {
+    // 本 Case 用隔离业务表持久状态 fixture 验证门禁，不声称通过真实活动/探索启动入口。
+    const modelRequestsBefore = context.server.allRequests.length;
+    await prepareOffscreenNotificationPage(resources, launched, context);
+    const blockedAttempt = async (activityId, kind) => {
+      await forceOpportunity(launched.app, context.dataDir);
+      const notice = await waitCompanion(launched.page);
+      assert.equal(notice.kind, "outfit");
+      await resources.cdp.page.locator(".companion-card").waitFor({ state: "attached", timeout: 10000 });
+      const identity = await resources.cdp.page.locator(".companion-card").evaluate((node) => ({
+        noticeId: node.dataset.noticeId,
+        noticeToken: node.dataset.noticeToken,
+      }));
+      insertRunningActivity(context.dataDir, activityId, kind);
+      const blockedSnapshot = await waitFor(async () => {
+        const snapshot = await snapshotOf(launched.page);
+        return snapshot.companionship?.current?.activity?.status === "running"
+          && (kind !== "exploration" || snapshot.companionship.current.exploring === true)
+          ? snapshot : null;
+      }, 5000, `${kind} 阻塞状态`);
+      const pageBefore = await launched.page.evaluate(() => document.body.dataset.activePage);
+      await resources.cdp.page.evaluate(({ noticeId, noticeToken }) => {
+        window.notifications.companionAck(noticeId, noticeToken);
+        window.notifications.companionAction(noticeId, noticeToken, "open");
+      }, identity);
+      await waitCompanion(launched.page, { expect: false });
+      await waitFor(
+        () => resources.cdp.page.locator(".companion-card").count().then((count) => count === 0),
+        5000,
+        `${kind} 阻塞后撤卡`,
+      );
+      const receiptsAfterBlock = receipts(context.dataDir).length;
+      const pendingAfterBlock = ownership(context.dataDir, OUTFIT_STORY).notification_pending;
+      const pageAfter = await launched.page.evaluate(() => document.body.dataset.activePage);
+      assert.equal(receiptsAfterBlock, 0, `${kind} 阻塞不得写收据`);
+      assert.equal(pendingAfterBlock, 1);
+      assert.equal(pageAfter, pageBefore, `${kind} 旧 action 不得导航`);
+      clearRunningActivity(context.dataDir, activityId);
+      await delay(1000);
+      assert.equal(
+        (await snapshotOf(launched.page)).desktop?.notifications?.companionNotice ?? null,
+        null,
+        `${kind} 解除后不得立即补发`,
+      );
+      return {
+        identity,
+        kind,
+        activity: blockedSnapshot.companionship.current.activity,
+        exploring: blockedSnapshot.companionship.current.exploring,
+        receiptsAfterBlock,
+        pendingAfterBlock,
+        pageUnchanged: pageAfter === pageBefore,
+      };
+    };
+
+    const daily = await blockedAttempt("ui-notice-block-daily", "daily");
+    const exploring = await blockedAttempt("ui-notice-block-exploring", "exploration");
+    await clearOffscreenNotificationPage(resources);
+    await forceOpportunity(launched.app, context.dataDir);
+    const recovered = await waitCompanion(launched.page);
+    assert.equal(recovered.kind, "outfit");
+    await waitFor(() => receipts(context.dataDir).length === 1, 10000, "解除后下一机会真实ACK");
+    assert.equal(ownership(context.dataDir, OUTFIT_STORY).notification_pending, 0);
+    assert.equal(receipts(context.dataDir).length, 1, "解除后只显示确认一次");
+    assert.equal(context.server.allRequests.length, modelRequestsBefore, "门禁恢复不得新增模型请求");
+    assert.deepEqual(resources.pageErrors, [], "管理窗与通知窗不得有 pageerror");
+    record.facts = {
+      daily,
+      exploring,
+      recovered,
+      receipts: receipts(context.dataDir).length,
+      current: (await snapshotOf(launched.page)).companionship.current,
+      window: (await snapshotOf(launched.page)).desktop.notifications.window,
+      modelRequests: context.server.allRequests.length,
+      fixtures: {
+        daily: "running daily character_activities row + runtime mode daily",
+        exploring: "running exploration row + runtime exploring=1",
+      },
+      pageErrors: resources.pageErrors,
+    };
+  } catch (error) {
+    record.facts.pageErrors = resources.pageErrors;
+    record.failure = error;
+    throw error;
+  } finally {
+    await teardown(resources, record.cleanupErrors);
+    writeCase("011", record);
+  }
+});
+
+test("POL-AUTONOTICE-UI-012 持久状态门禁：背景探索不阻塞，pendingRotation 等待撤卡并可恢复", {
+  timeout: 180000,
+}, async (t) => {
+  const record = { facts: {}, screenshots: [], cleanupErrors: [] };
+  const resources = await setupCaseAndApp(t, "outfit");
+  const { context, launched } = resources;
+  try {
+    // 本 Case 用隔离业务表持久状态 fixture；pendingRotation 不等同 hasBoundaryWaiters。
+    seedBackgroundExploration(context.dataDir, "hu");
+    const modelRequestsBefore = context.server.allRequests.length;
+    await prepareOffscreenNotificationPage(resources, launched, context);
+    await forceOpportunity(launched.app, context.dataDir);
+    const notice = await waitCompanion(launched.page);
+    assert.equal(notice.kind, "outfit", "背景探索不得阻塞前台自动告知");
+    await resources.cdp.page.locator(".companion-card").waitFor({ state: "attached", timeout: 10000 });
+    const identity = await resources.cdp.page.locator(".companion-card").evaluate((node) => ({
+      noticeId: node.dataset.noticeId,
+      noticeToken: node.dataset.noticeToken,
+    }));
+    const background = (await snapshotOf(launched.page)).companionship;
+    assert.equal(background.current.characterId, "rin");
+    assert.equal(background.current.exploring, false);
+    assert.equal(background.characters.find((item) => item.characterId === "hu")?.exploring, true);
+
+    execDb(context.dataDir,
+      "UPDATE character_stats SET energy = 20 WHERE character_id = 'rin'");
+    execDb(context.dataDir, `
+      INSERT INTO app_state (key, value) VALUES ('pending_rotation', 'low_energy')
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `);
+    await waitFor(async () =>
+      (await snapshotOf(launched.page)).companionship?.pendingRotation === true,
+    5000, "pendingRotation 阻塞状态");
+    const pageBefore = await launched.page.evaluate(() => document.body.dataset.activePage);
+    await resources.cdp.page.evaluate(({ noticeId, noticeToken }) => {
+      window.notifications.companionAck(noticeId, noticeToken);
+      window.notifications.companionAction(noticeId, noticeToken, "open");
+    }, identity);
+    await waitCompanion(launched.page, { expect: false });
+    await waitFor(
+      () => resources.cdp.page.locator(".companion-card").count().then((count) => count === 0),
+      5000,
+      "pendingRotation 后撤卡",
+    );
+    const receiptsAfterBlock = receipts(context.dataDir).length;
+    const pendingAfterBlock = ownership(context.dataDir, OUTFIT_STORY).notification_pending;
+    const pageAfter = await launched.page.evaluate(() => document.body.dataset.activePage);
+    assert.equal(receiptsAfterBlock, 0, "pendingRotation 阻塞不得写收据");
+    assert.equal(pendingAfterBlock, 1);
+    assert.equal(pageAfter, pageBefore, "旧 action 不得导航");
+    const pendingReason = (await snapshotOf(launched.page)).companionship.pendingRotationReason;
+    assert.equal(pendingReason, "low_energy");
+
+    execDb(context.dataDir,
+      "UPDATE character_stats SET energy = 100 WHERE character_id = 'rin'");
+    execDb(context.dataDir,
+      "UPDATE app_state SET value = '0' WHERE key = 'pending_rotation'");
+    await waitFor(async () =>
+      (await snapshotOf(launched.page)).companionship?.pendingRotation === false,
+    5000, "pendingRotation 解除");
+    await delay(1000);
+    assert.equal(
+      (await snapshotOf(launched.page)).desktop?.notifications?.companionNotice ?? null,
+      null,
+      "解除后不得立即补发",
+    );
+    await clearOffscreenNotificationPage(resources);
+    await forceOpportunity(launched.app, context.dataDir);
+    const recovered = await waitCompanion(launched.page);
+    assert.equal(recovered.kind, "outfit");
+    await waitFor(() => receipts(context.dataDir).length === 1, 10000, "恢复后真实ACK");
+    assert.equal(ownership(context.dataDir, OUTFIT_STORY).notification_pending, 0);
+    assert.equal(receipts(context.dataDir).length, 1, "恢复后只显示确认一次");
+    const final = (await snapshotOf(launched.page)).companionship;
+    assert.equal(final.current.characterId, "rin");
+    assert.equal(
+      final.characters.find((item) => item.characterId === "hu")?.exploring,
+      true,
+      "背景探索保持不受影响",
+    );
+    assert.equal(context.server.allRequests.length, modelRequestsBefore, "门禁恢复不得新增模型请求");
+    assert.deepEqual(resources.pageErrors, [], "管理窗与通知窗不得有 pageerror");
+    record.facts = {
+      notice,
+      identity,
+      background: {
+        current: background.current.characterId,
+        huExploring: background.characters.find((item) => item.characterId === "hu")?.exploring,
+      },
+      pendingReason,
+      pendingBlock: {
+        receipts: receiptsAfterBlock,
+        notificationPending: pendingAfterBlock,
+        pageUnchanged: pageAfter === pageBefore,
+      },
+      recovered,
+      receipts: receipts(context.dataDir).length,
+      final: {
+        current: final.current.characterId,
+        huExploring: final.characters.find((item) => item.characterId === "hu")?.exploring,
+      },
+      window: (await snapshotOf(launched.page)).desktop.notifications.window,
+      modelRequests: context.server.allRequests.length,
+      fixtures: {
+        background: "hu accepted + roster row + running exploration + runtime exploring=1",
+        pending: "rin energy=20 + app_state pending_rotation=low_energy",
+      },
+      pageErrors: resources.pageErrors,
+    };
+  } catch (error) {
+    record.facts.pageErrors = resources.pageErrors;
+    record.failure = error;
+    throw error;
+  } finally {
+    await teardown(resources, record.cleanupErrors);
+    writeCase("012", record);
+  }
+});
+
+test("POL-AUTONOTICE-UI-013 正式companion:switch自然节点等待时撤卡，节点后完成并可恢复", {
+  timeout: 180000,
+}, async (t) => {
+  const record = { facts: {}, screenshots: [], cleanupErrors: [] };
+  const resources = await setupCaseAndApp(t, "outfit");
+  const { context, launched } = resources;
+  try {
+    seedReadyCompanion(context.dataDir, "hu");
+    const modelRequestsBefore = context.server.allRequests.length;
+    await prepareOffscreenNotificationPage(resources, launched, context);
+    await forceOpportunity(launched.app, context.dataDir);
+    const notice = await waitCompanion(launched.page);
+    assert.equal(notice.kind, "outfit");
+    await resources.cdp.page.locator(".companion-card").waitFor({ state: "attached", timeout: 10000 });
+    const identity = await resources.cdp.page.locator(".companion-card").evaluate((node) => ({
+      noticeId: node.dataset.noticeId,
+      noticeToken: node.dataset.noticeToken,
+    }));
+
+    // 仅在本轮自建角色渲染进程内暂停自然帧，保证 switch 的 boundary waiter
+    // 有可观测等待窗口；恢复后仍走真实自然节点完成，不注入私有 waiter。
+    const character = await connectCharacterPage(context.dataDir);
+    resources.characterBrowser = character.browser;
+    collectPageErrors(character.page, resources.pageErrors);
+    resources.characterSession = await character.page.context().newCDPSession(character.page);
+    await resources.characterSession.send("Debugger.enable");
+    const pausedEvent = new Promise((resolve) => {
+      resources.characterSession.once("Debugger.paused", resolve);
+    });
+    await resources.characterSession.send("Debugger.pause");
+    const pauseConfirmed = await Promise.race([
+      pausedEvent.then(() => true),
+      delay(2000).then(() => false),
+    ]);
+    assert.equal(pauseConfirmed, true, "角色渲染进程未进入受控暂停");
+    resources.characterPaused = true;
+
+    let switchSettled = false;
+    const switchStartedAt = Date.now();
+    const switchPromise = launched.page.evaluate(
+      () => window.bayper.switchCompanion("hu"),
+    ).then((result) => {
+      switchSettled = true;
+      return result;
+    });
+    await waitFor(async () => {
+      const snapshot = await snapshotOf(launched.page);
+      const companion = snapshot.desktop?.notifications?.companionNotice ?? null;
+      return companion === null
+        && snapshot.companionship?.current?.characterId === "rin"
+        && switchSettled === false
+        ? snapshot : null;
+    }, 8000, "switch 等待期间撤卡");
+    const switchPendingAtCancelMs = Date.now() - switchStartedAt;
+    const pageBefore = await launched.page.evaluate(() => document.body.dataset.activePage);
+    await resources.cdp.page.locator(".companion-card").count().then((count) =>
+      assert.equal(count, 0, "边界等待后 DOM 自动卡必须撤下"));
+    await resources.cdp.page.evaluate(({ noticeId, noticeToken }) => {
+      window.notifications.companionAck(noticeId, noticeToken);
+      window.notifications.companionAction(noticeId, noticeToken, "open");
+    }, identity);
+    await delay(500);
+    assert.equal(receipts(context.dataDir).length, 0, "边界等待不得写收据");
+    assert.equal(ownership(context.dataDir, OUTFIT_STORY).notification_pending, 1);
+    assert.equal(
+      await launched.page.evaluate(() => document.body.dataset.activePage),
+      pageBefore,
+      "旧 action 不得导航",
+    );
+
+    await resources.characterSession.send("Debugger.resume");
+    resources.characterPaused = false;
+    const switched = await Promise.race([
+      switchPromise,
+      delay(12000).then(() => null),
+    ]);
+    assert.ok(switched, "自然节点后切换未完成");
+    assert.equal(switched.ok, true, JSON.stringify(switched));
+    const switchedSnapshot = await waitFor(async () => {
+      const snapshot = await snapshotOf(launched.page);
+      return snapshot.companionship?.current?.characterId === "hu"
+        && snapshot.desktop?.characterId === "hu"
+        ? snapshot : null;
+    }, 8000, "切换完成到 hu");
+    assert.equal(receipts(context.dataDir).length, 0);
+
+    await delay(1000);
+    const postSwitchSnapshot = await snapshotOf(launched.page);
+    const postSwitchCheckedAt = Date.now();
+    assert.equal(
+      postSwitchSnapshot.desktop?.notifications?.companionNotice ?? null,
+      null,
+      "边界完成后不得立即补发",
+    );
+    const postSwitchReceipts = receipts(context.dataDir).length;
+    assert.equal(postSwitchReceipts, 0, "等待期内不得写入收据");
+    await clearOffscreenNotificationPage(resources);
+    await forceOpportunity(launched.app, context.dataDir);
+    const recovered = await waitCompanion(launched.page);
+    assert.equal(recovered.kind, "outfit");
+    await waitFor(() => receipts(context.dataDir).length === 1, 10000, "恢复后真实ACK");
+    assert.equal(ownership(context.dataDir, OUTFIT_STORY).notification_pending, 0);
+    assert.equal(receipts(context.dataDir).length, 1, "恢复后只确认一次");
+    assert.equal(context.server.allRequests.length, modelRequestsBefore, "边界与恢复不得新增模型请求");
+    assert.deepEqual(resources.pageErrors, [], "管理窗与通知窗不得有 pageerror");
+    record.facts = {
+      notice,
+      identity,
+      switchPendingAtCancelMs,
+      switchResult: switched,
+      currentAfterSwitch: switchedSnapshot.companionship.current.characterId,
+      desktopAfterSwitch: switchedSnapshot.desktop.characterId,
+      postSwitchCheckedAt,
+      postSwitchCompanionNotice:
+        postSwitchSnapshot.desktop?.notifications?.companionNotice ?? null,
+      postSwitchReceipts,
+      receiptsAtCancel: 0,
+      pendingAtCancel: 1,
+      recovered,
+      receiptsFinal: receipts(context.dataDir).length,
+      window: (await snapshotOf(launched.page)).desktop.notifications.window,
+      modelRequests: context.server.allRequests.length,
+      boundary: "real companion:switch IPC; character renderer paused only in this test process; resumed to complete a real natural node.",
+      pageErrors: resources.pageErrors,
+    };
+  } catch (error) {
+    record.facts.pageErrors = resources.pageErrors;
+    record.failure = error;
+    throw error;
+  } finally {
+    await teardown(resources, record.cleanupErrors);
+    writeCase("013", record);
   }
 });
 

@@ -263,3 +263,5 @@ S06m r190：B Runner为tests/acceptance/automatic-notices-ui.spec.cjs（UI-001�
 S06m r196：UI-008/009补001实际整应用重启不重播、006真实GUI六秒/十秒完整周期，master2/2通过。以s06m-master-review.md r196及evaluation后续记录覆盖r190对应待补状态；其它未闭环义务保持。
 
 S06m r198：自动邀请拒绝→手动重开→接纳UI-010 master独立1/1通过，非空记忆/名单/角色状态隔离与公开IPC幂等证据见s06m-master-review.md r198。002交互联动缺口已补；额度与拒绝因果边界按GUI+领域证据分别记录。004探索/切换门禁仍待专门验证。
+
+S06m r202：POL-AUTONOTICE-001～006 v1在约定真实Electron/SQLite+构造内容/机会/状态边界内聚合PASS，逐项证据、失败修正与限制见s06m-master-review.md r202。最后011～013独立3/3、0skip、SHA稳定。历史“待补”是当时状态，以本次聚合为当前结论；不代表正式全部资源/主题发布、S06/S05或完整Goal完成。
