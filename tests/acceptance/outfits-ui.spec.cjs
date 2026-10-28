@@ -97,6 +97,13 @@ fs.writeFileSync(
   { flag: "wx" },
 );
 
+function localDay(at = Date.now()) {
+  const date = new Date(at);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+}
+
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(predicate, timeoutMs, message) {
@@ -288,6 +295,43 @@ async function patchClockAt(app, epochMs, randomValue = 0.1) {
   );
 }
 
+function configurePresence(dataDir, { currentId, roster }) {
+  const db = new DatabaseSync(path.join(dataDir, DB_FILE));
+  const slots = ["fixed", "random_1", "random_2", "random_3", "random_4"];
+  try {
+    db.exec("PRAGMA busy_timeout = 2000");
+    db.exec("BEGIN IMMEDIATE");
+    const setState = db.prepare(`
+      INSERT INTO app_state (key, value) VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `);
+    setState.run("current_character_id", currentId);
+    setState.run("current_mode", "companion");
+    setState.run("fixed_character_id", roster[0]);
+    setState.run("pending_rotation", "0");
+    setState.run("last_active_at", String(Date.now()));
+    db.prepare("DELETE FROM roster").run();
+    roster.forEach((characterId, index) => {
+      db.prepare("INSERT INTO roster (day, slot, character_id) VALUES (?, ?, ?)").run(
+        localDay(Date.now()),
+        slots[index],
+        characterId,
+      );
+    });
+    db.prepare("UPDATE character_runtime SET mode = 'waiting', exploring = 0").run();
+    db.prepare(`
+      UPDATE character_runtime SET mode = 'companion', exploring = 0
+      WHERE character_id = ?
+    `).run(currentId);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  } finally {
+    db.close();
+  }
+}
+
 function readActivities(dataDir) {
   const db = openDb(dataDir);
   try {
@@ -352,6 +396,15 @@ function readOutfitDb(dataDir) {
         ? JSON.parse(value(`outfit_pending:${CHARACTER_ID}`))
         : null,
     };
+  } finally {
+    db.close();
+  }
+}
+
+function readAppStateValue(dataDir, key) {
+  const db = openDb(dataDir);
+  try {
+    return db.prepare("SELECT value FROM app_state WHERE key = ?").get(key)?.value ?? null;
   } finally {
     db.close();
   }
@@ -485,13 +538,13 @@ async function waitForSnapshot(page, predicate, timeoutMs, message) {
   return snapshot;
 }
 
-async function openCharacters(page) {
+async function openCharacters(page, minOptions = 2) {
   await page.locator('[data-step="home"]').waitFor({ state: "visible", timeout: 20000 });
   await page.locator('[data-nav="characters"]').click();
   await page.locator('[data-page="characters"]').waitFor({ state: "visible" });
   await page.locator("#outfit-block").waitFor({ state: "visible", timeout: 20000 });
   await waitFor(
-    async () => (await page.locator("#outfit-options .outfit-option").count()) >= 2,
+    async () => (await page.locator("#outfit-options .outfit-option").count()) >= minOptions,
     20000,
     "衣装列表没有出现",
   );
@@ -1214,6 +1267,528 @@ test("POL-OUTFIT-003 基础休息坐下过渡中选择温茶，安全节点后�
     writeEvidence("case-003-rest.json", facts);
   } catch (error) {
     writeEvidence("case-003-rest-failure.json", {
+      error: error?.stack ?? String(error),
+      facts,
+    });
+    throw error;
+  }
+});
+
+test("POL-OUTFIT-005 系统暂停中选择待穿不应用，恢复后完成", {
+  timeout: 180000,
+}, async (t) => {
+  const context = await makeCase(t, "005-pause");
+  const facts = {};
+  try {
+    await setupAccepted(context);
+    const app = await openApp(context);
+    const page = app.page;
+    await openCharacters(page);
+    await waitForBaseDesktop(page);
+
+    // powerMonitor.emit 是构造的系统暂停事件，不是物理锁屏/休眠。
+    await app.app.evaluate(({ powerMonitor }) => powerMonitor.emit("lock-screen"));
+    await waitForSnapshot(
+      page,
+      (snapshot) => snapshot.system?.paused === true,
+      10000,
+      "构造系统暂停没有生效",
+    );
+
+    await clickOutfit(page, OUTFIT_ID);
+    await waitForPending(page, OUTFIT_ID);
+    const pending = await readOutfitDbAndWait(
+      context.dataDir,
+      (value) => value.pending?.outfitId === OUTFIT_ID && value.worn === null,
+    );
+    await delay(2200);
+    assert.equal(readOutfitDb(context.dataDir).worn, null, "暂停期间不得提交");
+    assert.equal((await snapshotOf(page)).system.paused, true);
+    facts.pending = pending.pending;
+    await capture(page, "005-paused-pending");
+
+    await app.app.evaluate(({ powerMonitor }) => powerMonitor.emit("unlock-screen"));
+    await waitForSnapshot(
+      page,
+      (snapshot) => snapshot.system?.paused === false,
+      10000,
+      "构造系统恢复没有生效",
+    );
+    const worn = await waitForOutfitDesktop(page, 30000);
+    await waitForWorn(page, OUTFIT_ID);
+    const final = await readOutfitDbAndWait(
+      context.dataDir,
+      (value) => value.worn?.outfitId === OUTFIT_ID && value.pending === null,
+    );
+    assert.equal(final.worn.outfitId, OUTFIT_ID);
+    assert.match(
+      worn.desktop.displayedFrame,
+      /\/characters\/rin\/outfits\/warm-tea\/animations\/idle-pixel-v2\/frame-/,
+    );
+    await capture(page, "005-resumed-worn");
+    facts.final = final;
+    writeEvidence("case-005-pause.json", facts);
+  } catch (error) {
+    writeEvidence("case-005-pause-failure.json", {
+      error: error?.stack ?? String(error),
+      facts,
+    });
+    throw error;
+  }
+});
+
+test("POL-OUTFIT-005 待穿退出后重启恢复选择，不丢失意图", {
+  timeout: 180000,
+}, async (t) => {
+  const context = await makeCase(t, "005-exit");
+  const facts = {};
+  try {
+    await setupAccepted(context);
+    const beforeBusiness = readBusinessState(context.dataDir);
+    let app = await openApp(context);
+    let page = app.page;
+    await openCharacters(page);
+    await waitForBaseDesktop(page);
+
+    await page.evaluate(() => window.bayperChat.openChat("rin"));
+    await waitForSnapshot(
+      page,
+      (snapshot) => snapshot.companionship?.current?.mode === "interacting",
+      10000,
+      "聊天互动没有开始",
+    );
+    await clickOutfit(page, OUTFIT_ID);
+    const pending = await readOutfitDbAndWait(
+      context.dataDir,
+      (value) => value.pending?.outfitId === OUTFIT_ID && value.worn === null,
+    );
+    facts.pending = pending.pending;
+
+    const closed = await closeApp(app);
+    context.launched.pop();
+    assert.equal(closed.gone, true);
+    const persisted = readOutfitDb(context.dataDir);
+    assert.equal(persisted.worn, null);
+    assert.equal(persisted.pending.outfitId, OUTFIT_ID);
+    facts.persisted = persisted;
+
+    app = await openApp(context);
+    page = app.page;
+    await openCharacters(page);
+    const worn = await waitForOutfitDesktop(page, 30000);
+    await waitForWorn(page, OUTFIT_ID);
+    const final = await readOutfitDbAndWait(
+      context.dataDir,
+      (value) => value.worn?.outfitId === OUTFIT_ID && value.pending === null,
+    );
+    assert.equal(final.worn.outfitId, OUTFIT_ID);
+    assert.match(
+      worn.desktop.displayedFrame,
+      /\/characters\/rin\/outfits\/warm-tea\/animations\/idle-pixel-v2\/frame-/,
+    );
+    const db = openDb(context.dataDir);
+    try {
+      assert.equal(
+        db.prepare("SELECT nickname FROM relationships WHERE character_id = ?").get(CHARACTER_ID).nickname,
+        "小凛",
+      );
+      assert.deepEqual(memorySnapshot(db), beforeBusiness.memory);
+      assert.deepEqual(
+        db.prepare("SELECT * FROM discovery_outfit_ownership ORDER BY story_id").all(),
+        beforeBusiness.ownership,
+      );
+    } finally {
+      db.close();
+    }
+    await capture(page, "005-restart-worn");
+    facts.final = final;
+    writeEvidence("case-005-exit.json", facts);
+  } catch (error) {
+    writeEvidence("case-005-exit-failure.json", {
+      error: error?.stack ?? String(error),
+      facts,
+    });
+    throw error;
+  }
+});
+
+test("POL-OUTFIT-005 等待中换人不误改新角色", {
+  timeout: 180000,
+}, async (t) => {
+  const context = await makeCase(t, "005-switch");
+  const facts = {};
+  try {
+    await setupAccepted(context);
+    const app = await openApp(context);
+    const page = app.page;
+    await openCharacters(page);
+    await waitForBaseDesktop(page);
+
+    await waitForSnapshot(
+      page,
+      (snapshot) => snapshot.desktop?.lastNode === "idle-loop",
+      10000,
+      "没有等到可用的 idle 节点",
+    );
+    await clickOutfit(page, OUTFIT_ID);
+    const waiting = await waitForSnapshot(
+      page,
+      (snapshot) => snapshot.outfit?.runtime?.phase === "waiting",
+      5000,
+      "换装没有进入节点等待",
+    );
+    facts.waitingPhase = waiting.outfit.runtime;
+    const switched = await page.evaluate(() => window.bayper.switchCompanion("hu"));
+    assert.equal(switched.ok, true, JSON.stringify(switched));
+    const huSnapshot = await waitForSnapshot(
+      page,
+      (snapshot) =>
+        snapshot.companionship?.current?.characterId === "hu"
+        && snapshot.desktop?.characterId === "hu"
+        && snapshot.desktop?.assetState === "ready"
+        && snapshot.desktop?.displayedFrame?.includes(
+          "/characters/hu/animations/idle-pixel-v2-canvas320/frame-",
+        ),
+      30000,
+      "换人后没有显示琥珀基础衣装",
+    );
+    const huWorn = await readAppStateValue(context.dataDir, "outfit_worn:hu");
+    const huPending = await readAppStateValue(context.dataDir, "outfit_pending:hu");
+    assert.equal(huWorn, null, "不得把凛的衣装写给琥珀");
+    assert.equal(huPending, null, "不得给琥珀留下凛的待穿");
+    const rin = await readOutfitDbAndWait(
+      context.dataDir,
+      (value) => value.worn?.outfitId === OUTFIT_ID && value.pending === null,
+      30000,
+    );
+    assert.equal(rin.worn.outfitId, OUTFIT_ID);
+    assert.equal(
+      huSnapshot.desktop.displayedFrame.includes("/outfits/warm-tea/"),
+      false,
+      "新角色不得播放凛的温茶帧",
+    );
+    await capture(page, "005-switch-hu");
+    facts.hu = {
+      current: huSnapshot.companionship.current.characterId,
+      displayedFrame: huSnapshot.desktop.displayedFrame,
+      worn: huWorn,
+      pending: huPending,
+    };
+    facts.rin = rin;
+    writeEvidence("case-005-switch.json", facts);
+  } catch (error) {
+    writeEvidence("case-005-switch-failure.json", {
+      error: error?.stack ?? String(error),
+      facts,
+    });
+    throw error;
+  }
+});
+
+test("POL-OUTFIT-006 名单外凛选择温茶不入场，正式切换后穿温茶出现", {
+  timeout: 180000,
+}, async (t) => {
+  const context = await makeCase(t, "006-outside");
+  const facts = {};
+  try {
+    await setupAccepted(context);
+    configurePresence(context.dataDir, { currentId: "hu", roster: ["hu"] });
+    const app = await openApp(context);
+    const page = app.page;
+    await waitForSnapshot(
+      page,
+      (snapshot) =>
+        snapshot.companionship?.current?.characterId === "hu"
+        && snapshot.desktop?.displayedFrame?.includes(
+          "/characters/hu/animations/idle-pixel-v2-canvas320/frame-",
+        ),
+      30000,
+      "名单外场景没有显示琥珀",
+    );
+    const before = await snapshotOf(page);
+    await openCharacters(page, 1);
+    await page.locator('#character-list [data-character-id="rin"]').click();
+    await waitFor(
+      async () => (await page.locator("#outfit-options .outfit-option").count()) >= 2,
+      10000,
+      "凛的衣装列表没有出现",
+    );
+    await waitForWorn(page, "base");
+    await clickOutfit(page, OUTFIT_ID);
+    const worn = await readOutfitDbAndWait(
+      context.dataDir,
+      (value) => value.worn?.outfitId === OUTFIT_ID && value.pending === null,
+    );
+    const afterSelect = await snapshotOf(page);
+    assert.equal(afterSelect.companionship.current.characterId, "hu");
+    assert.deepEqual(afterSelect.companionship.roster, before.companionship.roster);
+    assert.equal(
+      afterSelect.desktop.displayedFrame,
+      before.desktop.displayedFrame,
+      "名单外选择不得让当前琥珀跳动",
+    );
+    assert.equal(
+      afterSelect.companionship.characters.find((item) => item.characterId === "rin")
+        .exploring,
+      false,
+    );
+    assert.equal(worn.worn.outfitId, OUTFIT_ID);
+    await capture(page, "006-outside-selected");
+
+    const switched = await page.evaluate(() => window.bayper.switchCompanion("rin"));
+    assert.equal(switched.ok, true, JSON.stringify(switched));
+    const appeared = await waitForOutfitDesktop(page, 30000);
+    await waitForWorn(page, OUTFIT_ID);
+    const final = await readOutfitDb(context.dataDir);
+    assert.equal(final.worn.outfitId, OUTFIT_ID);
+    assert.equal((await snapshotOf(page)).companionship.current.characterId, "rin");
+    facts.selected = worn;
+    facts.appeared = {
+      current: (await snapshotOf(page)).companionship.current.characterId,
+      displayedFrame: appeared.desktop.displayedFrame,
+    };
+    writeEvidence("case-006-outside.json", facts);
+  } catch (error) {
+    writeEvidence("case-006-outside-failure.json", {
+      error: error?.stack ?? String(error),
+      facts,
+    });
+    throw error;
+  }
+});
+
+test("POL-OUTFIT-006 探索中的凛选择温茶不结束探索，探索结束后正式出现", {
+  timeout: 180000,
+}, async (t) => {
+  const context = await makeCase(t, "006-exploring");
+  const facts = {};
+  try {
+    await setupAccepted(context);
+    configurePresence(context.dataDir, { currentId: "hu", roster: ["rin", "hu"] });
+    const app = await openApp(context);
+    const page = app.page;
+    await waitForSnapshot(
+      page,
+      (snapshot) =>
+        snapshot.companionship?.current?.characterId === "hu"
+        && snapshot.desktop?.displayedFrame?.includes(
+          "/characters/hu/animations/idle-pixel-v2-canvas320/frame-",
+        ),
+      30000,
+      "探索场景没有显示琥珀",
+    );
+
+    setAppState(context.dataDir, "automatic_purpose_cursor", "exploration");
+    await patchClock(app.app, 31 * 60 * 1000, 0.1);
+    await waitFor(
+      () =>
+        readActivities(context.dataDir).some(
+          (activity) =>
+            activity.kind === "exploration" && activity.status === "running",
+        ),
+      10000,
+      "正式自动机会没有启动探索",
+    );
+    const exploration = readActivities(context.dataDir).find(
+      (activity) => activity.kind === "exploration" && activity.status === "running",
+    );
+    assert.ok(exploration);
+    await waitForSnapshot(
+      page,
+      (snapshot) =>
+        snapshot.companionship.characters.find((item) => item.characterId === "rin")
+          ?.exploring === true,
+      10000,
+      "凛没有进入探索状态",
+    );
+    const beforeSelect = await snapshotOf(page);
+    assert.equal(beforeSelect.companionship.current.characterId, "hu");
+    await openCharacters(page, 1);
+    await page.locator('#character-list [data-character-id="rin"]').click();
+    await waitFor(
+      async () => (await page.locator("#outfit-options .outfit-option").count()) >= 2,
+      10000,
+      "凛的衣装列表没有出现",
+    );
+    await waitForWorn(page, "base");
+    await clickOutfit(page, OUTFIT_ID);
+    const selected = await readOutfitDbAndWait(
+      context.dataDir,
+      (value) => value.worn?.outfitId === OUTFIT_ID && value.pending === null,
+    );
+    const duringExplore = await snapshotOf(page);
+    assert.equal(duringExplore.companionship.current.characterId, "hu");
+    assert.equal(
+      duringExplore.companionship.characters.find((item) => item.characterId === "rin")
+        .exploring,
+      true,
+      "选择衣装不得提前结束探索",
+    );
+    assert.deepEqual(duringExplore.companionship.roster, beforeSelect.companionship.roster);
+    assert.equal(duringExplore.desktop.displayedFrame, beforeSelect.desktop.displayedFrame);
+    await capture(page, "006-exploring-selected");
+
+    await patchClockAt(
+      app.app,
+      exploration.started_at + 21 * 60 * 1000,
+      0.1,
+    );
+    await waitFor(
+      () => {
+        const row = readActivities(context.dataDir).find(
+          (activity) => activity.activity_id === exploration.activity_id,
+        );
+        return row?.status === "completed";
+      },
+      10000,
+      "探索没有正式结束",
+    );
+    await waitForSnapshot(
+      page,
+      (snapshot) =>
+        snapshot.companionship.characters.find((item) => item.characterId === "rin")
+          ?.exploring === false,
+      10000,
+      "探索结束后凛仍在探索状态",
+    );
+    const switched = await page.evaluate(() => window.bayper.switchCompanion("rin"));
+    assert.equal(switched.ok, true, JSON.stringify(switched));
+    const appeared = await waitForOutfitDesktop(page, 30000);
+    await waitForWorn(page, OUTFIT_ID);
+    assert.equal((await snapshotOf(page)).companionship.current.characterId, "rin");
+    facts.explored = {
+      activity: exploration.activity_id,
+      duringExplore: duringExplore.companionship.current.characterId,
+      roster: duringExplore.companionship.roster,
+    };
+    facts.selected = selected;
+    facts.appeared = appeared.desktop.displayedFrame;
+    writeEvidence("case-006-exploring.json", facts);
+  } catch (error) {
+    writeEvidence("case-006-exploring-failure.json", {
+      error: error?.stack ?? String(error),
+      facts,
+    });
+    throw error;
+  }
+});
+
+test("POL-OUTFIT-003 温茶日常伸展中选择基础，活动完整结束前不切基础帧", {
+  timeout: 180000,
+}, async (t) => {
+  const context = await makeCase(t, "003-daily");
+  const facts = {};
+  try {
+    await setupAccepted(context);
+    const app = await openApp(context);
+    const page = app.page;
+    await openCharacters(page);
+    await waitForBaseDesktop(page);
+    await clickOutfit(page, OUTFIT_ID);
+    await waitForOutfitDesktop(page, 30000);
+    await waitForWorn(page, OUTFIT_ID);
+
+    const desktop = await connectDesktopPage(context.dataDir);
+    setAppState(context.dataDir, "automatic_purpose_cursor", "daily");
+    await patchClock(app.app, 31 * 60 * 1000, 0.1);
+    await waitFor(
+      () =>
+        readActivities(context.dataDir).some(
+          (activity) => activity.kind === "daily" && activity.status === "running",
+        ),
+      10000,
+      "正式自动机会没有启动日常",
+    );
+    const activity = readActivities(context.dataDir).find(
+      (item) => item.kind === "daily" && item.status === "running",
+    );
+    assert.ok(activity);
+
+    await waitFor(
+      async () =>
+        (await spriteFrame(desktop.page)).includes(
+          "/characters/rin/outfits/warm-tea/animations/stretch-pixel-v2-canvas320/frame-",
+        ),
+      10000,
+      "没有观察到温茶伸展帧",
+    );
+    await clickOutfit(page, "base");
+    await waitForPending(page, "base");
+    const pending = await readOutfitDbAndWait(
+      context.dataDir,
+      (value) => value.pending?.outfitId === "base" && value.worn?.outfitId === OUTFIT_ID,
+    );
+    facts.pending = pending.pending;
+    await capture(page, "003-daily-base-pending");
+
+    // 动作帧完成不等于活动完整收束；在 activity 仍 running 时不得出现基础帧。
+    const forbiddenFrames = [];
+    const observeDeadline = Date.now() + 3500;
+    while (Date.now() < observeDeadline) {
+      const frame = await spriteFrame(desktop.page);
+      const active = readActivities(context.dataDir).find(
+        (item) => item.activity_id === activity.activity_id,
+      );
+      if (
+        active?.status === "running"
+        && (
+          frame.includes("/characters/rin/animations/")
+          || frame.includes("/characters/rin/outfits/warm-tea/animations/stretch-pixel-v2-canvas256/")
+        )
+      ) {
+        forbiddenFrames.push(frame);
+      }
+      if (
+        active?.action_completed_at !== null
+        && (await snapshotOf(page)).desktop?.lastNode === "daily-action-complete"
+      ) {
+        break;
+      }
+      await delay(60);
+    }
+    assert.deepEqual(forbiddenFrames, [], "活动未结束前出现了基础帧");
+    assert.equal(
+      readOutfitDb(context.dataDir).worn.outfitId,
+      OUTFIT_ID,
+      "活动完整结束前不得写基础",
+    );
+    assert.equal(readOutfitDb(context.dataDir).pending.outfitId, "base");
+    facts.beforeComplete = readActivities(context.dataDir).find(
+      (item) => item.activity_id === activity.activity_id,
+    );
+
+    await patchClockAt(app.app, activity.started_at + 11000, 0.1);
+    await waitFor(
+      () => {
+        const row = readActivities(context.dataDir).find(
+          (item) => item.activity_id === activity.activity_id,
+        );
+        return row?.status === "completed";
+      },
+      10000,
+      "日常活动没有完整收束",
+    );
+    await waitForBaseDesktop(page, 30000);
+    const after = await readOutfitDbAndWait(
+      context.dataDir,
+      (value) => value.worn?.outfitId === "base" && value.pending === null,
+    );
+    const snapshot = await snapshotOf(page);
+    assert.equal(snapshot.companionship.current.mode, "companion");
+    assert.equal(snapshot.companionship.current.activity ?? null, null);
+    assert.equal(after.worn.outfitId, "base");
+    await capture(page, "003-daily-base-after");
+    facts.after = {
+      worn: after.worn,
+      mode: snapshot.companionship.current.mode,
+      displayedFrame: snapshot.desktop.displayedFrame,
+      activity: readActivities(context.dataDir).find(
+        (item) => item.activity_id === activity.activity_id,
+      ),
+    };
+    writeEvidence("case-003-daily.json", facts);
+  } catch (error) {
+    writeEvidence("case-003-daily-failure.json", {
       error: error?.stack ?? String(error),
       facts,
     });

@@ -107,7 +107,18 @@ function createOutfitRuntime({
     try {
       presentation = getPresentation();
     } catch (error) {
+      // 读取失败时无法判断当前动作，不能当作“无可见画布”直接提交。
       onError(error);
+      return;
+    }
+    // 日常/探索等待本身会占用自然节点（主进程优先让位给 boundary waiter），
+    // 从而阻止活动完成；有 open activity 时完全不注册节点等待，交给心跳重试。
+    const openActivity = presentation?.activity;
+    if (
+      openActivity
+      && ["scheduled", "running", "paused"].includes(openActivity.status)
+    ) {
+      return;
     }
     // 可见动画才需要收束；失效旧衣装/无画布时允许直接恢复合法目标。
     const visible = presentation?.assetState === "ready" && presentation?.visible !== false;
@@ -148,6 +159,14 @@ function createOutfitRuntime({
     if (
       after
       && (after.resting !== restingBefore || (after.restToken ?? 0) !== restTokenBefore)
+    ) {
+      return;
+    }
+    // 日常/探索的完整收束不是动作帧完成；仍有 open activity 时保留待穿，
+    // 由心跳在活动结束后重新调度，避免在伸展中途切到基础帧。
+    if (
+      after?.activity
+      && ["scheduled", "running", "paused"].includes(after.activity.status)
     ) {
       return;
     }

@@ -499,3 +499,7 @@ POL-OUTFIT-001/002/004/005/006领域与资产支撑已由master独立71/71执行
 ## S06l r174 自然节点补验
 
 master独立GUI5/5、领域协调12/12、SHA一致，证据evidence/s06l/master-r173-4x_6045u，详s06l-master-review.md r174。003聊天取消再选/基础休息、007温茶stretch子项获有限接受；时钟与随机数构造边界已记录。日常动作中换装、005恢复、006探索及007深浅背景继续，完整Case聚合不提前PASS。
+
+## S06l r177 恢复与探索补验
+
+master独立GUI11/11、领域与unit/story76/76，证据evidence/s06l/master-r176-zyxevbtw，详s06l-master-review.md r177。接受已测活动收尾修复、恢复与探索链路；005实际换人先于旧回调/等待中暂停、006其他角色bounds、007深浅背景继续补证。构造系统事件和时钟不冒充物理锁屏或真实等待。

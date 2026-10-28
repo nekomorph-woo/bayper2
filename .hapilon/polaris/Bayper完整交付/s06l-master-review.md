@@ -81,3 +81,19 @@ CLI57132终态exit0/is_error=false，master独立 `evidence/s06l/master-r173-4x_
 测试边界：复用activity-runtime.spec.cjs已有主进程Date/Math.random注入和临时库automatic_purpose_cursor，master核对后接受该构造时间/机会边界，无新增生产通道。loopback模型与候选作者目录沿用；未调用真实模型/Herdr。第一次driver包装对象错误，随后两次误取旧已完成活动导致未回idle，失败原件保留；修为选本次running活动，未修改Expected或生产。
 
 本批新增461测试行，稍超规模信号但对应真实重启外的聊天/休息/活动和协调场景，未引入通用框架。无测试进程残留。受托接受这些已测子项，按snap保存；003日常中换装、005完整恢复/超时、006名单外探索、007深浅背景仍未完成。现行Polaris流程可执行，无新skill矛盾。
+
+## r176 r175终态审查待返修
+
+CLI62411已终态exit0/is_error=false；开发者报告11GUI及3协调通过，master尚未独立复验。实际diff +17行针对活动waiter占用，master核对main.handleCanvasNodeComplete的hasBoundaryWaiters优先return及003daily首轮失败，修复方向合理。但新代码presentation.activity在getPresentation返回null时直接抛错，破坏原无可见画布允许合法恢复路径；需optional访问并以真实SQLite核查。读取presentation抛异常时不能把未知当前动作当作安全不可见，保留待穿、报告错误并下一次触发重试。新增timeout测试只有失败保留，仍需同一协调器恢复后成功的证据，不能拿另一个新对象代替。
+
+下一返修只限outfit-runtime及outfits-runtime测试；其余GUI行为与Expected冻结。完成后master独立全GUI+协调领域复验。007深浅背景与正式资源/完整Goal仍保留。此为具体生产健壮性与覆盖反馈，非新skill矛盾。
+
+## r177 恢复与探索链路独立有限接受
+
+CLI80602终态；master独立证据 `evidence/s06l/master-r176-zyxevbtw`：GUI11/11、unit+outfit+story76/76，exit0、0skip、app/tests前后SHA一致。实际审查新增测试及runtime diff，查看006-exploring-selected截图与JSON：凛仍探索、琥珀在场，衣装选择成功后未改变名单；构造时钟结束正式探索再切凛时显示温茶。无测试进程残留。
+
+接受本轮已测003日常中换装、005暂停后选择/退出重启/等待中提出换人、006名单外与探索换装后正式出现；受控SQLite补timeout同对象恢复、dispose单等待、空画布合法恢复、读取异常不提交且后续恢复。003daily首次活动卡住FAIL保留：main有boundary waiter时优先return，换装必须在活动结束前不注册waiter，+19行修正并重核活动状态；不是通过伪造完成事件修测试。
+
+构造边界：锁屏为powerMonitor.emit，时间/随机数/初始名单为隔离fixture，模型loopback；不称物理锁屏或真实等待20分钟。SQLite协调的getPresentation/节点/阻断回调受控，不能等同真实GUI。005已测等待中请求换人不误写琥珀，但尚需独立核查“实际换人先于旧回调”的受控反例；暂停发生于已开始等待中的路径也应补证。006本轮检查来源帧/身份、名单/探索保持，当前其他角色屏幕bounds稳定尚未独立断言。007深浅背景审查仍未完成；正式素材发布与整个Goal保持未完成。
+
+规模：新增GUI约577行、协调198行及生产19行，仅固定业务场景，没有通用引擎；后续不再向单个GUI文件无序堆积，必要时按恢复/归属场景作最小提取。受托接受自洽实现与本轮有限验证，按snap保存。Polaris既有规则足以发现并处理这些缺口，无需重复修订skill。
