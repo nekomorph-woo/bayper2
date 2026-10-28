@@ -254,6 +254,8 @@ POL-OUTFIT-001～007 v1，master受托批准，完整Expected与分阶段聚合�
 
 ## S06m 自动告知
 
-POL-AUTONOTICE-001～006 v1，master受托批准，需求/Expected/Oracle/Boundary见[s06m计划](s06m-automatic-notices-plan.md)，父级S06/S05。当前仅Part A已执行，完整Case状态见下方r182记录。
+POL-AUTONOTICE-001～006 v1，master受托批准，需求/Expected/Oracle/Boundary见[s06m计划](s06m-automatic-notices-plan.md)，父级S06/S05。Part A与B窗口首批已执行；r182保留历史，现行覆盖见下方r190记录。
 
 S06m r182：001/002/003/005的Part A领域证据见[s06m审查](s06m-master-review.md)，Runner tests/acceptance/automatic-notices.spec.cjs；004/006真实GUI仍NOT_COVERED，不将子项绿色提升为整组PASS。
+
+S06m r190：B Runner为tests/acceptance/automatic-notices-ui.spec.cjs（UI-001～007）与automatic-notices-runtime.spec.cjs。master独立40/40，见s06m-master-review.md；冷启动迟到快照缺陷已复现并修复。001正常衣装、002邀请稍后、004隐藏/暂停/休息/进程恢复、005旧请求/旧结果、006主动跳转/工作抢占的已执行子项通过。完整Case仍不聚合PASS：实际应用重启后不重播、GUI六秒/十秒完整周期及邀请拒绝/接纳从自动告知入口的联动仍待收口，领域/受控runtime结果单独保留。

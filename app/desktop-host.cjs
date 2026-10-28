@@ -138,6 +138,11 @@ function createDesktopHost({
   onNotificationAck = () => {},
   onNotificationClose = () => {},
   onNotificationVisibilityChange = () => {},
+  onCompanionNoticeVisible = () => {},
+  onCompanionNoticeAck = () => false,
+  onCompanionNoticeAction = () => false,
+  onCompanionNoticeClose = () => false,
+  onCompanionNoticeHidden = () => {},
 }) {
   const profileDir = path.join(dataDir, "desktop-profile");
   fs.mkdirSync(profileDir, { recursive: true });
@@ -180,6 +185,13 @@ function createDesktopHost({
         onNotificationVisibilityChange(next.visible === true);
       } catch {
         // 可见性回调不参与通知事实，不影响子进程通道。
+      }
+      if (wasVisible && next.visible !== true) {
+        try {
+          onCompanionNoticeHidden();
+        } catch {
+          // 自动卡的可见证明失效不能反向影响工作通知事实。
+        }
       }
     }
   }
@@ -225,7 +237,8 @@ function createDesktopHost({
     return Boolean(
       notificationView
       && notificationView.visible
-      && notificationView.presentations.length > 0,
+      && (notificationView.presentations.length > 0
+        || notificationView.companionNotice),
     );
   }
 
@@ -241,6 +254,7 @@ function createDesktopHost({
       generation: notificationView.generation,
       visible: notificationView.visible,
       presentations: notificationView.presentations,
+      companionNotice: notificationView.companionNotice ?? null,
     });
   }
 
@@ -258,6 +272,7 @@ function createDesktopHost({
       generation: view.generation,
       visible,
       presentations: view.presentations,
+      companionNotice: view.companionNotice ?? null,
     });
     if (signature === notificationSignature) return;
     notificationSignature = signature;
@@ -267,10 +282,14 @@ function createDesktopHost({
       generation: view.generation,
       visible,
       presentations: view.presentations,
+      companionNotice: view.companionNotice ?? null,
     };
     const active = new Set(view.presentations.map((item) => item.presentationId));
     for (const presentationId of [...notificationPanels.keys()]) {
-      if (!active.has(presentationId)) notificationPanels.delete(presentationId);
+      if (!active.has(presentationId)
+        && presentationId !== view.companionNotice?.noticeId) {
+        notificationPanels.delete(presentationId);
+      }
     }
     if (!child) {
       spawnChild();
@@ -285,6 +304,7 @@ function createDesktopHost({
       generation: notificationView.generation,
       visible,
       presentations: notificationView.presentations,
+      companionNotice: notificationView.companionNotice ?? null,
     });
     if (signature === notificationSignature) return;
     notificationSignature = signature;
@@ -310,7 +330,51 @@ function createDesktopHost({
           ...panelFact(presentation.presentationId),
         }))
         : [],
+      companionNotice: notificationView?.companionNotice
+        ? {
+          noticeId: notificationView.companionNotice.noticeId,
+          kind: notificationView.companionNotice.kind,
+          storyId: notificationView.companionNotice.storyId,
+          ...panelFact(notificationView.companionNotice.noticeId),
+        }
+        : null,
     };
+  }
+
+  /* 自动卡只接受当前视图代次、当前 noticeId/noticeToken 且窗口真实可见的消息；
+     旧子进程或已撤下的卡不能借残留 token 确认或跳转。 */
+  function validCompanionMessage(message, { requireWindowVisible = false } = {}) {
+    const notice = notificationView?.companionNotice;
+    if (!notificationView || !notice) return false;
+    if (message?.token !== notificationView.token
+      || message?.generation !== notificationView.generation) {
+      return false;
+    }
+    if (message.noticeId !== notice.noticeId
+      || message.noticeToken !== notice.noticeToken) {
+      return false;
+    }
+    if (requireWindowVisible && notificationWindowFact.visible !== true) {
+      return false;
+    }
+    return true;
+  }
+
+  function sendCompanionResult(message, result = {}) {
+    // 结果必须回显原请求的 transport token/generation/noticeToken，
+    // 不能拿当前最新视图 token 代替，否则同 noticeId 的新展示会接纳旧结果。
+    send({
+      type: "companion-notice-result",
+      token: message.token,
+      generation: message.generation,
+      noticeId: message.noticeId,
+      noticeToken: message.noticeToken,
+      accepted: result.accepted === true,
+      duplicate: result.duplicate === true,
+      navigated: result.navigated === true,
+      acknowledged: result.acknowledged === true,
+      reason: typeof result.reason === "string" ? result.reason : null,
+    });
   }
 
   function rememberPresentation(presentation) {
@@ -649,6 +713,75 @@ function createDesktopHost({
         generation: message.generation,
         token: message.token,
       });
+      return;
+    }
+
+    if (message.type === "companion-notice-visible") {
+      if (!validCompanionMessage(message, { requireWindowVisible: true })) {
+        return;
+      }
+      const fact = panelFact(message.noticeId);
+      fact.companionVisibleAt = Date.now();
+      fact.companionVisibleMs = Number(message.visibleMs) || 0;
+      fact.companionComplete = message.visible === true;
+      onCompanionNoticeVisible({
+        noticeId: message.noticeId,
+        noticeToken: message.noticeToken,
+        visible: message.visible === true,
+        visibleMs: Number(message.visibleMs) || 0,
+      });
+      return;
+    }
+
+    if (message.type === "companion-notice-ack") {
+      if (!validCompanionMessage(message, { requireWindowVisible: true })) {
+        sendCompanionResult(message, { accepted: false, reason: "STALE_NOTICE" });
+        return;
+      }
+      const outcome = onCompanionNoticeAck({
+        noticeId: message.noticeId,
+        noticeToken: message.noticeToken,
+      }) ?? {};
+      const accepted = outcome.accepted === true;
+      const fact = panelFact(message.noticeId);
+      if (accepted) {
+        fact.companionAckAt = Date.now();
+        fact.companionAckDuplicate = outcome.duplicate === true;
+      }
+      sendCompanionResult(message, outcome);
+      return;
+    }
+
+    if (message.type === "companion-notice-action") {
+      if (!validCompanionMessage(message, { requireWindowVisible: true })) {
+        sendCompanionResult(message, { accepted: false, reason: "STALE_NOTICE" });
+        return;
+      }
+      const outcome = onCompanionNoticeAction({
+        noticeId: message.noticeId,
+        noticeToken: message.noticeToken,
+        actionType: message.action,
+      }) ?? {};
+      const fact = panelFact(message.noticeId);
+      if (outcome.accepted === true) fact.companionActionAt = Date.now();
+      sendCompanionResult(message, outcome);
+      return;
+    }
+
+    if (message.type === "companion-notice-close") {
+      // 收起若可能确认实际显示，必须与 ACK 一样核对当前窗口真实可见；
+      // 工作通知 close 的免可见例外不能沿用到这里。
+      if (!validCompanionMessage(message, { requireWindowVisible: true })) {
+        sendCompanionResult(message, { accepted: false, reason: "STALE_NOTICE" });
+        return;
+      }
+      const outcome = onCompanionNoticeClose({
+        noticeId: message.noticeId,
+        noticeToken: message.noticeToken,
+      }) ?? {};
+      const fact = panelFact(message.noticeId);
+      fact.companionClosedAt = Date.now();
+      sendCompanionResult(message, outcome);
     }
   }
 

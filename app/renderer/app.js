@@ -10,6 +10,8 @@ const byId = (id) => document.getElementById(id);
 
 const state = {
   snapshot: null,
+  pendingNoticeTarget: null,
+  noticeTargetApplied: false,
   candidates: [],
   candidateIndex: 0,
   fixedSelection: null,
@@ -846,6 +848,15 @@ function applySnapshot(snapshot) {
   state.snapshot = snapshot;
   if (snapshot.state === "accepted") {
     renderAll();
+    if (state.pendingNoticeTarget) {
+      applyPendingNoticeTarget().catch(() => {});
+      return;
+    }
+    if (state.noticeTargetApplied) {
+      // 迟到初始 snapshot 只补充数据，不得把已应用的告知目标切回小窝。
+      state.noticeTargetApplied = false;
+      return;
+    }
     navigation.showPage("home", { focus: true });
     return;
   }
@@ -953,6 +964,50 @@ byId("character-memory").addEventListener("click", () => {
   }
 });
 
+/* 自动告知点击只做管理窗导航：衣装进入所属角色概览，邀请进入对应故事；
+   不自动穿用、接纳、切换当前角色或改写今日名单。冷启动时目标先保留，
+   等初始 snapshot accepted 后只应用一次，避免被随后的 home 覆盖。 */
+async function applyPendingNoticeTarget() {
+  const target = state.pendingNoticeTarget;
+  if (!target || state.snapshot?.state !== "accepted") {
+    return false;
+  }
+  state.pendingNoticeTarget = null;
+  state.noticeTargetApplied = true;
+  if (
+    typeof target.characterId === "string"
+    && characters().some((character) => character.characterId === target.characterId)
+  ) {
+    state.selectedCharacterId = target.characterId;
+  }
+  state.characterTab = target.characterTab === "stories" ? "stories" : "overview";
+  navigation.showPage("characters");
+  renderCharacterTabs();
+  if (state.characterTab === "stories") {
+    await storyPanel.openStory(target.storyId);
+    return true;
+  }
+  const outfit = byId("outfit-block");
+  if (outfit && !outfit.hidden) {
+    outfit.scrollIntoView({ block: "nearest" });
+  }
+  return true;
+}
+
+function applyNoticeTarget(target) {
+  if (!target || target.page !== "characters") {
+    return Promise.resolve(false);
+  }
+  state.pendingNoticeTarget = target;
+  return applyPendingNoticeTarget();
+}
+
+if (api && typeof api.onNoticeTarget === "function") {
+  api.onNoticeTarget((target) => {
+    applyNoticeTarget(target).catch(() => {});
+  });
+}
+
 if (api && typeof api.onSnapshotUpdated === "function") {
   api.onSnapshotUpdated((snapshot) => {
     if (!snapshot || snapshot.state !== "accepted") {
@@ -960,6 +1015,10 @@ if (api && typeof api.onSnapshotUpdated === "function") {
     }
     state.snapshot = snapshot;
     renderAll();
+    if (state.pendingNoticeTarget) {
+      applyPendingNoticeTarget().catch(() => {});
+      return;
+    }
     if (!navigation.isNavVisible()) {
       navigation.showPage("home");
     }

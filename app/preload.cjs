@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld(
     onSnapshotUpdated: (callback) => {
       ipcRenderer.on("bayper:snapshot-updated", (_event, snapshot) => callback(snapshot));
     },
+    onNoticeTarget: (callback) => {
+      ipcRenderer.on("bayper:notice-target", (_event, target) => callback(target));
+    },
     getSystemStatus: () => ipcRenderer.invoke("bayper:system-status"),
   }),
 );

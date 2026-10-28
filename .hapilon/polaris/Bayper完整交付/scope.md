@@ -12,9 +12,9 @@ Codex 是唯一 master，负责业务、Case、技术计划、独立验证和受
 
 此处保存用户对active Goal的当前执行约束；系统Goal工具仅能更新状态，不能改写仍进行中的objective原文，因此不把本文同步冒称系统Goal字段已修改。原系统Goal本已包含Polaris master与流程迭代要求，本条将其持续执行方式明确化。
 
-## 当前接续（r179，S06l换装功能链路接受）
+## 当前接续（r190，S06m自动告知窗口独立验收）
 
-POL-OUTFIT-001～007在计划隔离边界内聚合PASS，逐项见s06l-master-review.md r179。真实Electron/SQLite、构造时间/系统事件和候选素材限制明确；正式assetAvailable=false、全角色/服装24+12及父级S06/S07/Goal未完成。下一步推进S06解锁告知、自动相遇邀请及全局自动分享气泡预算，复用既有内容与呈现窗口。
+POL-OUTFIT-001～007在计划隔离边界内聚合PASS，逐项见s06l-master-review.md r179。真实Electron/SQLite、构造时间/系统事件和候选素材限制明确；正式assetAvailable=false、全角色/服装24+12及父级S06/S07/Goal未完成。S06m Part A共享额度/原子确认已master独立78/78接受并snap a8b8d80；B真实窗口/点击跳转/抢占已由单Claude CLI实现，方案c0b7aa6；master复验发现迟到初始快照覆盖点击目标，已保留FAIL并定向修复，独立40项通过，旧通知/工作反应14项通过加UI-010修正后独立通过，已受托接受B窗口阶段，完整Case尚待重启/真实时限/邀请处理联动收口。A不替代整体自动告知验收，状态及证据见s06m-master-review.md。
 
 ## 历史阶段（2026-10-28，S07/S05工作结束短反应已有限接受）
 

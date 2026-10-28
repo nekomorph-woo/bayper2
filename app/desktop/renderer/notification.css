@@ -195,3 +195,65 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* 自动告知卡与工作普通位并列显示；只有用户点击才会跳转管理窗。 */
+.companion-card {
+  border-color: rgba(109, 92, 64, 0.32);
+  background: rgba(250, 245, 231, 0.98);
+}
+
+.companion-badge {
+  background: #ded0b4;
+  color: #4b4031;
+}
+
+.companion-kind {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: 6px;
+  color: #857a6c;
+  font-size: 11px;
+}
+
+.companion-title {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.companion-body {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #4a4035;
+  overflow-wrap: anywhere;
+}
+
+.companion-source {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #857a6c;
+  overflow-wrap: anywhere;
+}
+
+.companion-action {
+  margin-top: 7px;
+  padding: 5px 10px;
+  border: 1px solid rgba(71, 58, 45, 0.3);
+  border-radius: 8px;
+  background: #f3ead8;
+  color: #3f352a;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.companion-action:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.companion-action:hover:not(:disabled) {
+  background: #eadcbe;
+}

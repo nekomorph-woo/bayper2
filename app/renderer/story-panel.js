@@ -555,7 +555,16 @@
       scheduleInvitationAck();
     }
 
-    return { activate, deactivate, handleSnapshot };
+    /* 通知点击只按 storyId 打开现有故事详情；不准备邀请、不改名单。 */
+    async function openStory(storyId) {
+      if (typeof storyId !== "string" || !storyId) return false;
+      await activate();
+      if (!state.list.some((item) => item.storyId === storyId)) return false;
+      selectStory(storyId);
+      return true;
+    }
+
+    return { activate, deactivate, handleSnapshot, openStory };
   }
 
   window.createStoryPanel = createStoryPanel;

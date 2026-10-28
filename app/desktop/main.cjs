@@ -331,6 +331,7 @@ function pushNotificationsToWindow() {
     token: view?.token ?? null,
     generation: view?.generation ?? null,
     presentations: view?.presentations ?? [],
+    companionNotice: view?.companionNotice ?? null,
     heightBudget: notificationHeightBudget(),
   });
 }
@@ -397,7 +398,9 @@ function ensureNotificationWindow() {
   win.webContents.once("did-finish-load", () => {
     notificationReady = true;
     pushNotificationsToWindow();
-    if (latestNotifications?.visible && latestNotifications.presentations.length > 0) {
+    if (latestNotifications?.visible
+      && ((latestNotifications.presentations?.length ?? 0) > 0
+        || latestNotifications.companionNotice)) {
       applyNotificationSize(lastNotificationSize.height);
       showNotificationWindow();
     }
@@ -417,10 +420,13 @@ function applyNotifications(message) {
     generation: message.generation,
     visible: message.visible === true,
     presentations: Array.isArray(message.presentations) ? message.presentations : [],
+    companionNotice: message.companionNotice ?? null,
   };
   // 隐藏时也同步视图 token，避免用户收起/回执沿用过期的窗口代次。
   pushNotificationsToWindow();
-  if (!latestNotifications.visible || latestNotifications.presentations.length === 0) {
+  if (!latestNotifications.visible
+    || (latestNotifications.presentations.length === 0
+      && !latestNotifications.companionNotice)) {
     hideNotificationWindow();
     return;
   }
@@ -626,6 +632,22 @@ function handleParentLine(line) {
         presentationId: message.presentationId,
         eventIds: Array.isArray(message.eventIds) ? message.eventIds : [],
         accepted: message.accepted === true,
+      });
+    }
+    return;
+  }
+  if (message.type === "companion-notice-result") {
+    if (notificationWindow && !notificationWindow.isDestroyed()) {
+      notificationWindow.webContents.send("companion-notice:result", {
+        token: Number.isInteger(message.token) ? message.token : null,
+        generation: typeof message.generation === "string" ? message.generation : null,
+        noticeId: message.noticeId,
+        noticeToken: message.noticeToken,
+        accepted: message.accepted === true,
+        duplicate: message.duplicate === true,
+        navigated: message.navigated === true,
+        acknowledged: message.acknowledged === true,
+        reason: typeof message.reason === "string" ? message.reason : null,
       });
     }
     return;
@@ -851,6 +873,82 @@ function registerIpc() {
       generation: latestNotifications.generation,
       presentationId: payload.presentationId,
       reason: "USER_CLOSED",
+    });
+  });
+
+  function companionPayloadValid(payload) {
+    const notice = latestNotifications?.companionNotice;
+    return Boolean(
+      notice
+      && payload?.noticeId === notice.noticeId
+      && payload?.noticeToken === notice.noticeToken,
+    );
+  }
+
+  ipcMain.on("companion-notice:visible", (event, payload) => {
+    if (!acceptsNotificationIpc({
+      sender: event.sender, window: notificationWindow, latest: latestNotifications,
+      requireVisible: true,
+    }) || !companionPayloadValid(payload)) {
+      return;
+    }
+    send({
+      type: "companion-notice-visible",
+      token: latestNotifications.token,
+      generation: latestNotifications.generation,
+      noticeId: payload.noticeId,
+      noticeToken: payload.noticeToken,
+      visible: payload.visible === true,
+      visibleMs: Number.isFinite(payload.visibleMs) ? payload.visibleMs : 0,
+    });
+  });
+
+  ipcMain.on("companion-notice:ack", (event, payload) => {
+    if (!acceptsNotificationIpc({
+      sender: event.sender, window: notificationWindow, latest: latestNotifications,
+      requireVisible: true,
+    }) || !companionPayloadValid(payload)) {
+      return;
+    }
+    send({
+      type: "companion-notice-ack",
+      token: latestNotifications.token,
+      generation: latestNotifications.generation,
+      noticeId: payload.noticeId,
+      noticeToken: payload.noticeToken,
+    });
+  });
+
+  ipcMain.on("companion-notice:action", (event, payload) => {
+    if (!acceptsNotificationIpc({
+      sender: event.sender, window: notificationWindow, latest: latestNotifications,
+      requireVisible: true,
+    }) || !companionPayloadValid(payload) || payload?.action !== "open") {
+      return;
+    }
+    send({
+      type: "companion-notice-action",
+      token: latestNotifications.token,
+      generation: latestNotifications.generation,
+      noticeId: payload.noticeId,
+      noticeToken: payload.noticeToken,
+      action: "open",
+    });
+  });
+
+  ipcMain.on("companion-notice:close", (event, payload) => {
+    if (!acceptsNotificationIpc({
+      sender: event.sender, window: notificationWindow, latest: latestNotifications,
+      requireVisible: true,
+    }) || !companionPayloadValid(payload)) {
+      return;
+    }
+    send({
+      type: "companion-notice-close",
+      token: latestNotifications.token,
+      generation: latestNotifications.generation,
+      noticeId: payload.noticeId,
+      noticeToken: payload.noticeToken,
     });
   });
 }

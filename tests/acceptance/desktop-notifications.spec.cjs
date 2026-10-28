@@ -2803,9 +2803,48 @@ test("POL-NOTIFY-UI-010 长Agent名默认分页自动可达；另批查看全部
       assert.ok(visible.meaning.includes("需要确认"));
     }
     assert.ok(manualOrdinarySamples > 0, "滚动长明细期间应始终有普通位在场");
-    await waitFor(async () => (await ordinaryPanels()).length === 3, 12000, "滚动后三个普通位");
+    /* 滚动与逐条回执结束后，旧普通位通常已按 4 秒自然到期。
+       布局检查需要合法未过期输入，因此用真实新事件重新供给，直到当前三个
+       普通位都仍有明确剩余 hold；不冻结时钟、不保留过期卡。 */
+    let freshOrdinaryLayout = null;
+    const ordinaryLayoutDeadline = Date.now() + 12000;
+    let lastOrdinaryFeedAt = 0;
+    while (Date.now() < ordinaryLayoutDeadline) {
+      if (Date.now() - lastOrdinaryFeedAt > 500) {
+        feedOrdinary(ordinaryFeed % 3);
+        lastOrdinaryFeedAt = Date.now();
+      }
+      const panels = await ordinaryPanels();
+      const now = Date.now();
+      const holds = panels.flatMap((panel) => panel.eventIds.map((eventId) => {
+        const row = ackRow(dataDir, eventId);
+        return {
+          eventId,
+          acknowledgedAt: row?.acknowledged_at ?? null,
+          holdUntil: row?.hold_until ?? null,
+        };
+      }));
+      if (panels.length === 3 && holds.every(
+        (row) => row.holdUntil !== null && row.holdUntil > now + 300,
+      )) {
+        freshOrdinaryLayout = { sampledAt: now, panels, holds };
+        break;
+      }
+      await delay(100);
+    }
+    assert.ok(freshOrdinaryLayout, "滚动后需要三个合法未过期普通位");
     const afterScroll = await sampleNotificationGeometry(cdp.page);
+    const afterScrollAt = Date.now();
+    const afterScrollPanels = notificationsOf(await snapshotOf(page)).panels;
     assert.equal(afterScroll.ordinary.length, 3, "滚动后普通三位仍须存在");
+    assert.ok(
+      afterScrollPanels.some((panel) => panel.channel === "urgent"),
+      "布局检查时加急长明细仍应在场，否则无法证明普通位未被挤出",
+    );
+    for (const hold of freshOrdinaryLayout.holds) {
+      assert.ok(hold.holdUntil > afterScrollAt,
+        `普通位 ${hold.eventId} 在布局采样时已经过期`);
+    }
     for (const card of afterScroll.ordinary) {
       assert.ok(card.rect.top >= -0.5 && card.rect.bottom <= afterScroll.innerHeight + 0.5,
         "滚动长明细不得把普通位挤出窗口");
@@ -2818,6 +2857,14 @@ test("POL-NOTIFY-UI-010 长Agent名默认分页自动可达；另批查看全部
       presentationId: manualUrgent.presentationId,
       ordinaryBeforeManual,
       ordinaryAfterScroll: afterScroll.ordinary,
+      ordinaryFreshLayout: freshOrdinaryLayout,
+      ordinaryLayoutSampledAt: afterScrollAt,
+      urgentPresentAtLayout: afterScrollPanels.some(
+        (panel) => panel.channel === "urgent",
+      ),
+      ordinaryLayoutMinRemainingMs: Math.min(
+        ...freshOrdinaryLayout.holds.map((hold) => hold.holdUntil - afterScrollAt),
+      ),
       expandedList: expanded.list,
       expandedUrgentRect: expanded.urgentRect,
       manualIds,

@@ -27,7 +27,13 @@ const { createStoryRuntime } = require("./story-runtime.cjs");
 const { createStoryWindow } = require("./story-window.cjs");
 const { createOutfitRuntime } = require("./outfit-runtime.cjs");
 const { createAutomaticOpportunities } = require("./automatic-opportunities.cjs");
-const { buildDesktopPresentation, getActivitySupport } = require("./desktop-assets.cjs");
+const { createAutomaticNotices } = require("./automatic-notices.cjs");
+const { createAutomaticNoticeRuntime } = require("./automatic-notice-runtime.cjs");
+const {
+  buildDesktopPresentation,
+  getActivitySupport,
+  isOutfitAssetAvailable,
+} = require("./desktop-assets.cjs");
 const { createAppTray } = require("./app-tray.cjs");
 const { createSystemLifecycle } = require("./system-lifecycle.cjs");
 const {
@@ -70,6 +76,9 @@ let storyWindow = null;
 let storyViewSeq = 0;
 let storyView = null;
 let automaticOpportunities = null;
+let automaticNotices = null;
+let automaticNoticeRuntime = null;
+let pendingNoticeTarget = null;
 let desktopHost = null;
 let tray = null;
 let heartbeatTimer = null;
@@ -389,14 +398,32 @@ function startApplication() {
   });
 
   // S06j 故事回看与正式故事进度共用同一目录和 SQLite 连接，只读生成展示数据。
+  const characterNames = Object.fromEntries(
+    characterContent.candidates.map((candidate) => [candidate.id, candidate.name]),
+  );
   storyWindow = createStoryWindow({
     db: store.db,
     storyProgress: store.storyProgress,
     discoveryOutcomes: store.discoveryOutcomes,
     catalog: storyCatalog,
-    characterNames: Object.fromEntries(
-      characterContent.candidates.map((candidate) => [candidate.id, candidate.name]),
-    ),
+    characterNames,
+  });
+
+  // S06m 自动告知先复用 A 的真实来源检查，再由 runtime 持有一次展示副本。
+  automaticNotices = createAutomaticNotices({
+    db: store.db,
+    storyProgress: store.storyProgress,
+    storyWindow,
+    discoveryOutcomes: store.discoveryOutcomes,
+    now: () => new Date(),
+    isAssetAvailable: (source) => automaticNoticeAssetAvailable(source, characterNames),
+  });
+  automaticNoticeRuntime = createAutomaticNoticeRuntime({
+    notices: automaticNotices,
+    storyWindow,
+    characterNames,
+    onUpdate: () => pushNotifications({ tick: false }),
+    onAction: (target) => openNoticeTarget(target),
   });
 
   automaticOpportunities = createAutomaticOpportunities({
@@ -404,7 +431,11 @@ function startApplication() {
     companionship,
     now: () => Date.now(),
     random: () => Math.random(),
-    runActivity: (payload) => activityRuntime.runActivity(payload),
+    runActivity: async (payload) => {
+      const notice = tryPresentAutomaticNotice(payload);
+      if (notice) return notice;
+      return activityRuntime.runActivity(payload);
+    },
     cancelActivity: () => {
       sourceAutomation?.cancelActive();
     },
@@ -420,6 +451,11 @@ function startApplication() {
     onNotificationAck: handleNotificationAck,
     onNotificationClose: handleNotificationClose,
     onNotificationVisibilityChange: handleNotificationWindowVisibility,
+    onCompanionNoticeVisible: (message) => automaticNoticeRuntime?.markVisible(message),
+    onCompanionNoticeAck: (message) => handleCompanionNoticeAck(message),
+    onCompanionNoticeAction: (message) => handleCompanionNoticeAction(message),
+    onCompanionNoticeClose: (message) => handleCompanionNoticeClose(message),
+    onCompanionNoticeHidden: () => automaticNoticeRuntime?.markWindowHidden(),
   });
 
   systemLifecycle = createSystemLifecycle(powerMonitor, {
@@ -522,6 +558,7 @@ function createManagementWindow() {
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event) => event.preventDefault());
   win.webContents.on("will-attach-webview", (event) => event.preventDefault());
+  win.webContents.on("did-finish-load", () => flushNoticeTarget());
   win.loadFile(RENDERER_FILE);
   return win;
 }
@@ -707,8 +744,8 @@ function shortSourceLabel(item) {
 
 function notificationPayload(view) {
   return {
-    generation: view.generation,
-    presentations: view.presentations.map((presentation) => ({
+    generation: view?.generation ?? null,
+    presentations: (view?.presentations ?? []).map((presentation) => ({
       presentationId: presentation.presentationId,
       channel: presentation.channel,
       slot: presentation.slot,
@@ -729,7 +766,23 @@ function notificationPayload(view) {
         receivedAt: item.receivedAt,
       })),
     })),
+    companionNotice: automaticNoticeRuntime?.getPayload() ?? null,
   };
+}
+
+/* 工作事件、自动卡和窗口可见性共用一次视图下发；自动卡不进入 presentations。 */
+function pushNotifications({ tick = true } = {}) {
+  if (quitting || !store || !desktopHost) {
+    return;
+  }
+  try {
+    const view = tick
+      ? store.notificationPresentation.tick()
+      : store.notificationPresentation.getView();
+    desktopHost.updateNotifications(notificationPayload(view), true);
+  } catch (error) {
+    console.error("通知呈现推进失败：", error?.message ?? error);
+  }
 }
 
 function tickNotifications() {
@@ -738,10 +791,180 @@ function tickNotifications() {
   }
   try {
     const view = store.notificationPresentation.tick();
+    if (automaticNoticeRuntime?.hasCurrent() && automaticNoticeGate() !== null) {
+      // 工作通知、休息/探索、换人等待、边界或桌面未就绪都在 tick 撤下当前卡。
+      automaticNoticeRuntime.cancel();
+    }
     desktopHost.updateNotifications(notificationPayload(view), true);
   } catch (error) {
     console.error("通知呈现推进失败：", error?.message ?? error);
   }
+}
+
+/* 自动告知的当前门禁：与工作短反应共用真实状态，不靠模式字符串蒙混。
+   返回 null 表示可展示；DESKTOP_UNAVAILABLE/BLOCKED 交回既有入口处理，
+   其余占用状态直接跳过本次机会，避免同次另起活动。 */
+function automaticNoticeGate() {
+  if (quitting || systemPaused || activeChat) {
+    return "BLOCKED";
+  }
+  if (!desktopVisible || !desktopReady) {
+    return "DESKTOP_UNAVAILABLE";
+  }
+  const presentation = desktopPresentation();
+  if (!presentation) {
+    return "DESKTOP_UNAVAILABLE";
+  }
+  if (presentation.assetState !== "ready") {
+    return "DESKTOP_UNAVAILABLE";
+  }
+  if (presentation.resting) {
+    return "NOTICE_BUSY";
+  }
+  const snapshot = companionship?.getSnapshot();
+  if (snapshot?.pendingRotation) {
+    return "NOTICE_BUSY";
+  }
+  const current = snapshot?.current;
+  if (!current) {
+    return "BLOCKED";
+  }
+  if (current.exploring || current.mode === "resting" || current.mode === "interacting") {
+    return "NOTICE_BUSY";
+  }
+  const activity = current.activity;
+  if (activity && ["running", "paused", "scheduled"].includes(activity.status)) {
+    return "NOTICE_BUSY";
+  }
+  if (rotationPending) {
+    return "NOTICE_BUSY";
+  }
+  const status = desktopHost?.getStatus();
+  if (!status || status.state !== "running" || status.assetState !== "ready") {
+    return "DESKTOP_UNAVAILABLE";
+  }
+  if (desktopHost.hasBoundaryWaiters()) {
+    return "NOTICE_BUSY";
+  }
+  try {
+    return store.notificationPresentation.getView().presentations.length === 0
+      ? null
+      : "WORK_BUSY";
+  } catch {
+    return "DESKTOP_UNAVAILABLE";
+  }
+}
+
+/* 复用固定衣装映射与真实角色 presentation；catalog 布尔值不能代替素材检查。 */
+function automaticNoticeAssetAvailable(source, names) {
+  try {
+    if (source.kind === "outfit") {
+      return isOutfitAssetAvailable(source.ownerCharacterId, source.outfitId) === true;
+    }
+    const name = names[source.targetCharacterId];
+    if (!name) return false;
+    return buildDesktopPresentation(source.targetCharacterId, name).assetState === "ready";
+  } catch {
+    return false;
+  }
+}
+
+/* 自动机会先尝试告知；成功即占用本次机会。门禁不满足、没有内容或气泡额度
+   不足时交回既有活动入口，由后者按自身规则跳过或推进，不在通知层伪造成功。 */
+function tryPresentAutomaticNotice(payload) {
+  if (!automaticNoticeRuntime) {
+    return null;
+  }
+  const gate = automaticNoticeGate();
+  if (gate === "DESKTOP_UNAVAILABLE" || gate === "BLOCKED") {
+    // 这些状态由既有活动入口按自身规则跳过或推进用途游标。
+    return null;
+  }
+  if (gate) {
+    return { status: "skipped", reason: gate };
+  }
+  const result = automaticNoticeRuntime.tryPresent({
+    speakerId: payload?.characterId,
+  });
+  if (result.presented) {
+    pushNotifications({ tick: false });
+    return { status: "notice", noticeId: result.noticeId };
+  }
+  if (["NO_NOTICE_CONTENT", "HOURLY_LIMIT", "EIGHT_HOUR_LIMIT"].includes(result.reason)) {
+    return null;
+  }
+  return { status: "skipped", reason: result.reason ?? "NOTICE_UNAVAILABLE" };
+}
+
+/* 子进程回执/点击/收起都重新核对主进程当前门禁；准备后进入聊天、休息、
+   探索、换人或桌面不可用时先撤卡，旧消息不能继续确认或导航。 */
+function handleCompanionNoticeAck(message) {
+  if (!automaticNoticeRuntime) {
+    return { accepted: false, reason: "DISPOSED" };
+  }
+  if (automaticNoticeGate() !== null) {
+    automaticNoticeRuntime.cancel();
+    return { accepted: false, reason: "GATE_CLOSED" };
+  }
+  return automaticNoticeRuntime.acknowledge(message);
+}
+
+function handleCompanionNoticeAction(message) {
+  if (!automaticNoticeRuntime) {
+    return { accepted: false, reason: "DISPOSED" };
+  }
+  if (automaticNoticeGate() !== null) {
+    automaticNoticeRuntime.cancel();
+    return { accepted: false, reason: "GATE_CLOSED" };
+  }
+  return automaticNoticeRuntime.action(message);
+}
+
+function handleCompanionNoticeClose(message) {
+  if (!automaticNoticeRuntime) {
+    return { accepted: false, reason: "DISPOSED" };
+  }
+  if (automaticNoticeGate() !== null) {
+    automaticNoticeRuntime.cancel();
+    return { accepted: true, acknowledged: false, reason: "GATE_CLOSED" };
+  }
+  return automaticNoticeRuntime.close(message);
+}
+
+/* 只有真实点击才打开管理窗；窗口未加载时保留一次目标，ready 后送达。 */
+function openNoticeTarget(target) {
+  if (!target || typeof target.type !== "string") {
+    return;
+  }
+  pendingNoticeTarget = target.type === "outfit"
+    ? {
+      page: "characters",
+      characterTab: "overview",
+      characterId: target.characterId,
+      outfitId: target.outfitId,
+    }
+    : {
+      page: "characters",
+      characterTab: "stories",
+      storyId: target.storyId,
+    };
+  showManagementWindow();
+  flushNoticeTarget();
+}
+
+function flushNoticeTarget() {
+  if (
+    !pendingNoticeTarget
+    || !mainWindow
+    || mainWindow.isDestroyed()
+    || mainWindow.webContents.isDestroyed()
+    || mainWindow.webContents.isLoading()
+  ) {
+    return;
+  }
+  const target = pendingNoticeTarget;
+  pendingNoticeTarget = null;
+  mainWindow.webContents.send("bayper:notice-target", target);
 }
 
 function startNotificationTicker() {
@@ -1113,6 +1336,7 @@ function createTray() {
         if (desktopVisible) {
           activityRuntime?.handleDesktopReady();
         } else {
+          automaticNoticeRuntime?.cancel();
           activityRuntime?.handleDesktopUnavailable();
         }
         syncDesktop();
@@ -1149,6 +1373,7 @@ function handleDesktopStatusChange(status = desktopHost?.getStatus()) {
   const ready = status?.state === "running" && status?.assetState === "ready";
   if (status?.state === "failed" || status?.assetState === "error") {
     desktopReady = false;
+    automaticNoticeRuntime?.cancel();
     activityRuntime?.handleDesktopUnavailable();
   } else if (ready && !desktopReady) {
     // 只在画布重新可用时扫描持久暂停事实，几何变化不重复恢复。
@@ -1158,6 +1383,9 @@ function handleDesktopStatusChange(status = desktopHost?.getStatus()) {
     desktopReady = ready;
   }
   if (!ready) {
+    // stopped/restarting/failed/asset-error 等任何未就绪状态都不得保留旧自动卡；
+    // 已确认收据不回滚，未确认内容由领域入口保留给下一次机会。
+    automaticNoticeRuntime?.cancel();
     // 素材错误/子进程退出/重建：不留旧静默计时或可被误用的睡眠资格。
     clearRestQuietTimer();
     restQuiet.eligible = false;
@@ -1395,6 +1623,7 @@ function pauseForSystem() {
   }
   systemPaused = true;
   automaticOpportunities?.pause();
+  automaticNoticeRuntime?.cancel();
   if (fallbackNodeTimer) {
     clearTimeout(fallbackNodeTimer);
     fallbackNodeTimer = null;
@@ -1645,6 +1874,7 @@ function startChat(characterId) {
     throw new AppError("INVALID_CHARACTER", "这个角色不在已结识名单中。");
   }
   automaticOpportunities?.pause();
+  automaticNoticeRuntime?.cancel();
   const history = store.chat.listConversations({ characterId, limit: 10 });
   closeActiveChat({ refresh: false });
   const interaction = companionship.startInteraction(characterId);
@@ -2365,6 +2595,14 @@ async function cleanup() {
     }
     automaticOpportunities = null;
   }
+  try {
+    automaticNoticeRuntime?.dispose();
+  } catch (error) {
+    console.error("退出时撤下自动告知失败：", error?.message ?? error);
+  }
+  automaticNoticeRuntime = null;
+  automaticNotices?.dispose?.();
+  automaticNotices = null;
   if (sourceAutomation) {
     try {
       await sourceAutomation.dispose();
